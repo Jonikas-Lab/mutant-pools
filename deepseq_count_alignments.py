@@ -23,9 +23,10 @@ USAGE: deepseq_count_alignments.py [options] infile [infile2 infile3 ...] outfil
 # MAYBE-TODO add an option to make output go to STDOUT?
 # MAYBE-TODO add mutation statistics and user-provided cutoffs like in the original old_deepseq_count_alignments.py script?
 
-import HTSeq
+import sys, time
 from collections import defaultdict
-from general_utilites import keybased_defaultdict
+from general_utilities import keybased_defaultdict, write_header_data
+import HTSeq
 
 ######### NOTES ON THE SAM FORMAT
 ### Header:
@@ -56,9 +57,12 @@ CIGAR_TYPES_UNKNOWN = ['M']
 def check_mutation_count_by_CIGAR_string(HTSeq_alignment, treat_unknown_as='unknown', ignore_introns=False):
     """ Return number of mutations in HTSeq_alignment, based on CIGAR string; -1 if unknown ('M') by default.
     If treat_unknown_as is 'unknown', return -1 whenever an unknown (M, may be match or mismatch) operation is found; 
-     if treat_unknown_as is 'mutation' or 'match', count unknowns accordingly.
+     if treat_unknown_as is 'mutation' or 'match', count unknowns accordingly.  Return -1 if read is unaligned.
     If ignore_introns is False, count introns (N) as mutations; otherwise don't."""
     global CIGAR_TYPES_MUTATION, CIGAR_TYPES_INTRON, CIGAR_TYPES_UNKNOWN
+    # just return -1 for unaligned reads
+    if HTSeq_alignment.cigar is None:
+        return -1
     # figure out whether to consider intron-skipping ('N') as a mutation or not, based on argument
     if ignore_introns:
         cigar_types_mutation = CIGAR_TYPES_MUTATION+CIGAR_TYPES_INTRON
@@ -77,20 +81,19 @@ def check_mutation_count_by_CIGAR_string(HTSeq_alignment, treat_unknown_as='unkn
     # count the mutations, return total count (or instantly return -1 on finding an unknonw)
     mutations = 0
     for cigar_op in HTSeq_alignment.cigar:
-        if cigar.op.type in cigar_types_mutation:
-            mutations += cigar.op.size
+        if cigar_op.type in cigar_types_mutation:
+            mutations += cigar_op.size
         # if there's an unknown, just return -1, no need to count
-        elif cigar.op.type in cigar_types_unknown:
+        elif cigar_op.type in cigar_types_unknown:
             return -1
     return mutations
-# TODO what does the CIGAR string of an unaligned read look like? 
 
 
 def check_mutation_count_by_optional_NM_field(HTSeq_alignment):
     """ Return number of mutations in HTSeq_alignment, based on optional NM field; -1 if unknown (NM field missing)."""
+    # for unalign reads NM field is missing - returns -1
     try:                return HTSeq_alignment.optional_field('NM')
     except KeyError:    return -1
-# TODO what does the NM field of an unaligned read look like? 
 
 
 def check_mutation_count_by_optional_MD_field(HTSeq_alignment):
@@ -99,9 +102,9 @@ def check_mutation_count_by_optional_MD_field(HTSeq_alignment):
     #   and sam_MD_field_examples_*.txt files in experiments/reference_data/aligner_format_info
     try:                mutation_string = HTSeq_alignment.optional_field('MD')
     except KeyError:    return -1
+    # for unalign reads MD field is missing - returns -1
     mutation_letters = [c for c in mutation_string if not (c.isdigit() or c=='^')]
     return len(mutation_letters)
-# TODO what does the MD field of an unaligned read look like? 
 
 
 def check_mutation_count_try_all_methods(HTSeq_alignment, treat_unknown_as='unknown', ignore_introns=False):
@@ -130,6 +133,8 @@ def check_mutation_count_try_all_methods(HTSeq_alignment, treat_unknown_as='unkn
 
 def get_chrom_and_pos_from_HTSeq_position(HTSeq_pos, pos_type):
     """ Return a (chrom, pos) tuple from an HTSeq.GenomicPosition object; pos_type can be start, end, 3prime, 5prime."""
+    if HTSeq_pos is None:
+        sys.exit("Invalid position %s passed! Need an HTSeq iv object. (If empty, maybe read wasn't aligned?)"%HTSeq_pos)
     chrom = HTSeq_pos.chrom
     if pos_type=='start':       pos = HTSeq_pos.start
     elif pos_type=='end':       pos = HTSeq_pos.end
@@ -137,7 +142,6 @@ def get_chrom_and_pos_from_HTSeq_position(HTSeq_pos, pos_type):
     elif pos_type=='3prime':    pos = HTSeq_pos.end if HTSeq_pos.strand=='+' else HTSeq_pos.start
     else:                       raise ValueError("pos_type argument must be 'start', 'end', '3prime', or '5prime'.")
     return chrom, pos
-# TODO what does the position of an unaligned read look like? 
 
 
 class Alignment_position_sequence_group():
@@ -156,7 +160,7 @@ class Alignment_position_sequence_group():
     def add_read(self, HTSeq_alignment, treat_unknown_as_match=False):
         """ Add a read to the data: increment total_read_count, increment perfect_read_count if read is a perfect 
         alignment, increment the appropriate field of sequence_counts based on read sequence."""
-        self.sequence_counts(HTSeq_alignment.read.seq) += 1
+        self.sequence_counts[HTSeq_alignment.read.seq] += 1
         self.total_read_count += 1
         # figure out whether the read is perfect, treating unknowns ('M' in CIGAR string) as desired
         treat_unknown_as = 'match' if treat_unknown_as_match else 'mutation'
@@ -164,10 +168,13 @@ class Alignment_position_sequence_group():
         if mutation_count==0:  
             self.perfect_read_count += 1
 
-    def get_main_sequence(self):
-        """ Return the most common sequence in this group."""
+    def get_main_sequence(self, N=1):
+        """ Return the most common sequence in this group and its count (or Nth most common sequence if N is provided)."""
         sequences_by_count = sorted([(count,seq) for (seq,count) in self.sequence_counts.iteritems()], reverse=True)
-        return sequences_by_count[0][1]
+        # try returning the Nth sequence and count; return nothing if there are under N sequences.
+        try:                return (sequences_by_count[N-1][1], sequences_by_count[N-1][0])
+        except IndexError:  return ('',0)
+
 
 
 class All_alignments_grouped_by_pos():
@@ -178,76 +185,119 @@ class All_alignments_grouped_by_pos():
         position_type must be 'start','end','3prime',or '5prime'.
         self.alignment_position_data_dict is a dictionary that generates a new alignment_position_sequence_group object
          based on the key (i.e. position) if the key isn't already in the dictionary.  """
-        self.alignment_position_data_dict = keybased_defaultdict(lambda key: alignment_position_sequence_group(*key))
+        self.alignment_position_data_dict = keybased_defaultdict(lambda key: Alignment_position_sequence_group(*key))
         if not position_type in ['start','end','3prime','5prime']: 
             raise ValueError("The position_type variable must be 'start','end','3prime',or '5prime'!")
         self.position_type = position_type
-        self.unaligned_count = 0
+        self.total_read_count, self.aligned_read_count, self.unaligned_read_count = 0,0,0
 
     def add_alignment_reader_to_data(self, HTSeq_alignment_reader, treat_unknown_as_match=False):
         """ Adds all alignments to self.alignment_position_data_dict based on position.
         Input must be a list/generator/etc of HTSeq.Alignment objects (usually an HTSeq.SAM_Reader)."""
         for aln in HTSeq_alignment_reader:
-            if not aln.aligned:
-                self.unaligned_count += 1
+            self.total_read_count += 1
+            if (not aln.aligned) or (aln.iv is None):
+                self.unaligned_read_count += 1
                 continue
+            self.aligned_read_count += 1
             position_info = get_chrom_and_pos_from_HTSeq_position(aln.iv, self.position_type)
             self.alignment_position_data_dict[position_info].add_read(aln, treat_unknown_as_match=treat_unknown_as_match)
 
-    # TODO should have other functions, like printing at least...
-    # MAYBE-TODO add overall info like total_reads, total_aligned, total_unaligned, total_groups, etc... 
+    def print_summary(self, OUTPUT=None, line_prefix = ''):
+        """ Print basic read and group counts (prints to stdout by default, can also pass an open file object)."""
+        if OUTPUT is None:
+            OUTPUT = sys.stdout
+        OUTPUT.write("%s Total reads processed: %s\n"%(line_prefix, self.total_read_count))
+        OUTPUT.write("%s Aligned reads: %s\n"%(line_prefix, self.aligned_read_count))
+        OUTPUT.write("%s Unaligned reads: %s\n"%(line_prefix, self.unaligned_read_count))
+        position_info = "looking at %s of read"%self.position_type
+        OUTPUT.write("%s Read groups by alignment position (%s): %s\n"%(line_prefix, position_info, 
+                                                                        len(self.alignment_position_data_dict)))
 
+    def print_data(self, OUTPUT=None, N_sequences=2, header_line=True, header_prefix="# "):
+        """ Print the full data:  the read count for each group of sequences with the same position.
+        If N_sequences<1, only prints position (chromosome and position), total and perfect read count, 
+          and the number of sequence variants.  If N_sequences==1, also prints the most common sequence and count; 
+          if N_sequences>1, adds the second most common sequence and count, and so on.
+        Output is tab-separated, with headers starting with "# ".  Prints to an open file object (stdout by default).
+        """
+        if OUTPUT is None:
+            OUTPUT = sys.stdout
 
+        if header_line:
+            headers = ['chromosome','position','total_reads','perfect_reads', 'N_sequence_variants']
+            for N in range(1,N_sequences+1):
+                headers.extend(['sequence_%s'%N,'count_seq_%s'%N])
+            OUTPUT.write(header_prefix + '\t'.join(headers) + "\n")
 
+        for group in self.alignment_position_data_dict.itervalues():
+            group_data = [group.chromosome, group.position, group.total_read_count, 
+                          group.perfect_read_count, len(group.sequence_counts)]
+            OUTPUT.write('\t'.join([str(x) for x in group_data]))
+            for N in range(1,N_sequences+1):
+                OUTPUT.write('\t%s\t%s'%group.get_main_sequence(N))
+            OUTPUT.write('\n')
 
-### OLD STUFF FROM OLD VERSION, TODO REWRITE OR DELETE
-
-
-def main(infiles, reffile, outfile, mutation_cutoffs, count_repeat_matches, allowed_repeats_file=None, _verbose=False):
-    """ Read arguments, extract data, print output  - for details see module docstring."""
-    global verbose
-    verbose = _verbose
-    if count_repeat_matches=="from_file" and not allowed_repeats_file:
-        raise ValueError("If count_repeat_matches is from_file, an allowed_repeats_file argument is required.")
-    if count_repeat_matches!="from_file" and allowed_repeats_file:
-        print "Warning: The allowed_repeats_file will be ignored unless you set count_repeat_matches to from_file."
-        allowed_repeats_file = None
-    if count_repeat_matches not in ["all","none"] and not MATCH_TYPE_FIELD:
-        print "Warning: you specified a count_repeat_matches method, but the MATCH_TYPE_FIELD variable in the program is set to 0, implying we're dealing with an input file format that doesn't provide match type information. All matches in the input file will be counted."
-    if verbose: print "parsing reference file - time %s."%time.ctime()
-    Name_to_seq, Name_to_mutations = initialize_dictionaries(reffile)
-    if verbose: print "finished parsing reference file - time %s."%time.ctime()
-    line_counts_summary = extract_data_from_novoalign_file(infiles, Name_to_seq, Name_to_mutations,
-                                                           count_repeat_matches, allowed_repeats_file)
-    total_lines = sum(line_counts_summary)
-    output_summary = "### Finished! %i lines processed:\n"%total_lines
-    output_summary += "# %i non-aligned lines, %i lines with non-allowed alignment types, %i alignments to reference file, %i alignments not matching reference file"%line_counts_summary
-    if verbose: print "printing output - time %s."%time.ctime()
-    Name_to_stats = calculate_statistics(Name_to_mutations)
-    write_output(Name_to_seq,Name_to_stats,outfile,output_summary)
-    if verbose: print output_summary
 
 if __name__ == "__main__":
     """ Allows both running and importing of this file. """
     # optparse only used here!  The options are converted to normal arguments before passing to main.
     from optparse import OptionParser
-    USAGE = "USAGE: %prog [options] infile [more infiles] reference_file outfile"
-    parser = OptionParser(usage = USAGE)
-    parser.add_option('-m', '--mutation_cutoffs', default="1,3,10", metavar="<comma-separated-int-list>")
-    parser.add_option('-r', '--count_repeat_matches', choices=["none","all","by_seq","from_file"], default="none", metavar="[none|all|by_seq|from_file]", help="How to deal with cases of one read aligning to multiple reference sequences: 'all' - count it as matching both sequences, 'none' - ignore it, 'by_seq' - only count it if both reference sequences are identical, 'from_file' - only count it if the pair occurs in the allowed_repeats_file (see -a option).")
-    parser.add_option('-a', '--allowed_repeats_file', type="string", metavar="FILE", help="See -r option 'from_file' for the explanation. The file should contain any number of lines of the format \"sequence<tab> name1,name2,name3,...\", and may be generated by the find_library_duplicates.py script.")
-    # TODO implement this with treating each mutated version of each shRNA as separate!
-    parser.add_option('-M', '--separate_mutations', action="store_true", default=False, help="NOT IMPLEMENTED YET")
+    parser = OptionParser(__doc__)
+    parser.add_option('-p', '--position_type', choices=['start','end','3prime','5prime'], 
+                      default='end', metavar = 'start|end|3prime|5prime', 
+                      help="Which position feature should be used to group reads together? (default %default)")
+    parser.add_option('-H', '--header_level', choices=['0','1','2'], default='2', metavar='0|1|2', 
+                      help="Outfile header type:  0 - no header at all, 1 - a single line giving column headers, "
+                           + "3 - full header with command, options, date, user etc (default %default)")
+    parser.add_option('-n', '--N_sequences_per_group', type='int', default=2, metavar='N', 
+                      help="How many most common sequences should be shown per group? (default %default)")
+    parser.add_option('-s', '--add_summary_to_file', action="store_true", default=True, 
+                      help="Print summary at the end of the file (default %default)")
+    parser.add_option('-S', '--dont_add_summary_to_file', action="store_false", dest='add_summary_to_file', 
+                      help="Turn -s off.")
+    parser.add_option('-u', '--treat_unknown_as_match', action="store_true", default=False, 
+                      help="When counting perfect reads, treat undefined alignment regions as matches (default %default)")
+    parser.add_option('-U', '--dont_treat_unknown_as_match', action="store_false", dest='treat_unknown_as_match',
+                      help="Turn -u off.")
+    # TODO add some way of specifying chromosomes or chromosome regions to ignore?  Like insertion_cassette
+    # TODO separator/format in case I want csv files instead of tab-separated ones?  I'd like to be able to read this file by eye, so I'd like to be able to have a comma-separated format with arbitrary whitespace to line things up.
     parser.add_option('-v', '--verbose', action="store_true", default=False)
     (options, args) = parser.parse_args()
-    # make sure required arguments are there
-    if not len(args)>=3:    parser_error(parser,"infile, reference file and outfile are required")
-    # parse mutation cutoff list
-    try:                mutation_cutoffs = [int(x) for x in options.mutation_cutoffs.split(',')]
-    except ValueError:  parser_error(parser,"mutation_cutoffs must be a comma-separated list of integers")
-    # run the main program with the arguments as given (any number of infiles, one reffile, one outfile
-    reffile, outfile = args[-2:]
-    if len(args)==3:    infiles = [args[0]]
-    else:               infiles = args[:-2]
-    main(infiles, reffile, outfile, mutation_cutoffs, options.count_repeat_matches, options.allowed_repeats_file, options.verbose)
 
+    if len(args)<2:    
+        parser.print_help()
+        sys.exit("\nError: at least one infile and exactly one outfile are required!")
+    infiles = args[:-1]
+    outfile = args[-1]
+
+    all_alignment_data = All_alignments_grouped_by_pos(options.position_type)
+
+    for infile in infiles:
+        if options.verbose: print "parsing input file %s - time %s."%(time.ctime(), infile)
+        infile_reader = HTSeq.SAM_Reader(infile)
+        all_alignment_data.add_alignment_reader_to_data(infile_reader, options.treat_unknown_as_match)
+        if options.verbose: print "finished parsing input file %s - time %s."%(time.ctime(), infile)
+
+    all_alignment_data.print_summary()
+
+    if options.verbose: print "printing output - time %s."%time.ctime()
+    options.header_level = int(options.header_level)
+    with open(outfile,'w') as OUTFILE:
+        if options.header_level==2:
+            write_header_data(OUTFILE,options)
+            OUTFILE.write("### HEADER AND DATA:\n")
+        header_line = True if options.header_level else False
+        header_prefix = '' if options.header_level==1 else '# '
+        all_alignment_data.print_data(OUTFILE, options.N_sequences_per_group, header_line, header_prefix)
+        if options.add_summary_to_file:
+            OUTFILE.write("\n### SUMMARY:\n")
+            all_alignment_data.print_summary(OUTFILE, "# ")
+
+    # TODO write unit-tests for everything!!  And possibly an overall test comparing to current output or to known small outputs?
+
+    ### MAYBE-TODO more options I might want (see old_deepseq_count_alignments.py for old code for dealing with them)
+    #parser.add_option('-m', '--mutation_cutoffs', default="1,3,10", metavar="<comma-separated-int-list>")
+    #parser.add_option('-r', '--count_repeat_matches', choices=["none","all","by_seq","from_file"], default="none", metavar="[none|all|by_seq|from_file]", help="How to deal with cases of one read aligning to multiple reference sequences: 'all' - count it as matching both sequences, 'none' - ignore it, 'by_seq' - only count it if both reference sequences are identical, 'from_file' - only count it if the pair occurs in the allowed_repeats_file (see -a option).")
+    #parser.add_option('-a', '--allowed_repeats_file', type="string", metavar="FILE", help="See -r option 'from_file' for the explanation. The file should contain any number of lines of the format \"sequence<tab> name1,name2,name3,...\", and may be generated by the find_library_duplicates.py script.")
+    # MAYBE-TODO alignment filetype option? (SAM or bowtie or novoalign - currently only implementing SAM)
