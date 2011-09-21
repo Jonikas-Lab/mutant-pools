@@ -24,6 +24,7 @@ USAGE: deepseq_count_alignments.py [options] infile [infile2 infile3 ...] outfil
 # MAYBE-TODO add mutation statistics and user-provided cutoffs like in the original old_deepseq_count_alignments.py script?
 
 import sys, time
+import unittest
 from collections import defaultdict
 from general_utilities import keybased_defaultdict, write_header_data
 import HTSeq
@@ -176,7 +177,6 @@ class Alignment_position_sequence_group():
         except IndexError:  return ('',0)
 
 
-
 class All_alignments_grouped_by_pos():
     """ Essentially a dictionary of alignment_position_sequence_group with position data (chrom,pos) as keys. """
 
@@ -246,10 +246,10 @@ def run_main_function(infiles, outfile, options):
     all_alignment_data = All_alignments_grouped_by_pos(options.position_type)
 
     for infile in infiles:
-        if options.verbose: print "parsing input file %s - time %s."%(time.ctime(), infile)
+        if options.verbose: print "parsing input file %s - time %s."%(infile, time.ctime())
         infile_reader = HTSeq.SAM_Reader(infile)
         all_alignment_data.add_alignment_reader_to_data(infile_reader, options.treat_unknown_as_match)
-        if options.verbose: print "finished parsing input file %s - time %s."%(time.ctime(), infile)
+        if options.verbose: print "finished parsing input file %s - time %s."%(infile, time.ctime())
 
     all_alignment_data.print_summary()
 
@@ -258,30 +258,77 @@ def run_main_function(infiles, outfile, options):
     with open(outfile,'w') as OUTFILE:
         if options.header_level==2:
             write_header_data(OUTFILE,options)
+        if options.add_summary_to_file:
+            OUTFILE.write("### SUMMARY:\n")
+            all_alignment_data.print_summary(OUTFILE, "# ")
+        if options.header_level==2:
             OUTFILE.write("### HEADER AND DATA:\n")
+        elif options.add_summary_to_file:
+            OUTFILE.write("### DATA:\n")
         header_line = True if options.header_level else False
         header_prefix = '' if options.header_level==1 else '# '
         all_alignment_data.print_data(OUTFILE, options.N_sequences_per_group, header_line, header_prefix)
-        if options.add_summary_to_file:
-            OUTFILE.write("\n### SUMMARY:\n")
-            all_alignment_data.print_summary(OUTFILE, "# ")
 
+
+### Test code
+
+class Testing_single_functions(unittest.TestCase):
+    """ Unit-tests for all the top-level functions in this module. """
+
+    def test__check_mutation_count_by_CIGAR_string(self):
+        pass
+        # TODO implement!
+
+    def test__check_mutation_count_by_optional_NM_field(self):
+        pass
+        # TODO implement!
+
+    def test__check_mutation_count_by_optional_MD_field(self):
+        pass
+        # TODO implement!
+
+    def test__check_mutation_count_try_all_methods(self):
+        pass
+        # TODO implement!
+
+    def test__get_chrom_and_pos_from_HTSeq_position(self):
+        pass
+        # TODO implement!
+
+
+class Testing_Alignment_position_sequence_group(unittest.TestCase):
+    """ Unit-tests for the Alignment_position_sequence_group class and its methods. """
+
+    pass
+    # TODO implement!
+
+
+class Testing_All_alignments_grouped_by_pos(unittest.TestCase):
+    """ Unit-tests for the All_alignments_grouped_by_pos class and its methods. """
+
+    pass
+    # TODO implement!
+
+
+# TODO Write overall test comparing to current output or to known small outputs?
 
 if __name__ == "__main__":
     """ Allows both running and importing of this file. """
     # optparse only used here!  The options are converted to normal arguments before passing to main.
     from optparse import OptionParser
     parser = OptionParser(__doc__)
+    parser.add_option('-t','--test_functionality', action='store_true', default=False, 
+                      help="Run the built-in unit test suite (ignores all other options/arguments; default False).")
     parser.add_option('-p', '--position_type', choices=['start','end','3prime','5prime'], 
                       default='end', metavar = 'start|end|3prime|5prime', 
                       help="Which position feature should be used to group reads together? (default %default)")
     parser.add_option('-H', '--header_level', choices=['0','1','2'], default='2', metavar='0|1|2', 
                       help="Outfile header type:  0 - no header at all, 1 - a single line giving column headers, "
-                           + "3 - full header with command, options, date, user etc (default %default)")
+                           + "3 - full header with command, options, date, user etc (default %default) (also see -s)")
     parser.add_option('-n', '--N_sequences_per_group', type='int', default=2, metavar='N', 
                       help="How many most common sequences should be shown per group? (default %default)")
     parser.add_option('-s', '--add_summary_to_file', action="store_true", default=True, 
-                      help="Print summary at the end of the file (default %default)")
+                      help="Print summary at the end of the file (default %default) (also see -H)")
     parser.add_option('-S', '--dont_add_summary_to_file', action="store_false", dest='add_summary_to_file', 
                       help="Turn -s off.")
     parser.add_option('-u', '--treat_unknown_as_match', action="store_true", default=False, 
@@ -293,6 +340,14 @@ if __name__ == "__main__":
     parser.add_option('-v', '--verbose', action="store_true", default=False)
     (options, args) = parser.parse_args()
 
+    # if ran with -t option, do unit tests and quit
+    if options.test_functionality:
+        print("*** You used the -t option - ignoring all other options/arguments, running the built-in simple test suite.")
+        # tun unittest.main, passing it no arguments (by default it takes sys.argv and complains about options)
+        unittest.main(argv=[sys.argv[0]])
+
+
+    # otherwise parse the arguments and run main function
     if len(args)<2:    
         parser.print_help()
         sys.exit("\nError: at least one infile and exactly one outfile are required!")
@@ -301,7 +356,6 @@ if __name__ == "__main__":
 
     run_main_function(infiles, outfile, options)
 
-    # TODO write unit-tests for everything!!  And possibly an overall test comparing to current output or to known small outputs?
 
     ### MAYBE-TODO more options I might want (see old_deepseq_count_alignments.py for old code for dealing with them)
     #parser.add_option('-m', '--mutation_cutoffs', default="1,3,10", metavar="<comma-separated-int-list>")
