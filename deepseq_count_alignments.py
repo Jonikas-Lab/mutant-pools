@@ -49,6 +49,7 @@ import HTSeq
 #        sam_MD_field_examples_*.txt files in experiments/reference_data/aligner_format_info)
 #########
 
+# MAYBE-TODO HTSeq doesn't appear aware of the = and X operations...  http://www-huber.embl.de/users/anders/HTSeq/doc/alignments.html#HTSeq.CigarOperation
 CIGAR_TYPES_MATCH = ['=']
 CIGAR_TYPES_NOOP = ['S','H','P']
 CIGAR_TYPES_MUTATION = ['X','I','D']
@@ -68,12 +69,14 @@ def check_mutation_count_by_CIGAR_string(HTSeq_alignment, treat_unknown_as='unkn
         return -1
     # figure out whether to consider intron-skipping ('N') as a mutation or not, based on argument
     if ignore_introns:
-        cigar_types_mutation = CIGAR_TYPES_MUTATION+CIGAR_TYPES_INTRON
+        # (need this []+ here so it's a copy, not a reference, and modifying it later doesn't modify the original)
+        cigar_types_mutation = [] + CIGAR_TYPES_MUTATION
     else:
-        cigar_types_mutation = CIGAR_TYPES_MUTATION
+        cigar_types_mutation = CIGAR_TYPES_MUTATION + CIGAR_TYPES_INTRON   
     # figure out how to treat unknown matches ('M'), based on argument
     if treat_unknown_as=='unknown':
-        cigar_types_unknown = CIGAR_TYPES_UNKNOWN
+        # (need this []+ here so it's a copy, not a reference, and modifying it later doesn't modify the original)
+        cigar_types_unknown = [] + CIGAR_TYPES_UNKNOWN
     elif treat_unknown_as=='mutation':
         cigar_types_mutation += CIGAR_TYPES_UNKNOWN
         cigar_types_unknown = []
@@ -107,6 +110,7 @@ def check_mutation_count_by_optional_MD_field(HTSeq_alignment):
     except KeyError:    return -1
     # for unalign reads MD field is missing - returns -1
     mutation_letters = [c for c in mutation_string if not (c.isdigit() or c=='^')]
+    # TODO what does ^ mean again?
     return len(mutation_letters)
 
 
@@ -117,7 +121,9 @@ def check_mutation_count_try_all_methods(HTSeq_alignment, treat_unknown_as='unkn
     If the CIGAR string is ambiguous and neither of the optional fields exist:
      - if treat_unknown_as is 'unknown', return -1
      - if treat_unknown_as is 'mutation' or 'match', return the CIGAR string result with unknowns counted accordingly.
-    If ignore_introns is False, count introns (N) in CIGAR string as mutations; otherwise don't."""
+    If ignore_introns is False, count introns (N) in CIGAR string as mutations; otherwise don't .
+    Does NOT guarantee returning a sensible value if the CIGAR, NM and MD fields contain inconsistent information.
+    """
     mutation_count = check_mutation_count_by_CIGAR_string(HTSeq_alignment, treat_unknown_as='unknown', 
                                                           ignore_introns=ignore_introns)
     if not mutation_count==-1:  
@@ -216,7 +222,7 @@ class All_alignments_grouped_by_pos():
         OUTPUT.write("%s Read groups by alignment position (%s): %s\n"%(line_prefix, position_info, 
                                                                         len(self.alignment_position_data_dict)))
 
-    def print_data(self, OUTPUT=None, N_sequences=2, header_line=True, header_prefix="# "):
+    def print_data(self, OUTPUT=None, sort_data=False, N_sequences=2, header_line=True, header_prefix="# "):
         """ Print the full data:  the read count for each group of sequences with the same position.
         If N_sequences<1, only prints position (chromosome and position), total and perfect read count, 
           and the number of sequence variants.  If N_sequences==1, also prints the most common sequence and count; 
@@ -232,12 +238,18 @@ class All_alignments_grouped_by_pos():
                 headers.extend(['sequence_%s'%N,'count_seq_%s'%N])
             OUTPUT.write(header_prefix + '\t'.join(headers) + "\n")
 
-        for group in self.alignment_position_data_dict.itervalues():
+        if sort_data:
+            data = sorted(self.alignment_position_data_dict.values(), key = lambda x: (x.chromosome, x.position))
+        else:
+            data = self.alignment_position_data_dict.itervalues()
+
+        for group in data:
             group_data = [group.chromosome, group.position, group.total_read_count, 
                           group.perfect_read_count, len(group.sequence_counts)]
             OUTPUT.write('\t'.join([str(x) for x in group_data]))
             for N in range(1,N_sequences+1):
                 OUTPUT.write('\t%s\t%s'%group.get_main_sequence(N))
+                # MAYBE-TODO also give the length and number of mutations for each sequence? Optionally?  Length is easy, but do I even keep track of mutation number?  I probably should...
             OUTPUT.write('\n')
 
 
@@ -269,7 +281,9 @@ def run_main_function(infiles, outfile, options):
             OUTFILE.write("### DATA:\n")
         header_line = True if options.header_level else False
         header_prefix = '' if options.header_level==1 else '# '
-        all_alignment_data.print_data(OUTFILE, options.N_sequences_per_group, header_line, header_prefix)
+        all_alignment_data.print_data(OUTPUT=OUTFILE, sort_data=options.sort_data_by_position, 
+                                      N_sequences=options.N_sequences_per_group, 
+                                      header_line=header_line, header_prefix=header_prefix)
 
 
 ### Test code
@@ -277,21 +291,99 @@ def run_main_function(infiles, outfile, options):
 class Testing_single_functions(unittest.TestCase):
     """ Unit-tests for all the top-level functions in this module. """
 
+    # MAYBE-TODO this should be in a setup function or something?
+    class Fake_cigar_op:
+        """ Fake CIGAR operation, mimicking HTSeq cigar object."""
+        def __init__(self,string):  self.type = string
+        size = 1
+    class Fake_alignment:
+        """ Fake alignment with optional_field lookup function, mimicking HTSeq alignment object."""
+        def __init__(self,data):        self.data = data
+        def optional_field(self,x):     return self.data[x]
+
+
     def test__check_mutation_count_by_CIGAR_string(self):
-        pass
-        # TODO implement!
+        # no alignment (CIGAR is None)
+        class fake_alignment:
+            cigar = None
+        assert check_mutation_count_by_CIGAR_string(fake_alignment) == -1
+        # CIGAR is unambiguous, no MD or NM given (or needed)
+        class fake_alignment:
+            cigar = [self.Fake_cigar_op('='),self.Fake_cigar_op('=')]
+        assert check_mutation_count_by_CIGAR_string(fake_alignment) == 0
+        class fake_alignment:
+            cigar = [self.Fake_cigar_op('X'),self.Fake_cigar_op('X')]
+        assert check_mutation_count_by_CIGAR_string(fake_alignment) == 2
+        class fake_alignment:
+            cigar = [self.Fake_cigar_op('D'),self.Fake_cigar_op('D')]
+        assert check_mutation_count_by_CIGAR_string(fake_alignment) == 2
+        class fake_alignment:
+            cigar = [self.Fake_cigar_op('S'),self.Fake_cigar_op('=')]
+        assert check_mutation_count_by_CIGAR_string(fake_alignment) == 0
+        class fake_alignment:
+            cigar = [self.Fake_cigar_op('S'),self.Fake_cigar_op('X')]
+        assert check_mutation_count_by_CIGAR_string(fake_alignment) == 1
+        class fake_alignment:
+            cigar = [self.Fake_cigar_op('N'),self.Fake_cigar_op('=')]
+        assert check_mutation_count_by_CIGAR_string(fake_alignment, ignore_introns=True) == 0
+        assert check_mutation_count_by_CIGAR_string(fake_alignment, ignore_introns=False) == 1
+        # CIGAR is ambiguous (contains M's) - return -1, 2 or 0 depending on what treat_unknown_as is set to
+        class fake_alignment:
+            cigar = [self.Fake_cigar_op('M'),self.Fake_cigar_op('M')]
+        assert check_mutation_count_by_CIGAR_string(fake_alignment, treat_unknown_as='unknown') == -1
+        assert check_mutation_count_by_CIGAR_string(fake_alignment, treat_unknown_as='mutation') == 2
+        assert check_mutation_count_by_CIGAR_string(fake_alignment, treat_unknown_as='match') == 0
+        class fake_alignment:
+            cigar = [self.Fake_cigar_op('M'),self.Fake_cigar_op('=')]
+        assert check_mutation_count_by_CIGAR_string(fake_alignment, treat_unknown_as='unknown') == -1
+        assert check_mutation_count_by_CIGAR_string(fake_alignment, treat_unknown_as='mutation') == 1
+        assert check_mutation_count_by_CIGAR_string(fake_alignment, treat_unknown_as='match') == 0
+        class fake_alignment:
+            cigar = [self.Fake_cigar_op('M'),self.Fake_cigar_op('X')]
+        assert check_mutation_count_by_CIGAR_string(fake_alignment, treat_unknown_as='unknown') == -1
+        assert check_mutation_count_by_CIGAR_string(fake_alignment, treat_unknown_as='mutation') == 2
+        assert check_mutation_count_by_CIGAR_string(fake_alignment, treat_unknown_as='match') == 1
 
     def test__check_mutation_count_by_optional_NM_field(self):
-        pass
-        # TODO implement!
+        """ return -1 if no NM field, otherwise return value of NM field."""
+        fake_alignment = self.Fake_alignment({})
+        assert check_mutation_count_by_optional_NM_field(fake_alignment) == -1
+        for x in range(10):
+            fake_alignment = self.Fake_alignment({'NM':x})
+            assert check_mutation_count_by_optional_NM_field(fake_alignment) == x
 
     def test__check_mutation_count_by_optional_MD_field(self):
-        pass
-        # TODO implement!
+        # see ~/experiments/reference_data/aligner_format_info/* files for examples
+        fake_alignment = self.Fake_alignment({})
+        assert check_mutation_count_by_optional_MD_field(fake_alignment) == -1
+        for s in [str(x) for x in range(30)]:
+            fake_alignment = self.Fake_alignment({'MD': s })
+            assert check_mutation_count_by_optional_MD_field(fake_alignment) == 0
+            fake_alignment = self.Fake_alignment({'MD': s+s })
+            assert check_mutation_count_by_optional_MD_field(fake_alignment) == 0
+            fake_alignment = self.Fake_alignment({'MD': s+'A'+s })
+            assert check_mutation_count_by_optional_MD_field(fake_alignment) == 1
+            fake_alignment = self.Fake_alignment({'MD': s+'A1G'+s })
+            assert check_mutation_count_by_optional_MD_field(fake_alignment) == 2
+            fake_alignment = self.Fake_alignment({'MD': s+'A1G1T1C1N'+s })
+            assert check_mutation_count_by_optional_MD_field(fake_alignment) == 5
+            fake_alignment = self.Fake_alignment({'MD': s+'^'+s })
+            assert check_mutation_count_by_optional_MD_field(fake_alignment) == 0
+            fake_alignment = self.Fake_alignment({'MD': s+'A4^'+s })
+            assert check_mutation_count_by_optional_MD_field(fake_alignment) == 1
 
     def test__check_mutation_count_try_all_methods(self):
-        pass
-        # TODO implement!
+        """ The order of check is CIGAR, NM, MD; CIGAR is skipped if ambiguous; NM and MD skipped if inexistent. 
+        Not attempting to deal with inconsistent states sensibly."""
+        # all measures agree there are no mutations
+        fake_alignment = self.Fake_alignment({'NM':0, 'MD':'10'})
+        fake_alignment.cigar = [self.Fake_cigar_op('=') for x in range(10)]
+        assert check_mutation_count_by_optional_MD_field(fake_alignment) == 0
+        # CIGAR is ambiguous, NM and MD agree there are no mutations
+        fake_alignment = self.Fake_alignment({'NM':0, 'MD':'10'})
+        fake_alignment.cigar = [self.Fake_cigar_op('M') for x in range(10)]
+        assert check_mutation_count_by_optional_MD_field(fake_alignment) == 0
+        # TODO implement more cases with various combinations of existence/values of NM, MD and CIGAR
 
     def test__get_chrom_and_pos_from_HTSeq_position(self):
         pass
@@ -312,7 +404,14 @@ class Testing_All_alignments_grouped_by_pos(unittest.TestCase):
     # TODO implement!
 
 
-# TODO Write overall test comparing to current output or to known small outputs?
+# TODO Write overall test comparing to current output or to known small outputs?  Half-done - see test_1.sam file
+# MAYBE-TODO separate test runs needed for different options: -p, -u/-U
+# use -s and -H 1 to get all relevant info but not have to deal with changing timestamps/etc
+def run_full_test(infiles, outfile, reference_outfile):
+    pass
+    # run_main_function(infiles, outfile, options)
+    # TODO need to move option parser into a separate function first...
+
 
 if __name__ == "__main__":
     """ Allows both running and importing of this file. """
@@ -333,6 +432,10 @@ if __name__ == "__main__":
                       help="How many most common sequences should be shown per group? (default %default)")
     parser.add_option('-s', '--add_summary_to_file', action="store_true", default=True, 
                       help="Print summary at the end of the file (default %default) (also see -H)")
+    parser.add_option('-o', '--sort_data_by_position', action="store_true", default=True, 
+                      help="Sort the output data by alignment position (default %default)")
+    parser.add_option('-O', '--dont_sort_data_by_position', action="store_false", dest='sort_data_by_position', 
+                      help="Turn -o off.")
     parser.add_option('-S', '--dont_add_summary_to_file', action="store_false", dest='add_summary_to_file', 
                       help="Turn -s off.")
     parser.add_option('-u', '--treat_unknown_as_match', action="store_true", default=False, 
@@ -346,7 +449,7 @@ if __name__ == "__main__":
 
     # if ran with -t option, do unit tests and quit
     if options.test_functionality:
-        print("*** You used the -t option - ignoring all other options/arguments, running the built-in simple test suite.")
+        print("*** You used the -t option - ignoring all other options/arguments, running the built-in test suite. ***")
         # tun unittest.main, passing it no arguments (by default it takes sys.argv and complains about options)
         unittest.main(argv=[sys.argv[0]])
 
