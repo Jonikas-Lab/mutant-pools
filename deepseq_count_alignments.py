@@ -6,11 +6,11 @@ other deepseq aligner programs (tested mainly on bowtie).  Multiple SAM input
 files can be provided.
 
 The output file is a tab-separated file, with one line per unique genomic
-alignment location of the 3' end of the sequence (?).  Each line will contain
-the following fields: chromosome, position, most common non-mutated sequence,
-total number of aligned reads, number of perfectly aligned reads.  (More output
-fields or separate files with details on mutations, lengths, etc, may be added
-later.)
+alignment location of the 3' end of the sequence (by default; other position
+options may be used).  Each line will contain the following fields: chromosome,
+position, most common non-mutated sequence, total number of aligned reads,
+number of perfectly aligned reads.  (More output fields or separate files with
+details on mutations, lengths, etc, may be added later.)
 
 The program assumes the SAM file contains only unique matches (i.e. each read
 was reported as aligning to at most one genomic location).
@@ -54,6 +54,8 @@ CIGAR_TYPES_NOOP = ['S','H','P']
 CIGAR_TYPES_MUTATION = ['X','I','D']
 CIGAR_TYPES_INTRON = ['N']     # 'N' is for introns, but we shouldn't be paying attention to those for genomic DNA seq
 CIGAR_TYPES_UNKNOWN = ['M']
+
+VALID_POSITION_TYPES = ['leftmost','rightmost','5prime','3prime']
 
 def check_mutation_count_by_CIGAR_string(HTSeq_alignment, treat_unknown_as='unknown', ignore_introns=False):
     """ Return number of mutations in HTSeq_alignment, based on CIGAR string; -1 if unknown ('M') by default.
@@ -133,15 +135,15 @@ def check_mutation_count_try_all_methods(HTSeq_alignment, treat_unknown_as='unkn
 
 
 def get_chrom_and_pos_from_HTSeq_position(HTSeq_pos, pos_type):
-    """ Return a (chrom, pos) tuple from an HTSeq.GenomicPosition object; pos_type can be start, end, 3prime, 5prime."""
+    """ Return a (chrom, pos) tuple based on a HTSeq.GenomicPosition object, with pos being the location of the leftmost, rightmost, 5prime, or 3prime end of the read, depending on the value of pos_type."""
     if HTSeq_pos is None:
         sys.exit("Invalid position %s passed! Need an HTSeq iv object. (If empty, maybe read wasn't aligned?)"%HTSeq_pos)
     chrom = HTSeq_pos.chrom
-    if pos_type=='start':       pos = HTSeq_pos.start
-    elif pos_type=='end':       pos = HTSeq_pos.end
+    if pos_type=='leftmost':       pos = HTSeq_pos.start
+    elif pos_type=='rightmost':       pos = HTSeq_pos.end
     elif pos_type=='5prime':    pos = HTSeq_pos.start if HTSeq_pos.strand=='+' else HTSeq_pos.end
     elif pos_type=='3prime':    pos = HTSeq_pos.end if HTSeq_pos.strand=='+' else HTSeq_pos.start
-    else:                       raise ValueError("pos_type argument must be 'start', 'end', '3prime', or '5prime'.")
+    else:                       raise ValueError("pos_type argument must be one of %s."%VALID_POSITION_TYPES)
     return chrom, pos
 
 
@@ -182,12 +184,12 @@ class All_alignments_grouped_by_pos():
 
     def __init__(self, position_type):
         """ Checks position_type and assigns to self.position_type; initializes self.alignment_position_data_dict.
-        position_type must be 'start','end','3prime',or '5prime'.
+        position_type must be one of %s.
         self.alignment_position_data_dict is a dictionary that generates a new alignment_position_sequence_group object
-         based on the key (i.e. position) if the key isn't already in the dictionary.  """
+         based on the key (i.e. position) if the key isn't already in the dictionary.  """%VALID_POSITION_TYPES
         self.alignment_position_data_dict = keybased_defaultdict(lambda key: Alignment_position_sequence_group(*key))
-        if not position_type in ['start','end','3prime','5prime']: 
-            raise ValueError("The position_type variable must be 'start','end','3prime',or '5prime'!")
+        if not position_type in VALID_POSITION_TYPES: 
+            raise ValueError("The position_type variable must be one of %s!"%VALID_POSITION_TYPES)
         self.position_type = position_type
         self.total_read_count, self.aligned_read_count, self.unaligned_read_count = 0,0,0
 
@@ -319,9 +321,11 @@ if __name__ == "__main__":
     parser = OptionParser(__doc__)
     parser.add_option('-t','--test_functionality', action='store_true', default=False, 
                       help="Run the built-in unit test suite (ignores all other options/arguments; default False).")
-    parser.add_option('-p', '--position_type', choices=['start','end','3prime','5prime'], 
-                      default='end', metavar = 'start|end|3prime|5prime', 
-                      help="Which position feature should be used to group reads together? (default %default)")
+    parser.add_option('-p', '--position_type', choices=VALID_POSITION_TYPES, 
+                      default='3prime', metavar='|'.join(VALID_POSITION_TYPES), 
+                      help="Which position feature should be used to group reads together? (default %default) "
+                           + "leftmost/rightmost refer to where the first aligned base of the read lies on the reference, "
+                           + "regardless of read orientation; 5prime/3prime is by position of specific end of the read.")
     parser.add_option('-H', '--header_level', choices=['0','1','2'], default='2', metavar='0|1|2', 
                       help="Outfile header type:  0 - no header at all, 1 - a single line giving column headers, "
                            + "3 - full header with command, options, date, user etc (default %default) (also see -s)")
@@ -356,6 +360,8 @@ if __name__ == "__main__":
 
     run_main_function(infiles, outfile, options)
 
+
+    # TODO we DON'T want the grouping to be based only on alignment location, I think!  What if we have two mutants that inserted into the same location but in opposite orientations?  12--->345 and 123<---45 - position should be "3" in both cases (is that really how it comes out? check!), but I think those are separate mutants and should be treated separately, right?  Unlikely, of course, but still.
 
     ### MAYBE-TODO more options I might want (see old_deepseq_count_alignments.py for old code for dealing with them)
     #parser.add_option('-m', '--mutation_cutoffs', default="1,3,10", metavar="<comma-separated-int-list>")
