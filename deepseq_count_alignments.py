@@ -404,11 +404,11 @@ class Testing_All_alignments_grouped_by_pos(unittest.TestCase):
 
 def do_test_run():
     """ Test run: run script on test infile, compare output to reference file."""
-    test_runs = [("-H 1 -s -n 3 -q -U -p leftmost", "test_data/test_input.sam", "test_data/test_output__U_leftmost.txt"),
-                 ("-H 1 -s -n 3 -q -U -p rightmost", "test_data/test_input.sam", "test_data/test_output__U_rightmost.txt"),
-                 ("-H 1 -s -n 3 -q -U -p 5prime", "test_data/test_input.sam", "test_data/test_output__U_5prime.txt"),
-                 ("-H 1 -s -n 3 -q -U -p 3prime", "test_data/test_input.sam", "test_data/test_output__U_3prime.txt"),
-                 ("-H 1 -s -n 3 -q -u -p leftmost", "test_data/test_input.sam", "test_data/test_output__u_leftmost.txt")]
+    test_runs = [("-H 1 -s -n3 -o -q -U -p leftmost","test_data/test_input.sam","test_data/test_output__U_leftmost.txt"),
+                 ("-H 1 -s -n3 -o -q -U -p rightmost","test_data/test_input.sam","test_data/test_output__U_rightmost.txt"),
+                 ("-H 1 -s -n3 -o -q -U -p 5prime","test_data/test_input.sam","test_data/test_output__U_5prime.txt"),
+                 ("-H 1 -s -n3 -o -q -U -p 3prime","test_data/test_input.sam","test_data/test_output__U_3prime.txt"),
+                 ("-H 1 -s -n3 -o -q -u -p leftmost","test_data/test_input.sam","test_data/test_output__u_leftmost.txt")]
     #  (using -s and -H 1 to get all relevant info but not have to deal with changing timestamps/etc)
     for option_string, infile, reference_file in test_runs:
         print(" * New test run, with options: %s (infile %s, reference outfile %s)"%(option_string,infile,reference_file))
@@ -434,12 +434,12 @@ def define_option_parser():
     from optparse import OptionParser
     parser = OptionParser(__doc__)
     parser.add_option('-t','--test_functionality', action='store_true', default=False, 
-                      help="Run the built-in unit test suite (ignores all other options/arguments; default False).")
+                      help="Run the built-in unit test suite (ignores all other options/arguments; default %default).")
     parser.add_option('-T','--test_run', action='store_true', default=False, 
-                      help="Run on a test input file, check output against reference. Ignores all other options/arguments."
-                      + "(default False). ")
-    parser.add_option('-p', '--position_type', choices=VALID_POSITION_TYPES, 
-                      default='3prime', metavar='|'.join(VALID_POSITION_TYPES), 
+                      help="Run on a test input file, check output against reference files. "
+                      + "Ignores all other options/arguments. (default %default).")
+    parser.add_option('-p', '--position_type', choices=VALID_POSITION_TYPES, default='3prime', 
+                      metavar='|'.join(VALID_POSITION_TYPES), 
                       help="Which position feature should be used to group reads together? (default %default) "
                            + "leftmost/rightmost refer to where the first aligned base of the read lies on the reference, "
                            + "regardless of read orientation; 5prime/3prime is by position of specific end of the read.")
@@ -450,8 +450,8 @@ def define_option_parser():
                       help="How many most common sequences should be shown per group? (default %default)")
     parser.add_option('-s', '--add_summary_to_file', action="store_true", default=True, 
                       help="Print summary at the end of the file (default %default) (also see -H)")
-    parser.add_option('-o', '--sort_data_by_position', action="store_true", default=True, 
-                      help="Sort the output data by alignment position (default %default)")
+    parser.add_option('-o', '--sort_data_by_position', action="store_true", default=False, 
+                      help="Sort the output data by alignment position (default %default) - CAUTION: MAY BE SLOW!")
     parser.add_option('-O', '--dont_sort_data_by_position', action="store_false", dest='sort_data_by_position', 
                       help="Turn -o off.")
     parser.add_option('-S', '--dont_add_summary_to_file', action="store_false", dest='add_summary_to_file', 
@@ -462,8 +462,8 @@ def define_option_parser():
                       help="Turn -u off.")
     # TODO add some way of specifying chromosomes or chromosome regions to ignore?  Like insertion_cassette
     # TODO separator/format in case I want csv files instead of tab-separated ones?  I'd like to be able to read this file by eye, so I'd like to be able to have a comma-separated format with arbitrary whitespace to line things up.
-    parser.add_option('-q', '--quiet', action="store_true", default=False)
-    parser.add_option('-v', '--verbose', action="store_true", default=False)
+    parser.add_option('-q', '--quiet', action="store_true", default=False, help="Don't print summary to STDOUT.")
+    parser.add_option('-v', '--verbose', action="store_true", default=False, help="Print progress reports to STDOUT.")
 
     return parser
 
@@ -514,7 +514,7 @@ if __name__ == "__main__":
         unittest.main(argv=[sys.argv[0]])
 
     if options.test_run:
-        print("*** You used the -T option - ignoring all other options and running the built-in example test runs.")
+        print("*** You used the -T option - ignoring all other options and running the built-in example test runs. ***")
         do_test_run()
 
     # otherwise parse the arguments and run main function
