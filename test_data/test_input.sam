@@ -1,0 +1,68 @@
+@@@ multiple-sequences test - different numbers of reads and of unique sequences
+TEST:2:1:8790:931#0/1	0	reads_1_seqs_1	100	255	4M	*	0	0	AAAA	____	XA:i:0	MD:Z:4	NM:i:0
+TEST:2:1:8790:931#0/1	0	reads_2_seqs_1	200	255	4M	*	0	0	AAAA	____	XA:i:0	MD:Z:4	NM:i:0
+TEST:2:1:8790:931#0/1	0	reads_2_seqs_1	200	255	4M	*	0	0	AAAA	____	XA:i:0	MD:Z:4	NM:i:0
+TEST:2:1:8790:931#0/1	0	reads_2_seqs_2	300	255	4M	*	0	0	CCCC	____	XA:i:0	MD:Z:4	NM:i:0
+TEST:2:1:8790:931#0/1	0	reads_2_seqs_2	300	255	4M	*	0	0	AAAA	____	XA:i:0	MD:Z:4	NM:i:0
+TEST:2:1:8790:931#0/1	0	reads_3_seqs_2	400	255	4M	*	0	0	CCCC	____	XA:i:0	MD:Z:4	NM:i:0
+TEST:2:1:8790:931#0/1	0	reads_3_seqs_2	400	255	4M	*	0	0	AAAA	____	XA:i:0	MD:Z:4	NM:i:0
+TEST:2:1:8790:931#0/1	0	reads_3_seqs_2	400	255	4M	*	0	0	AAAA	____	XA:i:0	MD:Z:4	NM:i:0
+TEST:2:1:8790:931#0/1	0	reads_3_seqs_3	500	255	4M	*	0	0	CCCC	____	XA:i:0	MD:Z:4	NM:i:0
+TEST:2:1:8790:931#0/1	0	reads_3_seqs_3	500	255	4M	*	0	0	GGGG	____	XA:i:0	MD:Z:4	NM:i:0
+TEST:2:1:8790:931#0/1	0	reads_3_seqs_3	500	255	4M	*	0	0	AAAA	____	XA:i:0	MD:Z:4	NM:i:0
+@ 
+@
+@@@ strandedness-position test 
+@ reference sequence (+ strand)
+TEST:2:1:8790:931#0/1	0	strandedness_+_reference	100	255	4M	*	0	0	AAAA	____	XA:i:0	MD:Z:4	NM:i:0
+@
+@ sequences on the + strand but with different length - they should be same or different position as reference depending on position_type option used (specified in name)
+TEST:2:1:8790:931#0/1	0	strandedness_+_same-left	100	255	6M	*	0	0	AAAAAA	______	XA:i:0	MD:Z:6	NM:i:0
+TEST:2:1:8790:931#0/1	0	strandedness_+_same-right	98	255	6M	*	0	0	AAAAAA	______	XA:i:0	MD:Z:6	NM:i:0
+TEST:2:1:8790:931#0/1	0	strandedness_+_same-5prime	100	255	6M	*	0	0	AAAAAA	______	XA:i:0	MD:Z:6	NM:i:0
+TEST:2:1:8790:931#0/1	0	strandedness_+_same-3prime	98	255	6M	*	0	0	AAAAAA	______	XA:i:0	MD:Z:6	NM:i:0
+@
+@ sequences on the - strand (same length) - they should be same or different position as reference depending on position_type option used (specified in name)
+TEST:2:1:8790:931#0/1	16	strandedness_-_same-left	100	255	4M	*	0	0	TTTT	____	XA:i:0	MD:Z:4	NM:i:0
+TEST:2:1:8790:931#0/1	16	strandedness_-_same-right	100	255	4M	*	0	0	TTTT	____	XA:i:0	MD:Z:4	NM:i:0
+TEST:2:1:8790:931#0/1	16	strandedness_-_same-5prime	96	255	4M	*	0	0	TTTT	____	XA:i:0	MD:Z:4	NM:i:0
+TEST:2:1:8790:931#0/1	16	strandedness_-_same-3prime	104	255	4M	*	0	0	TTTT	____	XA:i:0	MD:Z:4	NM:i:0
+@
+@
+@@@ mutation-handling test (by CIGAR string, NM field and MD field)
+@  note that I can't check what happens if CIGAR string explicitly specifies no mutations (=), because HTSeq doesn't accept = in CIGAR string (also doesn't accept X for mismatch; only M for match/mismatch)
+@    no mutations
+TEST:2:1:4364:947#0/1	0	mutation_none	100	255	4M	*	0	0	AAAA	____	XA:i:0	MD:Z:4	NM:i:0
+@
+@    mutation according to all relevant strings - should be detected (note I'm using an Insertion here, bowtie doesn't actually do those, but bowtie seems to only ever yield M's for match/mismatch, so nothing else I can test this with)
+TEST:2:1:7426:950#0/1	0	mutation_yes	200	255	4D	*	0	0	AAAA	____	XA:i:0	MD:Z:CCCC	NM:i:4
+@    mutation according to CIGAR string only - should be detected
+TEST:2:1:7426:950#0/1	0	mutation_yes	200	255	4D	*	0	0	AAAA	____	XA:i:0	MD:Z:4	NM:i:0
+@
+@ reads with ambiguous CIGAR string but mutations in other fields: should be detected always, because even with the --treat_unknown_as_match other fields are checked before we go back to forcibly interpret an ambiguous CIGAR string
+@    mutation according to MD and NM strings, CIGAR string ambiguous - should be detected
+TEST:2:1:7426:950#0/1	0	mutation_yes	200	255	4M	*	0	0	AAAA	____	XA:i:0	MD:Z:3L	NM:i:1
+@    mutation according to NM string, with MD string missing - should be detected
+TEST:2:1:0311:958#0/1	0	mutation_yes	200	255	4M	*	0	0	AAAA	____	XA:i:0	NM:i:1
+@    mutation according to MD string, with NM string missing - should be detected
+TEST:2:1:0311:958#0/1	0	mutation_yes	200	255	4M	*	0	0	AAAA	____	XA:i:0	MD:Z:1P2
+@    mutation according to NM string only - should be detected (my program checks NM first, then MD)
+TEST:2:1:0311:958#0/1	0	mutation_yes	200	255	4M	*	0	0	AAAA	____	XA:i:0	MD:Z:4	NM:i:1
+@    mutation according to MD string but not NM string - shouldn't be detected (my program checks NM first, then MD)
+TEST:2:1:0311:958#0/1	0	mutation_none	100	255	4M	*	0	0	AAAA	____	XA:i:0	MD:Z:1P2	NM:i:0
+@
+@ reads with ambiguous CIGAR string and no info in other fields: should be detected by default (-U), but not detected with -u option (--treat_unknown_as_match)
+TEST:2:1:0311:958#0/1	0	mutation_ifU	200	255	4M	*	0	0	AAAA	____	
+@
+@
+@@@ unaligned reads test (should be ten of them)
+TEST:2:1:3000:928#0/1	4	*	0	0	*	*	0	0	AAAA	____	XM:i:0
+TEST:2:1:3115:932#0/1	4	*	0	0	*	*	0	0	TTTT	_b_b	XM:i:0
+TEST:2:1:3183:928#0/1	4	*	0	0	*	*	0	0	AAAA	bb_b	XM:i:0
+TEST:2:1:3253:930#0/1	4	*	0	0	*	*	0	0	GGGG	b__b	XM:i:0
+TEST:2:1:3578:931#0/1	4	*	0	0	*	*	0	0	TTTT	____	XM:i:0
+TEST:2:1:5112:931#0/1	4	*	0	0	*	*	0	0	AAAA	_bbb	XM:i:0
+TEST:2:1:5345:929#0/1	4	*	0	0	*	*	0	0	AAAA	__bb	XM:i:0
+TEST:2:1:5392:940#0/1	4	*	0	0	*	*	0	0	TTTT	bbb_	XM:i:0
+TEST:2:1:5392:950#0/1	4	*	0	0	*	*	0	0	AAAA	bbbb	XM:i:0
+TEST:2:1:5392:960#0/1	4	*	0	0	*	*	0	0	CCCC	bbb_	XM:i:0

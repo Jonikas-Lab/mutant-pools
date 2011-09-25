@@ -217,7 +217,7 @@ class All_alignments_grouped_by_pos():
         OUTPUT.write("%s Total reads processed: %s\n"%(line_prefix, self.total_read_count))
         OUTPUT.write("%s Aligned reads: %s\n"%(line_prefix, self.aligned_read_count))
         OUTPUT.write("%s Unaligned reads: %s\n"%(line_prefix, self.unaligned_read_count))
-        position_info = "looking at %s of read"%self.position_type
+        position_info = "looking at %s end of read"%self.position_type
         OUTPUT.write("%s Read groups by alignment position (%s): %s\n"%(line_prefix, position_info, 
                                                                         len(self.alignment_position_data_dict)))
 
@@ -404,26 +404,26 @@ class Testing_All_alignments_grouped_by_pos(unittest.TestCase):
 
 def do_test_run():
     """ Test run: run script on test infile, compare output to reference file."""
-    test_runs = [("-H 1 -s -n 5 -p 3prime -U -q", "test_input.sam", "test_output__3prime_U.txt")]
+    test_runs = [("-H 1 -s -n 3 -q -U -p leftmost", "test_data/test_input.sam", "test_data/test_output__U_leftmost.txt"),
+                 ("-H 1 -s -n 3 -q -U -p rightmost", "test_data/test_input.sam", "test_data/test_output__U_rightmost.txt"),
+                 ("-H 1 -s -n 3 -q -U -p 5prime", "test_data/test_input.sam", "test_data/test_output__U_5prime.txt"),
+                 ("-H 1 -s -n 3 -q -U -p 3prime", "test_data/test_input.sam", "test_data/test_output__U_3prime.txt"),
+                 ("-H 1 -s -n 3 -q -u -p leftmost", "test_data/test_input.sam", "test_data/test_output__u_leftmost.txt")]
     #  (using -s and -H 1 to get all relevant info but not have to deal with changing timestamps/etc)
-    # TODO finish working on that input file (see comments in file)
-    # TODO write the actual reference file!  Right now it's just an outfile copy, to make sure the system works.
-    # MAYBE-TODO add test runs for different options: -p leftmost/rightmost/5prime/3prime, -u/-U
     for option_string, infile, reference_file in test_runs:
         print(" * New test run, with options: %s (infile %s, reference outfile %s)"%(option_string,infile,reference_file))
         # regenerate options with test argument string
         parser = define_option_parser()
         (options, _) = parser.parse_args(option_string.split())
-        outfile = "test_output.txt"
+        outfile = "test_data/test_output.txt"
         run_main_function([infile], outfile, options)
         # compare outfile to reference file: remove outfile and keep going if correct, otherwise exit with message.
         if filecmp.cmp(outfile, reference_file, shallow=False):
-            print("TEST PASSED - output file identical to reference file %s (removing output file)."%reference_file)
             os.remove(outfile)
         else:
             print("TEST FAILED!!  Reference file %s and output file %s differ - PLEASE COMPARE."%(reference_file,outfile))
             sys.exit(1)
-    print("*** Test runs finished. ***")
+    print("*** Test runs finished - EVERYTHING IS FINE. ***")
     sys.exit(0)
 
 
