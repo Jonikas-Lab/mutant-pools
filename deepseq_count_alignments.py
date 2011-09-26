@@ -1,5 +1,6 @@
 #!/usr/bin/env python
-""" Convert a SAM file to a file containing genomic position, sequence, and total read count. 
+""" Convert a SAM file to a file containing genomic position, total read count,
+and optionally other details. 
 
 The input file is a SAM deepseq alignment file created by bowtie, novoalign, or
 other deepseq aligner programs (tested mainly on bowtie).  Multiple SAM input
@@ -8,9 +9,10 @@ files can be provided.
 The output file is a tab-separated file, with one line per unique genomic
 alignment location of the 3' end of the sequence (by default; other position
 options may be used).  Each line will contain the following fields: chromosome,
-position, most common non-mutated sequence, total number of aligned reads,
-number of perfectly aligned reads.  (More output fields or separate files with
-details on mutations, lengths, etc, may be added later.)
+position, total number of aligned reads, number of perfectly aligned reads.
+Optionally: most common sequence and its count, second most common sequence and
+its count, etc.  (More output fields or separate files with details on
+mutations, lengths, etc, may be added later.)
 
 The program assumes the SAM file contains only unique matches (i.e. each read
 was reported as aligning to at most one genomic location).
@@ -532,6 +534,8 @@ if __name__ == "__main__":
 
 
     # TODO we DON'T want the grouping to be based only on alignment location, I think!  What if we have two mutants that inserted into the same location but in opposite orientations?  12--->345 and 123<---45 - position should be "3" in both cases (is that really how it comes out? check!), but I think those are separate mutants and should be treated separately, right?  Unlikely, of course, but still.
+
+    # MAYBE-TODO do I want to try outputting this in some existing bioinformatics format instead of a made-up one?
 
     # MAYBE-TODO add an option to make output go to STDOUT?
     # MAYBE-TODO add mutation statistics and user-provided cutoffs like in old_deepseq_count_alignments.py?
