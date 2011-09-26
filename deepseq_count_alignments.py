@@ -52,7 +52,7 @@ CIGAR_TYPES_NOOP = ['S','H','P']
 CIGAR_TYPES_MUTATION = ['X','I','D']
 CIGAR_TYPES_INTRON = ['N']     # 'N' is for introns, but we shouldn't be paying attention to those for genomic DNA seq
 CIGAR_TYPES_UNKNOWN = ['M']
-# MAYBE-TODO HTSeq doesn't appear aware of the = and X operations...  http://www-huber.embl.de/users/anders/HTSeq/doc/alignments.html#HTSeq.CigarOperation
+# MAYBE-TODO HTSeq doesn't appear aware of the = and X operations...  http://www-huber.embl.de/users/anders/HTSeq/doc/alignments.html#HTSeq.CigarOperation  - I emailed the author about it
 
 VALID_POSITION_TYPES = ['leftmost','rightmost','5prime','3prime']
 
@@ -105,11 +105,13 @@ def check_mutation_count_by_optional_MD_field(HTSeq_alignment):
     """ Return number of mutations in HTSeq_alignment, based on optional MD field; -1 if unknown (MD field missing)."""
     # for info on MD field format see SAM manual footnote, 
     #   and sam_MD_field_examples_*.txt files in experiments/reference_data/aligner_format_info
+    #       basically a number means matches, a letter means a mismatch to reference (or insertion? is that different?), 
+    #       letters preceded by ^ mean deletion from the reference
     try:                mutation_string = HTSeq_alignment.optional_field('MD')
     except KeyError:    return -1
     # for unalign reads MD field is missing - returns -1
     mutation_letters = [c for c in mutation_string if not (c.isdigit() or c=='^')]
-    # TODO what does ^ mean again?
+    #   (^ is used in describing a mutation but it shouldn't be counted as a separate mutation - only letters count.)
     return len(mutation_letters)
 
 
@@ -327,14 +329,16 @@ class Testing_single_functions(unittest.TestCase):
             assert check_mutation_count_by_optional_MD_field(fake_alignment) == 0
             fake_alignment = self.Fake_alignment({'MD': s+'A'+s })
             assert check_mutation_count_by_optional_MD_field(fake_alignment) == 1
-            fake_alignment = self.Fake_alignment({'MD': s+'A1G'+s })
+            fake_alignment = self.Fake_alignment({'MD': s+'A0G'+s })
             assert check_mutation_count_by_optional_MD_field(fake_alignment) == 2
-            fake_alignment = self.Fake_alignment({'MD': s+'A1G1T1C1N'+s })
+            fake_alignment = self.Fake_alignment({'MD': s+'A2G'+s })
+            assert check_mutation_count_by_optional_MD_field(fake_alignment) == 2
+            fake_alignment = self.Fake_alignment({'MD': s+'A2G2T2C2N'+s })
             assert check_mutation_count_by_optional_MD_field(fake_alignment) == 5
-            fake_alignment = self.Fake_alignment({'MD': s+'^'+s })
-            assert check_mutation_count_by_optional_MD_field(fake_alignment) == 0
-            fake_alignment = self.Fake_alignment({'MD': s+'A4^'+s })
+            fake_alignment = self.Fake_alignment({'MD': s+'^A'+s })
             assert check_mutation_count_by_optional_MD_field(fake_alignment) == 1
+            fake_alignment = self.Fake_alignment({'MD': s+'^AGC'+s })
+            assert check_mutation_count_by_optional_MD_field(fake_alignment) == 3
 
     def test__check_mutation_count_try_all_methods(self):
         """ The order of check is CIGAR, NM, MD; CIGAR is skipped if ambiguous; NM and MD skipped if inexistent. 
