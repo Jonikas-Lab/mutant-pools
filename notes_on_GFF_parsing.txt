@@ -1,0 +1,229 @@
+Parsing file ~/experiments/reference_data/chlamy_annotation/Creinhardtii_169_gene.gff3
+
+
+### Looking at it manually 
+
+What are the fields of the gff3 file?
+ * 1 - chromosome/scaffold
+ * 2 - always phytozome7_0 (gff_source)
+ * 3 - gene/mRNA/CDS/five_prime_UTR/three_prime_UTR (gff_type)
+ * 4-5 -  position
+ * 6 - "score", apparently, but it's always just . so it doesn't matter
+ * 7 - strand (or at least it's always + or -)
+ * 8 - phase, i.e. something related to the reading frame (0/1/2, CDS only; . for gene/mRNA/etc) 
+        (ends up as feature.qualifiers['phase'] in GFF parser below, for CDS only)
+ * 9 - "attributes": ID/name/parent/notes etc
+
+Official GFF3 format info: http://www.sequenceontology.org/gff3.shtml
+
+http://genome.ucsc.edu/FAQ/FAQformat.html#format3
+
+
+### Using BCBio.GFF
+
+Using this tutorial: http://biopython.org/wiki/GFF_Parsing 
+(installed BCBio from https://github.com/chapmanb/bcbb/tree/581d08cfbfff9f3d0743559b1c23d1efd3647263, using https://github.com/chapmanb/bcbb/zipball/master)
+
+# Trying initialization in python
+
+Works.
+
+>>> import pprint
+>>> from BCBio.GFF import GFFExaminer
+>>> in_file = 'reference_data/Creinhardtii_169_gene.gff3'
+>>> examiner = GFFExaminer()
+>>> in_handle = open(in_file)
+
+# Basic structure of the records: gene->mRNA, mRNA->CDS,5'UTR,3'UTR.  Reasonable.
+
+>>> pprint.pprint(examiner.parent_child_map(in_handle))
+{('phytozome7_0', 'gene'): [('phytozome7_0', 'mRNA')],
+ ('phytozome7_0', 'mRNA'): [('phytozome7_0', 'CDS'),
+                            ('phytozome7_0', 'five_prime_UTR'),
+                            ('phytozome7_0', 'three_prime_UTR')]}
+
+# Counts of various things:
+    gff_id is the chromosome/scaffold, it gives you counts of items (or genes?) per chromosome
+    gff_type/gff_source_type is gene, mRNA, CDS, five_prime_UTR or three_prime_UTR - it gives you counts of each. 17114 genes, same number of mRNAs, a few more UTRs (why?? TODO which genes have multiple UTRs, and what should we do with those), nearly 10x more CDS (those are basically exons, so yeah).
+
+>>> pprint.pprint(examiner.available_limits(in_handle))
+{'gff_id': {('chromosome_1',): 20164,
+            ('chromosome_10',): 14141,
+                ...
+            ('chromosome_17',): 12770,
+            ('chromosome_2',): 20749,
+                ...
+            ('chromosome_9',): 8810,
+            ('scaffold_18',): 2316,
+            ('scaffold_19',): 1536,
+                ...
+            ('scaffold_86',): 15,
+            ('scaffold_88',): 11},
+ 'gff_source': {('phytozome7_0',): 215606},
+ 'gff_source_type': {('phytozome7_0', 'CDS'): 144581,
+                     ('phytozome7_0', 'five_prime_UTR'): 19233,
+                     ('phytozome7_0', 'gene'): 17114,
+                     ('phytozome7_0', 'mRNA'): 17114,
+                     ('phytozome7_0', 'three_prime_UTR'): 17564},
+ 'gff_type': {('CDS',): 144581,
+              ('five_prime_UTR',): 19233,
+              ('gene',): 17114,
+              ('mRNA',): 17114,
+              ('three_prime_UTR',): 17564}}
+
+
+# Trying actual parsing:
+
+Using 713-line test file because running this on the full file takes up LOTS of memory, which makes sense...  Should do it on the server, I suppose?  SIGH, installing this on the server may not be very fun... 
+
+>>> from BCBio import GFF
+>>> infile = 'reference_data/test_file.gff3'
+>>> INFILE = open(infile)
+>>> GFF_parser = GFF.parse(INFILE)
+>>> record1 = GFF_parser.next()
+>>> record2 = GFF_parser.next()
+>>> record3 = GFF_parser.next()
+>>> record4 = GFF_parser.next()
+Traceback (most recent call last):
+  File "<stdin>", line 1, in <module>
+StopIteration
+
+All right, so only 3 records in this file?  How come?  Oh, looks like record = chromosome.
+
+>>> record1
+SeqRecord(seq=UnknownSeq(111817, alphabet = Alphabet(), character = '?'), id='chromosome_1', name='<unknown name>', description='<unknown description>', dbxrefs=[])
+>>> record2
+SeqRecord(seq=UnknownSeq(2125562, alphabet = Alphabet(), character = '?'), id='chromosome_12', name='<unknown name>', description='<unknown description>', dbxrefs=[])
+>>> record3
+SeqRecord(seq=UnknownSeq(8579, alphabet = Alphabet(), character = '?'), id='scaffold_88', name='<unknown name>', description='<unknown description>', dbxrefs=[])
+
+The interesting bits seem to be in the features variable:
+
+>>> record3.features
+[SeqFeature(FeatureLocation(ExactPosition(3198),ExactPosition(8579)), type='gene', location_operator='join', strand=-1, id='Cre88.g796750')]
+
+There's only one gene on scaffold_88; the two chromosomes have a lot more data, so their features lists are longer and I didn't print them here.
+
+>>> gene1 = record1.features[0]
+>>> gene2 = record1.features[1]
+>>> gene3 = record2.features[0]
+>>> gene4 = record2.features[1]
+>>> gene5 = record3.features[0]
+
+>>> gene1.id
+'Cre01.g000050'
+>>> gene1.type
+'gene'
+>>> gene1.qualifiers       
+{'source': ['phytozome7_0'], 'ID': ['Cre01.g000050'], 'Name': ['Cre01.g000050']}
+>>> gene1.ref
+>>> gene1.ref_db
+>>> gene1.location
+FeatureLocation(ExactPosition(8845),ExactPosition(14517))
+>>> gene1.location_operator
+'join'
+>>> gene1.strand
+1
+>>> gene1.sub_features
+[SeqFeature(FeatureLocation(ExactPosition(8845),ExactPosition(14517)), type='mRNA', location_operator='join', strand=1, id='PAC:19865169')]
+
+>>> mRNA1 = gene1.sub_features[0]
+>>> mRNA1.sub_features
+[SeqFeature(FeatureLocation(ExactPosition(8845),ExactPosition(9014)), type='five_prime_UTR', strand=1, id='PAC:19865169.five_prime_UTR.1'), SeqFeature(FeatureLocation(ExactPosition(9014),ExactPosition(12007)), type='CDS', strand=1, id='PAC:19865169.CDS.1'), SeqFeature(FeatureLocation(ExactPosition(12192),ExactPosition(12546)), type='CDS', strand=1, id='PAC:19865169.CDS.2'), SeqFeature(FeatureLocation(ExactPosition(12743),ExactPosition(12993)), type='CDS', strand=1, id='PAC:19865169.CDS.3'), SeqFeature(FeatureLocation(ExactPosition(13248),ExactPosition(13479)), type='CDS', strand=1, id='PAC:19865169.CDS.4'), SeqFeature(FeatureLocation(ExactPosition(13479),ExactPosition(14517)), type='three_prime_UTR', strand=1, id='PAC:19865169.three_prime_UTR.1')]
+
+>>> exon1 = mRNA1.sub_features[1]
+>>> UTR1 = mRNA1.sub_features[0]
+
+>>> UTR1.id
+'PAC:19865169.five_prime_UTR.1'
+>>> UTR1.type
+'five_prime_UTR'
+>>> UTR1.qualifiers
+{'source': ['phytozome7_0'], 'pacid': ['19865169'], 'ID': ['PAC:19865169.five_prime_UTR.1'], 'Parent': ['PAC:19865169']}
+>>> UTR1.ref
+>>> UTR1.ref_db
+>>> UTR1.location
+FeatureLocation(ExactPosition(8845),ExactPosition(9014))
+>>> UTR1.sub_features
+[]
+
+>>> exon1.id
+'PAC:19865169.CDS.1'
+>>> exon1.type        
+'CDS'
+>>> exon1.qualifiers
+{'phase': ['0'], 'source': ['phytozome7_0'], 'pacid': ['19865169'], 'ID': ['PAC:19865169.CDS.1'], 'Parent': ['PAC:19865169']}
+>>> exon1.ref
+>>> exon1.ref_db
+>>> exon1.location
+FeatureLocation(ExactPosition(9014),ExactPosition(12007))
+>>> exon1.sub_features
+[]
+
+>>> exon1.location.end
+ExactPosition(12007)
+>>> exon1.location.end.position
+12007
+>>> exon1.location.start       
+ExactPosition(9014)
+
+Okay, this all seems fairly sensible.
+
+
+>>> [gene for gene in record1.features if gene.strand==1]
+[SeqFeature(FeatureLocation(ExactPosition(8845),ExactPosition(14517)), type='gene', location_operator='join', strand=1, id='Cre01.g000050'), SeqFeature(FeatureLocation(ExactPosition(14675),ExactPosition(24737)), type='gene', location_operator='join', strand=1, id='Cre01.g000100'), SeqFeature(FeatureLocation(ExactPosition(25205),ExactPosition(30447)), type='gene', location_operator='join', strand=1, id='Cre01.g000150'), SeqFeature(FeatureLocation(ExactPosition(38005),ExactPosition(41821)), type='gene', location_operator='join', strand=1, id='Cre01.g000300'), SeqFeature(FeatureLocation(ExactPosition(48878),ExactPosition(54467)), type='gene', location_operator='join', strand=1, id='Cre01.g000450'), SeqFeature(FeatureLocation(ExactPosition(54515),ExactPosition(61567)), type='gene', location_operator='join', strand=1, id='Cre01.g000500'), SeqFeature(FeatureLocation(ExactPosition(61715),ExactPosition(68167)), type='gene', location_operator='join', strand=1, id='Cre01.g000550'), SeqFeature(FeatureLocation(ExactPosition(74045),ExactPosition(81977)), type='gene', location_operator='join', strand=1, id='Cre01.g000650'), SeqFeature(FeatureLocation(ExactPosition(101825),ExactPosition(106034)), type='gene', location_operator='join', strand=1, id='Cre01.g000900'), SeqFeature(FeatureLocation(ExactPosition(106825),ExactPosition(111817)), type='gene', location_operator='join', strand=1, id='Cre01.g000950')]
+>>> [gene for gene in record3.features if gene.strand==1]
+[]
+>>> [gene for gene in record3.features if gene.strand==-1]
+[SeqFeature(FeatureLocation(ExactPosition(3198),ExactPosition(8579)), type='gene', location_operator='join', strand=-1, id='Cre88.g796750')]
+
+gene position:
+
+>>> gene1.location.start.position
+8845
+>>> gene1.location.end.position
+14517
+
+mRNA position:
+
+>>> gene1.sub_features[0].location.start.position
+8845
+>>> gene1.sub_features[0].location.end.position
+14517
+
+Sub-feature positions: UTR, CDS right after UTR, next exon (i.e. next CDS), ..., UTR.
+
+>>> gene1.sub_features[0].sub_features[0].location.start.position
+8845
+>>> gene1.sub_features[0].sub_features[0].location.end.position
+9014
+>>> gene1.sub_features[0].sub_features[1].location.start.position
+9014
+>>> gene1.sub_features[0].sub_features[1].location.end.position
+12007
+>>> gene1.sub_features[0].sub_features[2].location.start.position
+12192
+>>> gene1.sub_features[0].sub_features[2].location.end.position
+12546
+>>> gene1.sub_features[0].sub_features[-1].location.start.position
+13479
+>>> gene1.sub_features[0].sub_features[-1].location.end.position
+14517
+
+Same, in shorter form, for five genes:
+
+>>> [(x.type, x.location.start.position, x.location.end.position) for x in gene1.sub_features[0].sub_features]
+[('five_prime_UTR', 8845, 9014), ('CDS', 9014, 12007), ('CDS', 12192, 12546), ('CDS', 12743, 12993), ('CDS', 13248, 13479), ('three_prime_UTR', 13479, 14517)]
+>>> [(x.type, x.location.start.position, x.location.end.position) for x in gene2.sub_features[0].sub_features]
+[('five_prime_UTR', 14675, 14930), ('CDS', 14930, 15011), ('CDS', 15164, 16643), ('CDS', 16767, 16859), ('CDS', 17048, 17284), ('CDS', 17416, 17654), ('CDS', 17829, 18333), ('CDS', 18469, 18495), ('CDS', 18610, 18877), ('CDS', 18983, 19263), ('CDS', 19441, 20137), ('CDS', 20347, 21006), ('CDS', 21162, 21227), ('CDS', 21398, 24005), ('three_prime_UTR', 24005, 24737)]
+>>> [(x.type, x.location.start.position, x.location.end.position) for x in gene3.sub_features[0].sub_features]
+[('CDS', 1933975, 1934092), ('five_prime_UTR', 1934092, 1934120), ('CDS', 1933712, 1933895), ('three_prime_UTR', 1931967, 1933142), ('CDS', 1933142, 1933580)]
+>>> [(x.type, x.location.start.position, x.location.end.position) for x in gene4.sub_features[0].sub_features]
+[('five_prime_UTR', 1934213, 1934269), ('CDS', 1934269, 1934325), ('CDS', 1934393, 1934595), ('three_prime_UTR', 1934595, 1935195)]
+>>> [(x.type, x.location.start.position, x.location.end.position) for x in gene5.sub_features[0].sub_features]
+[('CDS', 8392, 8579), ('CDS', 8000, 8179), ('CDS', 7547, 7684), ('CDS', 7044, 7230), ('CDS', 6596, 6705), ('CDS', 6153, 6243), ('CDS', 5699, 5858), ('three_prime_UTR', 3198, 5003), ('CDS', 5003, 5387)]
+
+Looking at gene3, apparently sometimes the UTRs aren't at the ends??  TODO what's up with that?  How to deal with it?  Are the CDS chunks outside of the UTRs really CDS?  Maybe there's alternative splicing?...  
+
+Looking at gene 5, UTRs aren't necessary at all...
+
