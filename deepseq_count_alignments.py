@@ -25,387 +25,9 @@ USAGE: deepseq_count_alignments.py [options] infile [infile2 infile3 ...] outfil
 import sys, os, time
 import filecmp
 import unittest
-from collections import defaultdict
-from general_utilities import keybased_defaultdict, write_header_data
+from general_utilities import write_header_data
 import HTSeq
-
-######### NOTES ON THE SAM FORMAT
-### Header:
-# MAYBE-TODO do something useful with the SAM header?  Or at least copy it to outfile?
-### Alignment line fields:
-# * query template name
-# * bitwise flag (relevant bits: 4 = unmapped, 16 = reverse-complement, 512 = failed quality control)
-# * reference sequence name (* = unmapped)
-# * leftmost mapping position (1-based) (0 = unmapped)
-# * mapping quality ("-10 * log10(probability that position is wrong)"; 255 = unknown)
-# * CIGAR string - descriptions of alignment matches/mismatches/etc (M/= match, I/D ins/del, X mismatch, S/H clipping)
-# * (PE only - reference name of the mate fragment)
-# * (PE only - position of the mate fragment)
-# * template length
-# * fragment sequence
-# * ASCII of Phred-scaled base quality + 33   (original deepseq read quality)
-# * OPTIONAL FIELDS, lots of different possibilities:   MD is mismatch info string, NM is edit distance to reference
-#       (for info on MD field format see SAM manual footnote, and 
-#        sam_MD_field_examples_*.txt files in experiments/reference_data/aligner_format_info)
-#########
-
-CIGAR_TYPES_MATCH = ['=']
-CIGAR_TYPES_NOOP = ['S','H','P']
-CIGAR_TYPES_MUTATION = ['X','I','D']
-CIGAR_TYPES_INTRON = ['N']     # 'N' is for introns, but we shouldn't be paying attention to those for genomic DNA seq
-CIGAR_TYPES_UNKNOWN = ['M']
-# MAYBE-TODO HTSeq doesn't appear aware of the = and X operations...  http://www-huber.embl.de/users/anders/HTSeq/doc/alignments.html#HTSeq.CigarOperation  - I emailed the author about it
-
-VALID_POSITION_TYPES = ['leftmost','rightmost','5prime','3prime']
-
-
-def check_mutation_count_by_CIGAR_string(HTSeq_alignment, treat_unknown_as='unknown', ignore_introns=False):
-    """ Return number of mutations in HTSeq_alignment, based on CIGAR string; -1 if unknown ('M') by default.
-    If treat_unknown_as is 'unknown', return -1 whenever an unknown (M, may be match or mismatch) operation is found; 
-     if treat_unknown_as is 'mutation' or 'match', count unknowns accordingly.  Return -1 if read is unaligned.
-    If ignore_introns is False, count introns (N) as mutations; otherwise don't."""
-    global CIGAR_TYPES_MUTATION, CIGAR_TYPES_INTRON, CIGAR_TYPES_UNKNOWN
-    # just return -1 for unaligned reads
-    if HTSeq_alignment.cigar is None:
-        return -1
-    # figure out whether to consider intron-skipping ('N') as a mutation or not, based on argument
-    if ignore_introns:
-        # (need this []+ here so it's a copy, not a reference, and modifying it later doesn't modify the original)
-        cigar_types_mutation = [] + CIGAR_TYPES_MUTATION
-    else:
-        cigar_types_mutation = CIGAR_TYPES_MUTATION + CIGAR_TYPES_INTRON   
-    # figure out how to treat unknown matches ('M'), based on argument
-    if treat_unknown_as=='unknown':
-        # (need this []+ here so it's a copy, not a reference, and modifying it later doesn't modify the original)
-        cigar_types_unknown = [] + CIGAR_TYPES_UNKNOWN
-    elif treat_unknown_as=='mutation':
-        cigar_types_mutation += CIGAR_TYPES_UNKNOWN
-        cigar_types_unknown = []
-    elif treat_unknown_as=='match':
-        cigar_types_unknown = []
-    else:
-        raise ValueError("treat_unknown_as argument value must be 'mutation', 'match' or 'unknown'")
-    # count the mutations, return total count (or instantly return -1 on finding an unknonw)
-    mutations = 0
-    for cigar_op in HTSeq_alignment.cigar:
-        if cigar_op.type in cigar_types_mutation:
-            mutations += cigar_op.size
-        # if there's an unknown, just return -1, no need to count
-        elif cigar_op.type in cigar_types_unknown:
-            return -1
-    return mutations
-
-
-def check_mutation_count_by_optional_NM_field(HTSeq_alignment):
-    """ Return number of mutations in HTSeq_alignment, based on optional NM field; -1 if unknown (NM field missing)."""
-    # for unalign reads NM field is missing - returns -1
-    try:                return HTSeq_alignment.optional_field('NM')
-    except KeyError:    return -1
-
-
-def check_mutation_count_by_optional_MD_field(HTSeq_alignment):
-    """ Return number of mutations in HTSeq_alignment, based on optional MD field; -1 if unknown (MD field missing)."""
-    # for info on MD field format see SAM manual footnote, 
-    #   and sam_MD_field_examples_*.txt files in experiments/reference_data/aligner_format_info
-    #       basically a number means matches, a letter means a mismatch to reference (or insertion? is that different?), 
-    #       letters preceded by ^ mean deletion from the reference
-    try:                mutation_string = HTSeq_alignment.optional_field('MD')
-    except KeyError:    return -1
-    # for unalign reads MD field is missing - returns -1
-    mutation_letters = [c for c in mutation_string if not (c.isdigit() or c=='^')]
-    #   (^ is used in describing a mutation but it shouldn't be counted as a separate mutation - only letters count.)
-    return len(mutation_letters)
-
-
-def check_mutation_count_try_all_methods(HTSeq_alignment, treat_unknown_as='unknown', ignore_introns=False):
-    """ Return number of mutations in HTSeq_alignment (look at CIGAR string and NM and MD optional fields); -1 if unknown.
-    First check the CIGAR string but only accept the answer if there are no unknown ('M') characters; 
-     then check the NM and MD fields and return the result if those fields exist.
-    If the CIGAR string is ambiguous and neither of the optional fields exist:
-     - if treat_unknown_as is 'unknown', return -1
-     - if treat_unknown_as is 'mutation' or 'match', return the CIGAR string result with unknowns counted accordingly.
-    If ignore_introns is False, count introns (N) in CIGAR string as mutations; otherwise don't .
-    Does NOT guarantee returning a sensible value if the CIGAR, NM and MD fields contain inconsistent information.
-    """
-    mutation_count = check_mutation_count_by_CIGAR_string(HTSeq_alignment, treat_unknown_as='unknown', 
-                                                          ignore_introns=ignore_introns)
-    if not mutation_count==-1:  
-        return mutation_count
-    mutation_count = check_mutation_count_by_optional_NM_field(HTSeq_alignment)
-    if not mutation_count==-1:  
-        return mutation_count
-    mutation_count = check_mutation_count_by_optional_MD_field(HTSeq_alignment)
-    if not mutation_count==-1:  
-        return mutation_count
-    if treat_unknown_as=='unknown':     
-        return -1
-    return check_mutation_count_by_CIGAR_string(HTSeq_alignment, treat_unknown_as=treat_unknown_as, 
-                                                          ignore_introns=ignore_introns)
-
-
-def get_chrom_and_pos_from_HTSeq_position(HTSeq_pos, pos_type):
-    """ Return a (chrom, pos) tuple based on a HTSeq.GenomicPosition object, with pos being the location of the leftmost, rightmost, 5prime, or 3prime end of the read, depending on the value of pos_type."""
-    if HTSeq_pos is None:
-        raise ValueError("Invalid position %s! Need an HTSeq iv object. (If empty, maybe read wasn't aligned?)"%HTSeq_pos)
-    chrom = HTSeq_pos.chrom
-    if pos_type=='leftmost':        pos = HTSeq_pos.start
-    elif pos_type=='rightmost':     pos = HTSeq_pos.end
-    elif pos_type=='5prime':        pos = HTSeq_pos.start if HTSeq_pos.strand=='+' else HTSeq_pos.end
-    elif pos_type=='3prime':        pos = HTSeq_pos.end if HTSeq_pos.strand=='+' else HTSeq_pos.start
-    else:                           raise ValueError("pos_type argument must be one of %s."%VALID_POSITION_TYPES)
-    return chrom, pos
-
-
-class Alignment_position_sequence_group():
-    """ Data regarding sequences aligned to a particular genomic position (genomic position is set at initialization). 
-    Variables: chromosome, position, total_read_count, perfect_read_count, sequence_counts (a sequence:count dictionary).
-    Methods: add_read to add a given HTSeq read to the counts (doesn't check chromosome/position), 
-     get_main_sequence to get the most common sequence from sequence_counts. """
-
-    def __init__(self, chromosome, position):
-        """ Set chromosome and position; initialize total_read_count, perfect_read_count and sequence_counts to 0 or {}."""
-        self.chromosome, self.position = chromosome, position
-        self.total_read_count = 0
-        self.perfect_read_count = 0
-        self.sequence_counts = defaultdict(lambda: 0)
-
-    def add_read(self, HTSeq_alignment, treat_unknown_as_match=False):
-        """ Add a read to the data: increment total_read_count, increment perfect_read_count if read is a perfect 
-        alignment, increment the appropriate field of sequence_counts based on read sequence."""
-        self.sequence_counts[HTSeq_alignment.read.seq] += 1
-        self.total_read_count += 1
-        # figure out whether the read is perfect, treating unknowns ('M' in CIGAR string) as desired
-        treat_unknown_as = 'match' if treat_unknown_as_match else 'mutation'
-        mutation_count = check_mutation_count_try_all_methods(HTSeq_alignment, treat_unknown_as=treat_unknown_as)
-        if mutation_count==0:  
-            self.perfect_read_count += 1
-
-    def get_main_sequence(self, N=1):
-        """ Return the most common sequence in this group and its count (or Nth most common sequence if N is provided)."""
-        sequences_by_count = sorted([(count,seq) for (seq,count) in self.sequence_counts.iteritems()], reverse=True)
-        # try returning the Nth sequence and count; return nothing if there are under N sequences.
-        try:                return (sequences_by_count[N-1][1], sequences_by_count[N-1][0])
-        except IndexError:  return ('',0)
-
-
-class All_alignments_grouped_by_pos():
-    """ Essentially a dictionary of alignment_position_sequence_group with position data (chrom,pos) as keys. """
-
-    def __init__(self, position_type):
-        """ Checks position_type and assigns to self.position_type; initializes self.alignment_position_data_dict.
-        position_type must be one of %s.
-        self.alignment_position_data_dict is a dictionary that generates a new alignment_position_sequence_group object
-         based on the key (i.e. position) if the key isn't already in the dictionary.  """%VALID_POSITION_TYPES
-        self.alignment_position_data_dict = keybased_defaultdict(lambda key: Alignment_position_sequence_group(*key))
-        if not position_type in VALID_POSITION_TYPES: 
-            raise ValueError("The position_type variable must be one of %s!"%VALID_POSITION_TYPES)
-        self.position_type = position_type
-        self.total_read_count, self.aligned_read_count, self.unaligned_read_count = 0,0,0
-
-    def add_alignment_reader_to_data(self, HTSeq_alignment_reader, treat_unknown_as_match=False):
-        """ Adds all alignments to self.alignment_position_data_dict based on position.
-        Input must be a list/generator/etc of HTSeq.Alignment objects (usually an HTSeq.SAM_Reader)."""
-        for aln in HTSeq_alignment_reader:
-            self.total_read_count += 1
-            if (not aln.aligned) or (aln.iv is None):
-                self.unaligned_read_count += 1
-                continue
-            self.aligned_read_count += 1
-            position_info = get_chrom_and_pos_from_HTSeq_position(aln.iv, self.position_type)
-            self.alignment_position_data_dict[position_info].add_read(aln, treat_unknown_as_match=treat_unknown_as_match)
-
-    def print_summary(self, OUTPUT=None, line_prefix = ''):
-        """ Print basic read and group counts (prints to stdout by default, can also pass an open file object)."""
-        if OUTPUT is None:
-            OUTPUT = sys.stdout
-        OUTPUT.write("%s Total reads processed: %s\n"%(line_prefix, self.total_read_count))
-        OUTPUT.write("%s Aligned reads: %s\n"%(line_prefix, self.aligned_read_count))
-        OUTPUT.write("%s Unaligned reads: %s\n"%(line_prefix, self.unaligned_read_count))
-        position_info = "looking at %s end of read"%self.position_type
-        OUTPUT.write("%s Read groups by alignment position (%s): %s\n"%(line_prefix, position_info, 
-                                                                        len(self.alignment_position_data_dict)))
-
-    def print_data(self, OUTPUT=None, sort_data=False, N_sequences=2, header_line=True, header_prefix="# "):
-        """ Print the full data:  the read count for each group of sequences with the same position.
-        If N_sequences<1, only prints position (chromosome and position), total and perfect read count, 
-          and the number of sequence variants.  If N_sequences==1, also prints the most common sequence and count; 
-          if N_sequences>1, adds the second most common sequence and count, and so on.
-        Output is tab-separated, with headers starting with "# ".  Prints to an open file object (stdout by default).
-        """
-        if OUTPUT is None:
-            OUTPUT = sys.stdout
-
-        if header_line:
-            headers = ['chromosome','position','total_reads','perfect_reads', 'N_sequence_variants']
-            for N in range(1,N_sequences+1):
-                headers.extend(['sequence_%s'%N,'count_seq_%s'%N])
-            OUTPUT.write(header_prefix + '\t'.join(headers) + "\n")
-
-        if sort_data:
-            data = sorted(self.alignment_position_data_dict.values(), key = lambda x: (x.chromosome, x.position))
-        else:
-            data = self.alignment_position_data_dict.itervalues()
-
-        for group in data:
-            group_data = [group.chromosome, group.position, group.total_read_count, 
-                          group.perfect_read_count, len(group.sequence_counts)]
-            OUTPUT.write('\t'.join([str(x) for x in group_data]))
-            for N in range(1,N_sequences+1):
-                OUTPUT.write('\t%s\t%s'%group.get_main_sequence(N))
-                # MAYBE-TODO also give the length and number of mutations for each sequence? Optionally?  Length is easy, but do I even keep track of mutation number?  I probably should...
-            OUTPUT.write('\n')
-
-
-######### Test code #########
-
-class Testing_single_functions(unittest.TestCase):
-    """ Unit-tests for all the top-level functions in this module. """
-
-    class Fake_cigar_op:
-        """ Fake CIGAR operation, mimicking HTSeq cigar object."""
-        def __init__(self,string):  self.type = string
-        size = 1
-    class Fake_alignment:
-        """ Fake alignment with optional_field lookup function, mimicking HTSeq alignment object."""
-        def __init__(self,data):        self.data = data
-        def optional_field(self,x):     return self.data[x]
-
-    def test__check_mutation_count_by_CIGAR_string(self):
-        # no alignment (CIGAR is None)
-        class fake_alignment:
-            cigar = None
-        assert check_mutation_count_by_CIGAR_string(fake_alignment) == -1
-        # CIGAR is unambiguous, no MD or NM given (or needed)
-        class fake_alignment:
-            cigar = [self.Fake_cigar_op('='),self.Fake_cigar_op('=')]
-        assert check_mutation_count_by_CIGAR_string(fake_alignment) == 0
-        class fake_alignment:
-            cigar = [self.Fake_cigar_op('X'),self.Fake_cigar_op('X')]
-        assert check_mutation_count_by_CIGAR_string(fake_alignment) == 2
-        class fake_alignment:
-            cigar = [self.Fake_cigar_op('D'),self.Fake_cigar_op('D')]
-        assert check_mutation_count_by_CIGAR_string(fake_alignment) == 2
-        class fake_alignment:
-            cigar = [self.Fake_cigar_op('S'),self.Fake_cigar_op('=')]
-        assert check_mutation_count_by_CIGAR_string(fake_alignment) == 0
-        class fake_alignment:
-            cigar = [self.Fake_cigar_op('S'),self.Fake_cigar_op('X')]
-        assert check_mutation_count_by_CIGAR_string(fake_alignment) == 1
-        class fake_alignment:
-            cigar = [self.Fake_cigar_op('N'),self.Fake_cigar_op('=')]
-        assert check_mutation_count_by_CIGAR_string(fake_alignment, ignore_introns=True) == 0
-        assert check_mutation_count_by_CIGAR_string(fake_alignment, ignore_introns=False) == 1
-        # CIGAR is ambiguous (contains M's) - return -1, 2 or 0 depending on what treat_unknown_as is set to
-        class fake_alignment:
-            cigar = [self.Fake_cigar_op('M'),self.Fake_cigar_op('M')]
-        assert check_mutation_count_by_CIGAR_string(fake_alignment, treat_unknown_as='unknown') == -1
-        assert check_mutation_count_by_CIGAR_string(fake_alignment, treat_unknown_as='mutation') == 2
-        assert check_mutation_count_by_CIGAR_string(fake_alignment, treat_unknown_as='match') == 0
-        class fake_alignment:
-            cigar = [self.Fake_cigar_op('M'),self.Fake_cigar_op('=')]
-        assert check_mutation_count_by_CIGAR_string(fake_alignment, treat_unknown_as='unknown') == -1
-        assert check_mutation_count_by_CIGAR_string(fake_alignment, treat_unknown_as='mutation') == 1
-        assert check_mutation_count_by_CIGAR_string(fake_alignment, treat_unknown_as='match') == 0
-        class fake_alignment:
-            cigar = [self.Fake_cigar_op('M'),self.Fake_cigar_op('X')]
-        assert check_mutation_count_by_CIGAR_string(fake_alignment, treat_unknown_as='unknown') == -1
-        assert check_mutation_count_by_CIGAR_string(fake_alignment, treat_unknown_as='mutation') == 2
-        assert check_mutation_count_by_CIGAR_string(fake_alignment, treat_unknown_as='match') == 1
-
-    def test__check_mutation_count_by_optional_NM_field(self):
-        """ the tested function should return -1 if no NM field, otherwise return value of NM field. """
-        fake_alignment = self.Fake_alignment({})
-        assert check_mutation_count_by_optional_NM_field(fake_alignment) == -1
-        for x in range(10):
-            fake_alignment = self.Fake_alignment({'NM':x})
-            assert check_mutation_count_by_optional_NM_field(fake_alignment) == x
-
-    def test__check_mutation_count_by_optional_MD_field(self):
-        """ see ~/experiments/reference_data/aligner_format_info/* files for MD field examples."""
-        fake_alignment = self.Fake_alignment({})
-        assert check_mutation_count_by_optional_MD_field(fake_alignment) == -1
-        for s in [str(x) for x in range(30)]:
-            fake_alignment = self.Fake_alignment({'MD': s })
-            assert check_mutation_count_by_optional_MD_field(fake_alignment) == 0
-            fake_alignment = self.Fake_alignment({'MD': s+s })
-            assert check_mutation_count_by_optional_MD_field(fake_alignment) == 0
-            fake_alignment = self.Fake_alignment({'MD': s+'A'+s })
-            assert check_mutation_count_by_optional_MD_field(fake_alignment) == 1
-            fake_alignment = self.Fake_alignment({'MD': s+'A0G'+s })
-            assert check_mutation_count_by_optional_MD_field(fake_alignment) == 2
-            fake_alignment = self.Fake_alignment({'MD': s+'A2G'+s })
-            assert check_mutation_count_by_optional_MD_field(fake_alignment) == 2
-            fake_alignment = self.Fake_alignment({'MD': s+'A2G2T2C2N'+s })
-            assert check_mutation_count_by_optional_MD_field(fake_alignment) == 5
-            fake_alignment = self.Fake_alignment({'MD': s+'^A'+s })
-            assert check_mutation_count_by_optional_MD_field(fake_alignment) == 1
-            fake_alignment = self.Fake_alignment({'MD': s+'^AGC'+s })
-            assert check_mutation_count_by_optional_MD_field(fake_alignment) == 3
-
-    def test__check_mutation_count_try_all_methods(self):
-        """ The order of check is CIGAR, NM, MD; CIGAR is skipped if ambiguous; NM and MD skipped if inexistent. 
-        Not attempting to deal with inconsistent states sensibly."""
-        # all measures agree there are no mutations (with 0-2 of NM/MD fields present)
-        for optional_data in [{'NM':0, 'MD':'10'}, {'NM':0}, {'MD':'10'}, {}]:
-            fake_alignment = self.Fake_alignment(optional_data)
-            fake_alignment.cigar = [self.Fake_cigar_op('=') for x in range(10)]
-            assert check_mutation_count_try_all_methods(fake_alignment) == 0
-        # all measures agree there is a mutation (with 0-2 of NM/MD fields present)
-        for optional_data in [{'NM':1, 'MD':'A9'}, {'NM':1}, {'MD':'A9'}, {}]:
-            fake_alignment = self.Fake_alignment(optional_data)
-            fake_alignment.cigar = [self.Fake_cigar_op('X')] + [self.Fake_cigar_op('=') for x in range(9)]
-            assert check_mutation_count_try_all_methods(fake_alignment) == 1
-        # CIGAR is ambiguous, there are no mutations according to NM/MD (NM, MD or both are present)
-        for optional_data in [{'NM':0, 'MD':'10'}, {'NM':0}, {'MD':'10'}]:
-            fake_alignment = self.Fake_alignment(optional_data)
-            fake_alignment.cigar = [self.Fake_cigar_op('M') for x in range(10)]
-            assert check_mutation_count_try_all_methods(fake_alignment) == 0
-        # CIGAR is ambiguous, there is a  mutation according to NM/MD (NM, MD or both are present)
-        for optional_data in [{'NM':1, 'MD':'A9'}, {'NM':1}, {'MD':'A9'}]:
-            fake_alignment = self.Fake_alignment(optional_data)
-            fake_alignment.cigar = [self.Fake_cigar_op('M') for x in range(10)]
-            assert check_mutation_count_try_all_methods(fake_alignment) == 1
-
-    class Fake_pos:
-        def __init__(self, chrom, strand, start, end):
-            self.chrom = chrom
-            self.strand = strand
-            self.start = start
-            self.end = end
-
-    def test__get_chrom_and_pos_from_HTSeq_position(self):
-        """ Expected results: leftmost=start, rightmost=end; 5prime=start and 3prime=end if strand is +, reverse otherwise.
-        Tested function should raise ValueError when passed None or an invalid pos_type. """
-        for pos_type in VALID_POSITION_TYPES:
-            self.assertRaises(ValueError, get_chrom_and_pos_from_HTSeq_position, None, pos_type)
-        fake_pos = self.Fake_pos('C', '+', 0, 5)
-        for bad_pos_type in ['', 'aaa', 0, 1, [], None, True, False, 'start', 'end', 'middle', 'read']:
-            self.assertRaises(ValueError, get_chrom_and_pos_from_HTSeq_position, fake_pos, bad_pos_type)
-        for (start,end) in [(0,5), (0,100), (10,11), (5,44)]:
-            fake_pos = self.Fake_pos('C', '+', start, end)
-            assert get_chrom_and_pos_from_HTSeq_position(fake_pos, 'leftmost') == ('C', start)
-            assert get_chrom_and_pos_from_HTSeq_position(fake_pos, 'rightmost') == ('C', end)
-            assert get_chrom_and_pos_from_HTSeq_position(fake_pos, '5prime') == ('C', start)
-            assert get_chrom_and_pos_from_HTSeq_position(fake_pos, '3prime') == ('C', end)
-            fake_pos = self.Fake_pos('C', '-', start, end)
-            assert get_chrom_and_pos_from_HTSeq_position(fake_pos, 'leftmost') == ('C', start)
-            assert get_chrom_and_pos_from_HTSeq_position(fake_pos, 'rightmost') == ('C', end)
-            assert get_chrom_and_pos_from_HTSeq_position(fake_pos, '5prime') == ('C', end)
-            assert get_chrom_and_pos_from_HTSeq_position(fake_pos, '3prime') == ('C', start)
-
-
-class Testing_Alignment_position_sequence_group(unittest.TestCase):
-    """ Unit-tests for the Alignment_position_sequence_group class and its methods. """
-
-    pass
-    # TODO implement!
-
-
-class Testing_All_alignments_grouped_by_pos(unittest.TestCase):
-    """ Unit-tests for the All_alignments_grouped_by_pos class and its methods. """
-
-    pass
-    # TODO implement!
+import deepseq_analysis_classes
 
 
 def do_test_run():
@@ -444,8 +66,8 @@ def define_option_parser():
     parser.add_option('-T','--test_run', action='store_true', default=False, 
                       help="Run on a test input file, check output against reference files. "
                       + "Ignores all other options/arguments. (default %default).")
-    parser.add_option('-p', '--position_type', choices=VALID_POSITION_TYPES, default='3prime', 
-                      metavar='|'.join(VALID_POSITION_TYPES), 
+    parser.add_option('-p', '--position_type', choices=deepseq_analysis_classes.VALID_POSITION_TYPES, default='3prime', 
+                      metavar='|'.join(deepseq_analysis_classes.VALID_POSITION_TYPES), 
                       help="Which position feature should be used to group reads together? (default %default) "
                            + "leftmost/rightmost refer to where the first aligned base of the read lies on the reference, "
                            + "regardless of read orientation; 5prime/3prime is by position of specific end of the read.")
@@ -478,7 +100,7 @@ def run_main_function(infiles, outfile, options):
     """ Run the main functionality of the module (see module docstring for more information), excluding testing.
     The options argument is generated by an optparse parser.
     """
-    all_alignment_data = All_alignments_grouped_by_pos(options.position_type)
+    all_alignment_data = deepseq_analysis_classes.All_alignments_grouped_by_pos(options.position_type)
 
     for infile in infiles:
         if options.verbose: print "parsing input file %s - time %s."%(infile, time.ctime())
@@ -516,8 +138,15 @@ if __name__ == "__main__":
     # if ran with -t option, do unit tests and quit
     if options.test_functionality:
         print("*** You used the -t option - ignoring all other options/arguments, running the built-in test suite. ***")
-        # tun unittest.main, passing it no arguments (by default it takes sys.argv and complains about options)
+        print("      (testing both the deepseq_count_alignments.py module and this module)")
+        # to run tests for another file, have to use TextTestRunner, not unittest.main -  make a test suite with 
+        #   autodetection of all tests (see http://docs.python.org/library/unittest.html#unittest.TestLoader)
+        test_suite_1 = unittest.defaultTestLoader.loadTestsFromModule(deepseq_analysis_classes)
+        unittest.TextTestRunner(verbosity=1).run(test_suite_1)
+        # to run tests for current module, just run unittest.main, passing it only the filename 
+        #   (by default it takes all of sys.argv and complains about options/arguments it can't recognize)
         unittest.main(argv=[sys.argv[0]])
+
 
     if options.test_run:
         print("*** You used the -T option - ignoring all other options and running the built-in example test runs. ***")
