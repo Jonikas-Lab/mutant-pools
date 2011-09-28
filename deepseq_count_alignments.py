@@ -88,6 +88,7 @@ def define_option_parser():
                       help="When counting perfect reads, treat undefined alignment regions as matches (default %default)")
     parser.add_option('-U', '--dont_treat_unknown_as_match', action="store_false", dest='treat_unknown_as_match',
                       help="Turn -u off.")
+    # TODO if the imput data had been ran through fastx_collapser before alignment, each unique sequence will have exactly one count - need extract the actual original read count data from the read name!!  Implement in deepseq_analysis_classes.py Alignment_position_sequence_group.add_read
     # TODO add some way of specifying chromosomes or chromosome regions to ignore?  Like insertion_cassette
     # TODO separator/format in case I want csv files instead of tab-separated ones?  I'd like to be able to read this file by eye, so I'd like to be able to have a comma-separated format with arbitrary whitespace to line things up.
     # MAYBE-TODO add user-provided mutation cutoffs like in old_deepseq_count_alignments.py, instead of just all reads and perfet reads

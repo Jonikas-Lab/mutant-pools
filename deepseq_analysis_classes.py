@@ -183,6 +183,7 @@ class Alignment_position_sequence_group():
         mutation_count = check_mutation_count_try_all_methods(HTSeq_alignment, treat_unknown_as=treat_unknown_as)
         if mutation_count==0:  
             self.perfect_read_count += 1
+        # TODO if the imput data had been ran through fastx_collapser before alignment, each unique sequence will have exactly one count - need extract the actual original read count data from the read name!!
 
     def add_counts(self, total_count, perfect_count, sequence_variant_count, assume_new_sequences=False):
         """ Increment self.total_read_count, self.perfect_read_count and self.unique_sequence_count based on inputs.
