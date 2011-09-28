@@ -78,18 +78,22 @@ def define_option_parser():
                       help="How many most common sequences should be shown per group? (default %default)")
     parser.add_option('-s', '--add_summary_to_file', action="store_true", default=True, 
                       help="Print summary at the end of the file (default %default) (also see -H)")
+    parser.add_option('-S', '--dont_add_summary_to_file', action="store_false", dest='add_summary_to_file', 
+                      help="Turn -s off.")
     parser.add_option('-o', '--sort_data_by_position', action="store_true", default=False, 
                       help="Sort the output data by alignment position (default %default) - CAUTION: MAY BE SLOW!")
     parser.add_option('-O', '--dont_sort_data_by_position', action="store_false", dest='sort_data_by_position', 
                       help="Turn -o off.")
-    parser.add_option('-S', '--dont_add_summary_to_file', action="store_false", dest='add_summary_to_file', 
-                      help="Turn -s off.")
     parser.add_option('-u', '--treat_unknown_as_match', action="store_true", default=False, 
                       help="When counting perfect reads, treat undefined alignment regions as matches (default %default)")
     parser.add_option('-U', '--dont_treat_unknown_as_match', action="store_false", dest='treat_unknown_as_match',
                       help="Turn -u off.")
     # TODO add some way of specifying chromosomes or chromosome regions to ignore?  Like insertion_cassette
     # TODO separator/format in case I want csv files instead of tab-separated ones?  I'd like to be able to read this file by eye, so I'd like to be able to have a comma-separated format with arbitrary whitespace to line things up.
+    # MAYBE-TODO add user-provided mutation cutoffs like in old_deepseq_count_alignments.py, instead of just all reads and perfet reads
+    # MAYBE-TODO add a check to print a warning if any mutants are closer than X bases to each other; optionally mark/omit those mutants in the output file?
+    # MAYBE-TODO add a check to print a warning if any mutant has fewer than X% perfect reads; optionally mark/omit those mutants in the output file?
+    # TODO eventually I want to implement grouping based on sequence (clustering?) instead of just based on alignment position!  See "Notes on grouping mutants based on sequence/position/etc" section in ../notes.txt
     parser.add_option('-q', '--quiet', action="store_true", default=False, help="Don't print summary to STDOUT.")
     parser.add_option('-v', '--verbose', action="store_true", default=False, help="Print progress reports to STDOUT.")
 
@@ -138,7 +142,7 @@ if __name__ == "__main__":
     # if ran with -t option, do unit tests and quit
     if options.test_functionality:
         print("*** You used the -t option - ignoring all other options/arguments, running the built-in test suite. ***")
-        print("      (testing both the deepseq_count_alignments.py module and this module)")
+        print("      (testing both the deepseq_analysis_classes.py module and this module)")
         # to run tests for another file, have to use TextTestRunner, not unittest.main -  make a test suite with 
         #   autodetection of all tests (see http://docs.python.org/library/unittest.html#unittest.TestLoader)
         test_suite_1 = unittest.defaultTestLoader.loadTestsFromModule(deepseq_analysis_classes)
@@ -167,7 +171,6 @@ if __name__ == "__main__":
     # MAYBE-TODO do I want to try outputting this in some existing bioinformatics format instead of a made-up one?
 
     # MAYBE-TODO add an option to make output go to STDOUT?
-    # MAYBE-TODO add mutation statistics and user-provided cutoffs like in old_deepseq_count_alignments.py?
 
     ### MAYBE-TODO more options I might want (see old_deepseq_count_alignments.py for old code for dealing with them)
     #parser.add_option('-m', '--mutation_cutoffs', default="1,3,10", metavar="<comma-separated-int-list>")

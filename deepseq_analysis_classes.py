@@ -43,6 +43,8 @@ CIGAR_TYPES_UNKNOWN = ['M']
 VALID_POSITION_TYPES = ['leftmost','rightmost','5prime','3prime']
 
 
+### Various functions
+
 def check_mutation_count_by_CIGAR_string(HTSeq_alignment, treat_unknown_as='unknown', ignore_introns=False):
     """ Return number of mutations in HTSeq_alignment, based on CIGAR string; -1 if unknown ('M') by default.
     If treat_unknown_as is 'unknown', return -1 whenever an unknown (M, may be match or mismatch) operation is found; 
@@ -140,6 +142,8 @@ def get_chrom_and_pos_from_HTSeq_position(HTSeq_pos, pos_type):
     return chrom, pos
 
 
+### Main two classes
+
 class Alignment_position_sequence_group():
     """ Data regarding sequences aligned to a particular genomic position (genomic position is set at initialization). 
     Variables: chromosome, position, total_read_count, perfect_read_count, unique_sequence_count, 
@@ -156,6 +160,8 @@ class Alignment_position_sequence_group():
         self.perfect_read_count = 0
         self.unique_sequence_count = 0
         self.sequences_and_counts = defaultdict(lambda: 0)
+
+    # MAYBE-TODO give each mutant some kind of unique ID at some point in the process?  If we end up using per-mutant barcodes (in addition to the flanking sequences), we could use that, probably, or that plus genomic location
 
     def add_read(self, HTSeq_alignment, treat_unknown_as_match=False):
         """ Add a read to the data: increment total_read_count, increment perfect_read_count if read is a perfect 
