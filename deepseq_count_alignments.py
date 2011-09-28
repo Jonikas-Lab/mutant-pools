@@ -50,9 +50,9 @@ def do_test_run():
             os.remove(outfile)
         else:
             print("TEST FAILED!!  Reference file %s and output file %s differ - PLEASE COMPARE."%(reference_file,outfile))
-            sys.exit(1)
+            return 1
     print("*** Test runs finished - EVERYTHING IS FINE. ***")
-    sys.exit(0)
+    return 0
 
 
 ######### Main function code #########
@@ -149,12 +149,12 @@ if __name__ == "__main__":
         unittest.TextTestRunner(verbosity=1).run(test_suite_1)
         # to run tests for current module, just run unittest.main, passing it only the filename 
         #   (by default it takes all of sys.argv and complains about options/arguments it can't recognize)
-        unittest.main(argv=[sys.argv[0]])
-
+        unittest.main(argv=[sys.argv[0]])   # unittest.main automatically runs sys.exit()
 
     if options.test_run:
         print("*** You used the -T option - ignoring all other options and running the built-in example test runs. ***")
-        do_test_run()
+        test_result = do_test_run()
+        sys.exit(test_result)
 
     # otherwise parse the arguments and run main function
     if len(args)<2:    
