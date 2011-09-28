@@ -156,6 +156,7 @@ class Alignment_position_sequence_group():
         # should this check that chromosome is a string and position is an int?  
         #   Probably not, in case I want to use HTSeq or Biopython position objects later...
         self.chromosome, self.position = chromosome, position
+        self.gene = 'gene_unknown'
         self.total_read_count = 0
         self.perfect_read_count = 0
         self.unique_sequence_count = 0
@@ -260,7 +261,7 @@ class All_alignments_grouped_by_pos():
             OUTPUT = sys.stdout
 
         if header_line:
-            headers = ['chromosome','position','total_reads','perfect_reads', 'N_sequence_variants']
+            headers = ['chromosome','position','gene','total_reads','perfect_reads', 'N_sequence_variants']
             for N in range(1,N_sequences+1):
                 headers.extend(['sequence_%s'%N,'count_seq_%s'%N])
             OUTPUT.write(header_prefix + '\t'.join(headers) + "\n")
@@ -271,7 +272,7 @@ class All_alignments_grouped_by_pos():
             data = self.alignment_position_data_dict.itervalues()
 
         for group in data:
-            group_data = [group.chromosome, group.position, group.total_read_count, 
+            group_data = [group.chromosome, group.position, group.gene, group.total_read_count, 
                           group.perfect_read_count, len(group.sequences_and_counts)]
             OUTPUT.write('\t'.join([str(x) for x in group_data]))
             for N in range(1,N_sequences+1):
@@ -291,12 +292,15 @@ class All_alignments_grouped_by_pos():
             # MAYBE-TODO get unaligned read count from summary if present - do we actually want that?
             # ignore comment and header lines
             if line.startswith('#'):    continue
-            if line.startswith('chromosome\tposition\ttotal_reads'):    continue
+            if line.startswith('chromosome\tposition\t'):    continue
             fields = line.split('\t')
             chromosome = fields[0]
-            pos,total_reads,perfect_reads,sequence_variants = [int(x) for x in fields[1:5]]
+            pos = int(fields[1])
+            gene = fields[2]
+            total_reads,perfect_reads,sequence_variants = [int(x) for x in fields[3:6]]
             self.alignment_position_data_dict[(chromosome,pos)].add_counts(total_reads, perfect_reads, 
                                                                            sequence_variants, assume_new_sequences)
+            self.alignment_position_data_dict[(chromosome,pos)].gene = gene
             # MAYBE-TODO split the remaining fields into twos (seq,count) (we don't know how many there will be) 
             #   and use self.alignment_position_data_dict[(chromosome, position)].add_sequence_and_counts(seq,count) 
             #   to add specific sequences and counts to the data.  Add to unit-test!

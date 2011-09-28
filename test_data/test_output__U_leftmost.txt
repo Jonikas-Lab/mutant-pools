@@ -4,21 +4,21 @@
 #  Unaligned reads: 10
 #  Read groups by alignment position (looking at leftmost end of read): 17
 ### DATA:
-chromosome	position	total_reads	perfect_reads	N_sequence_variants	sequence_1	count_seq_1	sequence_2	count_seq_2	sequence_3	count_seq_3
-mutation_ifU	199	1	0	1	AAAA	1		0		0
-mutation_none	99	2	2	1	AAAA	2		0		0
-mutation_yes	199	6	0	1	AAAA	6		0		0
-reads_1_seqs_1	99	1	1	1	AAAA	1		0		0
-reads_2_seqs_1	199	2	2	1	AAAA	2		0		0
-reads_2_seqs_2	299	2	2	2	CCCC	1	AAAA	1		0
-reads_3_seqs_2	399	3	3	2	AAAA	2	CCCC	1		0
-reads_3_seqs_3	499	3	3	3	GGGG	1	CCCC	1	AAAA	1
-strandedness_+_reference	99	1	1	1	AAAA	1		0		0
-strandedness_+_same-3prime	97	1	1	1	AAAAAA	1		0		0
-strandedness_+_same-5prime	99	1	1	1	AAAAAA	1		0		0
-strandedness_+_same-left	99	1	1	1	AAAAAA	1		0		0
-strandedness_+_same-right	97	1	1	1	AAAAAA	1		0		0
-strandedness_-_same-3prime	103	1	1	1	AAAA	1		0		0
-strandedness_-_same-5prime	95	1	1	1	AAAA	1		0		0
-strandedness_-_same-left	99	1	1	1	AAAA	1		0		0
-strandedness_-_same-right	99	1	1	1	AAAA	1		0		0
+chromosome	position	gene	total_reads	perfect_reads	N_sequence_variants	sequence_1	count_seq_1	sequence_2	count_seq_2	sequence_3	count_seq_3
+mutation_ifU	199	gene_unknown	1	0	1	AAAA	1		0		0
+mutation_none	99	gene_unknown	2	2	1	AAAA	2		0		0
+mutation_yes	199	gene_unknown	6	0	1	AAAA	6		0		0
+reads_1_seqs_1	99	gene_unknown	1	1	1	AAAA	1		0		0
+reads_2_seqs_1	199	gene_unknown	2	2	1	AAAA	2		0		0
+reads_2_seqs_2	299	gene_unknown	2	2	2	CCCC	1	AAAA	1		0
+reads_3_seqs_2	399	gene_unknown	3	3	2	AAAA	2	CCCC	1		0
+reads_3_seqs_3	499	gene_unknown	3	3	3	GGGG	1	CCCC	1	AAAA	1
+strandedness_+_reference	99	gene_unknown	1	1	1	AAAA	1		0		0
+strandedness_+_same-3prime	97	gene_unknown	1	1	1	AAAAAA	1		0		0
+strandedness_+_same-5prime	99	gene_unknown	1	1	1	AAAAAA	1		0		0
+strandedness_+_same-left	99	gene_unknown	1	1	1	AAAAAA	1		0		0
+strandedness_+_same-right	97	gene_unknown	1	1	1	AAAAAA	1		0		0
+strandedness_-_same-3prime	103	gene_unknown	1	1	1	AAAA	1		0		0
+strandedness_-_same-5prime	95	gene_unknown	1	1	1	AAAA	1		0		0
+strandedness_-_same-left	99	gene_unknown	1	1	1	AAAA	1		0		0
+strandedness_-_same-right	99	gene_unknown	1	1	1	AAAA	1		0		0
