@@ -2,7 +2,7 @@
 #  Total reads processed: 39
 #  Aligned reads: 29
 #  Unaligned reads: 10
-#  Read groups by alignment position (looking at leftmost end of read): 17
+#  Read groups by alignment position (distinct mutants) (looking at leftmost end of read): 17
 ### DATA:
 chromosome	position	gene	total_reads	perfect_reads	N_sequence_variants	sequence_1	count_seq_1	sequence_2	count_seq_2	sequence_3	count_seq_3
 mutation_ifU	199	gene_unknown	1	1	1	AAAA	1		0		0
