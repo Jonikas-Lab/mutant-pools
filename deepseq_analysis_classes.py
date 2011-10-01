@@ -255,6 +255,7 @@ class All_alignments_grouped_by_pos():
         position_info = " (looking at %s end of read)"%self.position_type if self.position_type else ''
         OUTPUT.write("%s Read groups by alignment position (distinct mutants)%s: %s\n"%(line_prefix, position_info, 
                                                                                         len(self.data_by_position)))
+        # TODO add overall percent of perfect/imperfect reads
 
     def print_data(self, OUTPUT=None, sort_data=False, N_sequences=2, header_line=True, header_prefix="# "):
         """ Print the full data:  the read count for each group of sequences with the same position.
@@ -295,7 +296,7 @@ class All_alignments_grouped_by_pos():
         Currently doesn't read the specific sequences and counts - even if it did, some information could 
         always be missing, since the file only has N first sequences. """
         for line in open(infile):
-            # MAYBE-TODO get unaligned read count from summary if present - do we actually want that?
+            # TODO get unaligned read count from summary if present, so we can keep track of full counts!
             # ignore comment and header lines
             if line.startswith('#'):    continue
             if line.startswith('chromosome\tposition\t'):    continue
