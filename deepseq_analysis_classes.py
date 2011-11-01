@@ -7,11 +7,15 @@ This is a module to be imported and used by other programs.  Running it directly
  -- Weronika Patena, Jonikas Lab, Carnegie Institution, 2011
 """
 
+# basic libraries
 import sys
 import unittest
 from collections import defaultdict
-from general_utilities import keybased_defaultdict
+# other libraries
 import HTSeq
+# my modules
+from general_utilities import keybased_defaultdict
+from deepseq_utilities import get_seq_count_from_collapsed_header
 
 ######### NOTES ON THE SAM FORMAT
 ### Header:
@@ -169,21 +173,21 @@ class Alignment_position_sequence_group():
 
     # MAYBE-TODO give each mutant some kind of unique ID at some point in the process?  If we end up using per-mutant barcodes (in addition to the flanking sequences), we could use that, probably, or that plus genomic location
 
-    def add_read(self, HTSeq_alignment, treat_unknown_as_match=False):
-        """ Add a read to the data: increment total_read_count, increment perfect_read_count if read is a perfect 
+    def add_read(self, HTSeq_alignment, read_count=1, treat_unknown_as_match=False):
+        """ Add a read to the data (or multiple identical reads, if read_count>1): 
+        increment total_read_count, increment perfect_read_count if read is a perfect 
         alignment, increment the appropriate field of sequences_and_counts based on read sequence."""
-        # if it's a new sequence, increment unique_sequence_count; add a count to the self.sequences_and_counts dictionary.
         seq = HTSeq_alignment.read.seq
+        # if it's a new sequence, increment unique_sequence_count; add a count to the self.sequences_and_counts dictionary.
         if seq not in self.sequences_and_counts:
             self.unique_sequence_count += 1
-        self.sequences_and_counts[seq] += 1
+        self.sequences_and_counts[seq] += read_count
         # increment self.total_read_count; figure out if the read is perfect and increment self.perfect_read_count if yes.
-        self.total_read_count += 1
+        self.total_read_count += read_count
         treat_unknown_as = 'match' if treat_unknown_as_match else 'mutation'
         mutation_count = check_mutation_count_try_all_methods(HTSeq_alignment, treat_unknown_as=treat_unknown_as)
         if mutation_count==0:  
-            self.perfect_read_count += 1
-        # TODO if the imput data had been ran through fastx_collapser before alignment, each unique sequence will have exactly one count - need extract the actual original read count data from the read name!!
+            self.perfect_read_count += read_count
 
     def add_counts(self, total_count, perfect_count, sequence_variant_count, assume_new_sequences=False):
         """ Increment self.total_read_count, self.perfect_read_count and self.unique_sequence_count based on inputs.
@@ -231,19 +235,22 @@ class All_alignments_grouped_by_pos():
         self.position_type = position_type
         self.total_read_count, self.aligned_read_count, self.unaligned_read_count = 0,0,0
 
-    def add_alignment_reader_to_data(self, HTSeq_alignment_reader, treat_unknown_as_match=False):
+    def add_alignment_reader_to_data(self, HTSeq_alignment_reader, 
+                                     uncollapse_read_counts=False, treat_unknown_as_match=False):
         """ Adds all alignments to self.data_by_position based on position.
         Input must be a list/generator/etc of HTSeq.Alignment objects (usually an HTSeq.SAM_Reader)."""
         if self.position_type is None:
             raise Exception("Cannot add data from an alignment reader if position_type isn't specified! Please set the position_type attribute of this All_alignments_grouped_by_pos instance to one of %s first."%VALID_POSITION_TYPES)
         for aln in HTSeq_alignment_reader:
-            self.total_read_count += 1
+            if uncollapse_read_counts:      read_count = get_seq_count_from_collapsed_header(aln.read.name)
+            else:                           read_count = 1
+            self.total_read_count += read_count
             if (not aln.aligned) or (aln.iv is None):
-                self.unaligned_read_count += 1
+                self.unaligned_read_count += read_count
                 continue
-            self.aligned_read_count += 1
+            self.aligned_read_count += read_count
             position_info = get_chrom_and_pos_from_HTSeq_position(aln.iv, self.position_type)
-            self.data_by_position[position_info].add_read(aln, treat_unknown_as_match=treat_unknown_as_match)
+            self.data_by_position[position_info].add_read(aln, read_count, treat_unknown_as_match)
 
     def print_summary(self, OUTPUT=None, line_prefix = ''):
         """ Print basic read and group counts (prints to stdout by default, can also pass an open file object)."""

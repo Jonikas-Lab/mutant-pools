@@ -61,16 +61,34 @@ def define_option_parser():
     """ Populates and returns an optparse option parser object, with __doc__ as usage."""
     from optparse import OptionParser
     parser = OptionParser(__doc__)
+
+    ### test options
     parser.add_option('-t','--test_functionality', action='store_true', default=False, 
                       help="Run the built-in unit test suite (ignores all other options/arguments; default %default).")
     parser.add_option('-T','--test_run', action='store_true', default=False, 
                       help="Run on a test input file, check output against reference files. "
                       + "Ignores all other options/arguments. (default %default).")
+
+    ### functionality options
     parser.add_option('-p', '--position_type', choices=deepseq_analysis_classes.VALID_POSITION_TYPES, default='3prime', 
                       metavar='|'.join(deepseq_analysis_classes.VALID_POSITION_TYPES), 
                       help="Which position feature should be used to group reads together? (default %default) "
                            + "leftmost/rightmost refer to where the first aligned base of the read lies on the reference, "
                            + "regardless of read orientation; 5prime/3prime is by position of specific end of the read.")
+    parser.add_option('-u', '--treat_unknown_as_match', action="store_true", default=False, 
+                      help="When counting perfect reads, treat undefined alignment regions as matches (default %default)")
+    parser.add_option('-U', '--dont_treat_unknown_as_match', action="store_false", dest='treat_unknown_as_match',
+                      help="Turn -u off.")
+    parser.add_option('-c','--input_collapsed_to_unique', action='store_true', default=False, 
+                      help="Use to get correct original total read counts if the infile was collapsed to unique sequences using fastx_collapser (default %default).")
+    parser.add_option('-C','--input_not_collapsed_to_unique', action='store_false', dest="input_collapsed_to_unique", 
+                      help="Turn -c off.")
+    # TODO add some way of specifying chromosomes or chromosome regions to ignore (or count as 'bad')? (insertion_cassette)
+    # MAYBE-TODO add a check to print a warning if any mutants are closer than X bases to each other; optionally mark/omit those mutants in the output file?
+    # MAYBE-TODO add a check to print a warning if any mutant has fewer than X% perfect reads; optionally mark/omit those mutants in the output file?
+    # TODO eventually I want to implement grouping based on sequence (clustering?) instead of just based on alignment position!  See "Notes on grouping mutants based on sequence/position/etc" section in ../notes.txt
+
+    ### output format options
     parser.add_option('-H', '--header_level', choices=['0','1','2'], default='2', metavar='0|1|2', 
                       help="Outfile header type:  0 - no header at all, 1 - a single line giving column headers, "
                            + "3 - full header with command, options, date, user etc (default %default) (also see -s)")
@@ -84,17 +102,8 @@ def define_option_parser():
                       help="Sort the output data by alignment position (default %default) - CAUTION: MAY BE SLOW!")
     parser.add_option('-O', '--dont_sort_data_by_position', action="store_false", dest='sort_data_by_position', 
                       help="Turn -o off.")
-    parser.add_option('-u', '--treat_unknown_as_match', action="store_true", default=False, 
-                      help="When counting perfect reads, treat undefined alignment regions as matches (default %default)")
-    parser.add_option('-U', '--dont_treat_unknown_as_match', action="store_false", dest='treat_unknown_as_match',
-                      help="Turn -u off.")
-    # TODO if the imput data had been ran through fastx_collapser before alignment, each unique sequence will have exactly one count - need extract the actual original read count data from the read name!!  Implement in deepseq_analysis_classes.py Alignment_position_sequence_group.add_read
-    # TODO add some way of specifying chromosomes or chromosome regions to ignore?  Like insertion_cassette
-    # TODO separator/format in case I want csv files instead of tab-separated ones?  I'd like to be able to read this file by eye, so I'd like to be able to have a comma-separated format with arbitrary whitespace to line things up.
+    # MAYBE-TODO separator/format in case I want csv files instead of tab-separated ones?  I'd like to be able to read this file by eye, so I'd like to be able to have a comma-separated format with arbitrary whitespace to line things up.
     # MAYBE-TODO add user-provided mutation cutoffs like in old_deepseq_count_alignments.py, instead of just all reads and perfet reads
-    # MAYBE-TODO add a check to print a warning if any mutants are closer than X bases to each other; optionally mark/omit those mutants in the output file?
-    # MAYBE-TODO add a check to print a warning if any mutant has fewer than X% perfect reads; optionally mark/omit those mutants in the output file?
-    # TODO eventually I want to implement grouping based on sequence (clustering?) instead of just based on alignment position!  See "Notes on grouping mutants based on sequence/position/etc" section in ../notes.txt
     parser.add_option('-q', '--quiet', action="store_true", default=False, help="Don't print summary to STDOUT.")
     parser.add_option('-v', '--verbose', action="store_true", default=False, help="Print progress reports to STDOUT.")
 
@@ -110,7 +119,8 @@ def run_main_function(infiles, outfile, options):
     for infile in infiles:
         if options.verbose: print "parsing input file %s - time %s."%(infile, time.ctime())
         infile_reader = HTSeq.SAM_Reader(infile)
-        all_alignment_data.add_alignment_reader_to_data(infile_reader, options.treat_unknown_as_match)
+        all_alignment_data.add_alignment_reader_to_data(infile_reader, options.input_collapsed_to_unique, 
+                                                        options.treat_unknown_as_match)
         if options.verbose: print "finished parsing input file %s - time %s."%(infile, time.ctime())
 
     if not options.quiet:   all_alignment_data.print_summary()
