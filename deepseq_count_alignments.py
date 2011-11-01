@@ -20,7 +20,7 @@ It also only deals with single-end alignments at the moment.
 
  -- Weronika Patena, Jonikas Lab, Carnegie Institution, 2011
 
-USAGE: deepseq_count_alignments.py [options] infile [infile2 infile3 ...] outfile """
+USAGE: deepseq_count_alignments.py [options] infile outfile """
 
 import sys, os, time
 import filecmp
@@ -67,31 +67,38 @@ def define_option_parser():
                       help="Run the built-in unit test suite (ignores all other options/arguments; default %default).")
     parser.add_option('-T','--test_run', action='store_true', default=False, 
                       help="Run on a test input file, check output against reference files. "
-                      + "Ignores all other options/arguments. (default %default).")
+                          + "Ignores all other options/arguments. (default %default).")
 
     ### functionality options
     parser.add_option('-p', '--position_type', choices=deepseq_analysis_classes.VALID_POSITION_TYPES, default='3prime', 
                       metavar='|'.join(deepseq_analysis_classes.VALID_POSITION_TYPES), 
                       help="Which position feature should be used to group reads together? (default %default) "
-                           + "leftmost/rightmost refer to where the first aligned base of the read lies on the reference, "
-                           + "regardless of read orientation; 5prime/3prime is by position of specific end of the read.")
+                          + "leftmost/rightmost refer to where the first aligned base of the read lies on the reference, "
+                          + "regardless of read orientation; 5prime/3prime is by position of specific end of the read.")
     parser.add_option('-u', '--treat_unknown_as_match', action="store_true", default=False, 
                       help="When counting perfect reads, treat undefined alignment regions as matches (default %default)")
     parser.add_option('-U', '--dont_treat_unknown_as_match', action="store_false", dest='treat_unknown_as_match',
                       help="Turn -u off.")
-    parser.add_option('-c','--input_collapsed_to_unique', action='store_true', default=False, 
-                      help="Use to get correct original total read counts if the infile was collapsed to unique sequences using fastx_collapser (default %default).")
-    parser.add_option('-C','--input_not_collapsed_to_unique', action='store_false', dest="input_collapsed_to_unique", 
-                      help="Turn -c off.")
     # MAYBE-TODO add a way to specify chromosomes or regions to ignore (or count as 'bad')?  like insertion_cassette
     # MAYBE-TODO add a check to print a warning if any mutants are closer than X bases to each other; optionally mark/omit those mutants in the output file?
     # MAYBE-TODO add a check to print a warning if any mutant has fewer than X% perfect reads; optionally mark/omit those mutants in the output file?
     # LATER-TODO eventually I want to implement grouping based on sequence (clustering?) instead of just based on alignment position!  See "Notes on grouping mutants based on sequence/position/etc" section in ../notes.txt
 
+    ### input options
+    parser.add_option('-c','--input_collapsed_to_unique', action='store_true', default=False, 
+                      help="Use to get correct original total read counts if the data was collapsed to unique sequences using fastx_collapser before alignment (default %default).")
+    parser.add_option('-C','--input_not_collapsed_to_unique', action='store_false', dest="input_collapsed_to_unique", 
+                      help="Turn -c off.")
+    parser.add_option('-m', '--metadata_file', default=None, metavar='FILE', 
+                      help="File containing preprocessing and alignment metadata (scripts/options used etc). "
+                          +"Default: <infile_basename>_info.txt. Warning will be raised if not found. "
+                          +"Pass NONE to not look for a metadata file at all.")
+    # TODO implement parsing metadata file and extracting information from it!
+
     ### output format options
     parser.add_option('-H', '--header_level', choices=['0','1','2'], default='2', metavar='0|1|2', 
                       help="Outfile header type:  0 - no header at all, 1 - a single line giving column headers, "
-                           + "3 - full header with command, options, date, user etc (default %default) (also see -s)")
+                          + "3 - full header with command, options, date, user etc (default %default) (also see -s)")
     parser.add_option('-n', '--N_sequences_per_group', type='int', default=2, metavar='N', 
                       help="How many most common sequences should be shown per group? (default %default)")
     parser.add_option('-s', '--add_summary_to_file', action="store_true", default=True, 
@@ -110,18 +117,17 @@ def define_option_parser():
     return parser
 
 
-def run_main_function(infiles, outfile, options):
+def run_main_function(infile, outfile, options):
     """ Run the main functionality of the module (see module docstring for more information), excluding testing.
     The options argument is generated by an optparse parser.
     """
     all_alignment_data = deepseq_analysis_classes.All_alignments_grouped_by_pos(options.position_type)
 
-    for infile in infiles:
-        if options.verbose: print "parsing input file %s - time %s."%(infile, time.ctime())
-        infile_reader = HTSeq.SAM_Reader(infile)
-        all_alignment_data.add_alignment_reader_to_data(infile_reader, options.input_collapsed_to_unique, 
-                                                        options.treat_unknown_as_match)
-        if options.verbose: print "finished parsing input file %s - time %s."%(infile, time.ctime())
+    if options.verbose: print "parsing input file %s - time %s."%(infile, time.ctime())
+    infile_reader = HTSeq.SAM_Reader(infile)
+    all_alignment_data.add_alignment_reader_to_data(infile_reader, options.input_collapsed_to_unique, 
+                                                    options.treat_unknown_as_match)
+    if options.verbose: print "finished parsing input file %s - time %s."%(infile, time.ctime())
 
     if not options.quiet:   all_alignment_data.print_summary()
 
@@ -168,13 +174,14 @@ if __name__ == "__main__":
         sys.exit(test_result)
 
     # otherwise parse the arguments and run main function
-    if len(args)<2:    
+    try:
+        [infile,outfile] = args
+    except ValueError:
         parser.print_help()
-        sys.exit("\nError: at least one infile and exactly one outfile are required!")
-    infiles = args[:-1]
-    outfile = args[-1]
+        sys.exit("\nError: exactly one infile and exactly one outfile are required!")
+    # MAYBE-TODO allow it to take multiple infiles if --metafile is not provided?  Just in case I want to merge different samples for some reason or another.
 
-    run_main_function(infiles, outfile, options)
+    run_main_function(infile, outfile, options)
 
 
     # TODO we DON'T want the grouping to be based only on alignment location, but also strand, I think?  What if we have two mutants that inserted into the same location but in opposite orientations?  12--->345 and 123<---45 - position should be "3" in both cases (is that really how it comes out? check!), but I think those are separate mutants and should be treated separately, right?  UNLIKELY, of course, but still.
