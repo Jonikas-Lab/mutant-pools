@@ -1,10 +1,10 @@
 #!/usr/bin/env python
-""" Convert a SAM file to a file containing genomic position, total read count,
-and optionally other details. 
+""" Group the reads in a deepseq alignment file by genomic alignment position;
+output a new file with one line per group, with total read counts, most common
+sequence variants, and optionally other details. 
 
 The input file is a SAM deepseq alignment file created by bowtie, novoalign, or
-other deepseq aligner programs (tested mainly on bowtie).  Multiple SAM input
-files can be provided.
+other deepseq aligner programs (tested mainly on bowtie).
 
 The output file is a tab-separated file, with one line per unique genomic
 alignment location of the 3' end of the sequence (by default; other position
@@ -79,7 +79,6 @@ def define_option_parser():
                       help="When counting perfect reads, treat undefined alignment regions as matches (default %default)")
     parser.add_option('-U', '--dont_treat_unknown_as_match', action="store_false", dest='treat_unknown_as_match',
                       help="Turn -u off.")
-    # MAYBE-TODO add a way to specify chromosomes or regions to ignore (or count as 'bad')?  like insertion_cassette
     # MAYBE-TODO add a check to print a warning if any mutants are closer than X bases to each other; optionally mark/omit those mutants in the output file?
     # MAYBE-TODO add a check to print a warning if any mutant has fewer than X% perfect reads; optionally mark/omit those mutants in the output file?
     # LATER-TODO eventually I want to implement grouping based on sequence (clustering?) instead of just based on alignment position!  See "Notes on grouping mutants based on sequence/position/etc" section in ../notes.txt
@@ -109,6 +108,7 @@ def define_option_parser():
                       help="Sort the output data by alignment position (default %default) - CAUTION: MAY BE SLOW!")
     parser.add_option('-O', '--dont_sort_data_by_position', action="store_false", dest='sort_data_by_position', 
                       help="Turn -o off.")
+    # TODO add option to specify 'bad' chromosomes/regions (like insertion_cassette) - count the number of reads aligned to those in the header along with unaligned/etc; optionally don't output them at all in the rest of the file.
     # MAYBE-TODO separator/format in case I want csv files instead of tab-separated ones?  I'd like to be able to read this file by eye, so I'd like to be able to have a comma-separated format with arbitrary whitespace to line things up.
     # MAYBE-TODO add user-provided mutation cutoffs like in old_deepseq_count_alignments.py, instead of just all reads and perfet reads:   parser.add_option('-m', '--mutation_cutoffs', default="1,3,10", metavar="<comma-separated-int-list>")
     parser.add_option('-q', '--quiet', action="store_true", default=False, help="Don't print summary to STDOUT.")
@@ -184,8 +184,7 @@ if __name__ == "__main__":
     run_main_function(infile, outfile, options)
 
 
-    # TODO we DON'T want the grouping to be based only on alignment location, but also strand, I think?  What if we have two mutants that inserted into the same location but in opposite orientations?  12--->345 and 123<---45 - position should be "3" in both cases (is that really how it comes out? check!), but I think those are separate mutants and should be treated separately, right?  UNLIKELY, of course, but still.
+    # MAYBE-TODO we DON'T want the grouping to be based only on alignment location, but also strand, I think?  What if we have two mutants that inserted into the same location but in opposite orientations?  12--->345 and 123<---45 - position should be "3" in both cases (is that really how it comes out? check!), but I think those are separate mutants and should be treated separately, right?  EXTREMELY UNLIKELY, of course, but still incorrect. 
+    # MAYBE-TODO Also, if we have two mutants that inserted into the exact same location in opposite directions, WOULD they actually get reported as the same position, or offset by one?  Offset by one, probably: 12-->345 would deepseq "345" and get 3 as the position; 12345 would deepseq "12" and get 2 as the position, I think.  May want to fix that. Again, though, this is EXTREMELY UNLIKELY to make a difference (would have to be right on the edge of a gene/feature/something).
 
     # MAYBE-TODO do I want to try outputting this in some existing bioinformatics format instead of a made-up one?
-
-    # MAYBE-TODO add an option to make output go to STDOUT?
