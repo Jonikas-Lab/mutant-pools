@@ -44,7 +44,7 @@ def do_test_run():
         parser = define_option_parser()
         (options, _) = parser.parse_args(option_string.split())
         outfile = "test_data/test_output.txt"
-        run_main_function([infile], outfile, options)
+        run_main_function(infile, outfile, options)
         # compare outfile to reference file: remove outfile and keep going if correct, otherwise exit with message.
         if filecmp.cmp(outfile, reference_file, shallow=False):
             os.remove(outfile)
