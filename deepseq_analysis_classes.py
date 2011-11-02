@@ -138,17 +138,18 @@ def check_mutation_count_try_all_methods(HTSeq_alignment, treat_unknown_as='unkn
                                                           ignore_introns=ignore_introns)
 
 
-def get_chrom_and_pos_from_HTSeq_position(HTSeq_pos, pos_type):
+def get_chrom_strand_pos_from_HTSeq_position(HTSeq_pos, pos_type):
     """ Return a (chrom, pos) tuple based on a HTSeq.GenomicPosition object, with pos being the location of the leftmost, rightmost, 5prime, or 3prime end of the read, depending on the value of pos_type."""
     if HTSeq_pos is None:
         raise ValueError("Invalid position %s! Need an HTSeq iv object. (If empty, maybe read wasn't aligned?)"%HTSeq_pos)
     chrom = HTSeq_pos.chrom
+    strand = HTSeq_pos.strand
     if pos_type=='leftmost':        pos = HTSeq_pos.start
     elif pos_type=='rightmost':     pos = HTSeq_pos.end
-    elif pos_type=='5prime':        pos = HTSeq_pos.start if HTSeq_pos.strand=='+' else HTSeq_pos.end
-    elif pos_type=='3prime':        pos = HTSeq_pos.end if HTSeq_pos.strand=='+' else HTSeq_pos.start
+    elif pos_type=='5prime':        pos = HTSeq_pos.start if strand=='+' else HTSeq_pos.end
+    elif pos_type=='3prime':        pos = HTSeq_pos.end if strand=='+' else HTSeq_pos.start
     else:                           raise ValueError("pos_type argument must be one of %s."%VALID_POSITION_TYPES)
-    return chrom, pos
+    return chrom, strand, pos
 
 
 ### Main two classes
@@ -160,11 +161,11 @@ class Alignment_position_sequence_group():
     Methods: add_read to add a given HTSeq read to the counts (doesn't check chromosome/position), 
      get_main_sequence to get the most common sequence from sequences_and_counts. """
 
-    def __init__(self, chromosome, position):
+    def __init__(self, chromosome, strand, position):
         """ Set chromosome and position; initialize total_read_count, perfect_read_count and sequences_and_counts."""
         # should this check that chromosome is a string and position is an int?  
         #   Probably not, in case I want to use HTSeq or Biopython position objects later...
-        self.chromosome, self.position = chromosome, position
+        self.chromosome, self.strand, self.position = chromosome, strand, position
         self.gene = SPECIAL_GENE_CODES.not_determined
         self.total_read_count = 0
         self.perfect_read_count = 0
@@ -176,7 +177,9 @@ class Alignment_position_sequence_group():
     def add_read(self, HTSeq_alignment, read_count=1, treat_unknown_as_match=False):
         """ Add a read to the data (or multiple identical reads, if read_count>1): 
         increment total_read_count, increment perfect_read_count if read is a perfect 
-        alignment, increment the appropriate field of sequences_and_counts based on read sequence."""
+        alignment, increment the appropriate field of sequences_and_counts based on read sequence.
+        Note: this does NOT check the read chrom/strand/pos to make sure it matches that of the object."""
+        # MAYBE-TODO check HTSeq_alignment chromosome/strand to make sure it matches data in self?  Don't check position, that's more complicated (it can be either start or end) - could maybe check that position is within, idk, 10bp of either alignment start or alignment end
         seq = HTSeq_alignment.read.seq
         # if it's a new sequence, increment unique_sequence_count; add a count to the self.sequences_and_counts dictionary.
         if seq not in self.sequences_and_counts:
@@ -259,11 +262,12 @@ class All_alignments_grouped_by_pos():
                 self.unaligned_read_count += read_count
                 continue
             self.aligned_read_count += read_count
-            (chrom,pos) = get_chrom_and_pos_from_HTSeq_position(aln.iv, self.position_type)
+            (chrom,strand,pos) = get_chrom_strand_pos_from_HTSeq_position(aln.iv, self.position_type)
+            # TODO keep track of + and - strand total read counts!
             if chrom in chromosomes_to_count:
                 self.specific_region_read_counts[chrom] += read_count
             if chrom not in chromosomes_to_ignore:
-                self.data_by_position[(chrom,pos)].add_read(aln, read_count, treat_unknown_as_match)
+                self.data_by_position[(chrom,strand,pos)].add_read(aln, read_count, treat_unknown_as_match)
 
     def print_summary(self, OUTPUT=None, line_prefix = ''):
         """ Print basic read and group counts (prints to stdout by default, can also pass an open file object)."""
@@ -277,6 +281,7 @@ class All_alignments_grouped_by_pos():
         position_info = " (looking at %s end of read)"%self.position_type if self.position_type else ''
         OUTPUT.write("%s Read groups by alignment position (distinct mutants)%s: %s\n"%(line_prefix, position_info, 
                                                                                         len(self.data_by_position)))
+        # TODO print + and - strand total read counts!
         # TODO add overall percent of perfect/imperfect reads
 
     def print_data(self, OUTPUT=None, sort_data=False, N_sequences=2, header_line=True, header_prefix="# "):
@@ -294,6 +299,8 @@ class All_alignments_grouped_by_pos():
             for N in range(1,N_sequences+1):
                 headers.extend(['sequence_%s'%N,'count_seq_%s'%N])
             OUTPUT.write(header_prefix + '\t'.join(headers) + "\n")
+
+        # TODO print strand as well!  Also add it to the headers
 
         if sort_data:
             data = sorted(self.data_by_position.values(), key = lambda x: (x.chromosome, x.position))
@@ -318,11 +325,12 @@ class All_alignments_grouped_by_pos():
         Currently doesn't read the specific sequences and counts - even if it did, some information could 
         always be missing, since the file only has N first sequences. """
         for line in open(infile):
-            # TODO get unaligned read count from summary if present, so we can keep track of full counts!
+            # TODO get unaligned/discarded/etc read count from summary, so we can keep track of full counts!
             # ignore comment and header lines
             if line.startswith('#'):    continue
             if line.startswith('chromosome\tposition\t'):    continue
             fields = line.split('\t')
+            # TODO read strand info as well!  (and remember to change the header search pattern so it has strand)
             chromosome = fields[0]
             pos = int(fields[1])
             gene = fields[2]
@@ -464,21 +472,21 @@ class Testing_single_functions(unittest.TestCase):
         """ Expected results: leftmost=start, rightmost=end; 5prime=start and 3prime=end if strand is +, reverse otherwise.
         Tested function should raise ValueError when passed None or an invalid pos_type. """
         for pos_type in VALID_POSITION_TYPES:
-            self.assertRaises(ValueError, get_chrom_and_pos_from_HTSeq_position, None, pos_type)
+            self.assertRaises(ValueError, get_chrom_strand_pos_from_HTSeq_position, None, pos_type)
         fake_pos = self.Fake_pos('C', '+', 0, 5)
         for bad_pos_type in ['', 'aaa', 0, 1, [], None, True, False, 'start', 'end', 'middle', 'read']:
-            self.assertRaises(ValueError, get_chrom_and_pos_from_HTSeq_position, fake_pos, bad_pos_type)
+            self.assertRaises(ValueError, get_chrom_strand_pos_from_HTSeq_position, fake_pos, bad_pos_type)
         for (start,end) in [(0,5), (0,100), (10,11), (5,44)]:
             fake_pos = self.Fake_pos('C', '+', start, end)
-            assert get_chrom_and_pos_from_HTSeq_position(fake_pos, 'leftmost') == ('C', start)
-            assert get_chrom_and_pos_from_HTSeq_position(fake_pos, 'rightmost') == ('C', end)
-            assert get_chrom_and_pos_from_HTSeq_position(fake_pos, '5prime') == ('C', start)
-            assert get_chrom_and_pos_from_HTSeq_position(fake_pos, '3prime') == ('C', end)
+            assert get_chrom_strand_pos_from_HTSeq_position(fake_pos, 'leftmost') == ('C', '+', start)
+            assert get_chrom_strand_pos_from_HTSeq_position(fake_pos, 'rightmost') == ('C', '+', end)
+            assert get_chrom_strand_pos_from_HTSeq_position(fake_pos, '5prime') == ('C', '+', start)
+            assert get_chrom_strand_pos_from_HTSeq_position(fake_pos, '3prime') == ('C', '+', end)
             fake_pos = self.Fake_pos('C', '-', start, end)
-            assert get_chrom_and_pos_from_HTSeq_position(fake_pos, 'leftmost') == ('C', start)
-            assert get_chrom_and_pos_from_HTSeq_position(fake_pos, 'rightmost') == ('C', end)
-            assert get_chrom_and_pos_from_HTSeq_position(fake_pos, '5prime') == ('C', end)
-            assert get_chrom_and_pos_from_HTSeq_position(fake_pos, '3prime') == ('C', start)
+            assert get_chrom_strand_pos_from_HTSeq_position(fake_pos, 'leftmost') == ('C', '-', start)
+            assert get_chrom_strand_pos_from_HTSeq_position(fake_pos, 'rightmost') == ('C', '-', end)
+            assert get_chrom_strand_pos_from_HTSeq_position(fake_pos, '5prime') == ('C', '-', end)
+            assert get_chrom_strand_pos_from_HTSeq_position(fake_pos, '3prime') == ('C', '-', start)
 
 
 class Testing_Alignment_position_sequence_group(unittest.TestCase):
@@ -486,21 +494,23 @@ class Testing_Alignment_position_sequence_group(unittest.TestCase):
 
     def test__init(self):
         for chromosome in ['chr1', 'chromosome_2', 'chrom3', 'a', 'adfads', '100', 'scaffold_88']:
-            for position in [0,1,2,5,100,10000,4323423]:
-                group = Alignment_position_sequence_group(chromosome,position)
-                assert group.chromosome == chromosome
-                assert group.position == position
-                assert group.total_read_count == 0
-                assert group.perfect_read_count == 0
-                assert group.unique_sequence_count == 0
-                assert group.sequences_and_counts == {}
+            for strand in ['+','-']:
+                for position in [0,1,2,5,100,10000,4323423]:
+                    group = Alignment_position_sequence_group(chromosome,strand,position)
+                    assert group.chromosome == chromosome
+                    assert group.strand == strand
+                    assert group.position == position
+                    assert group.total_read_count == 0
+                    assert group.perfect_read_count == 0
+                    assert group.unique_sequence_count == 0
+                    assert group.sequences_and_counts == {}
 
     def test__add_read(self):
         pass
         # MAYBE-TODO implement using a mock-up of HTSeq_alignment?  (see Testing_single_functions for how I did that)
 
     def test__add_counts(self):
-        group = Alignment_position_sequence_group('chr',3)
+        group = Alignment_position_sequence_group('chr','+',3)
         group.add_counts(0,0,0)
         assert group.total_read_count == 0
         assert group.perfect_read_count == 0
@@ -515,7 +525,7 @@ class Testing_Alignment_position_sequence_group(unittest.TestCase):
         assert group.sequences_and_counts == {}
         # how group.unique_sequence_count changes depends on assume_new_sequences:
         #  - if False, group.unique_sequence_count is max(new_seq_count, group.unique_sequence_count)
-        group = Alignment_position_sequence_group('chr',3)
+        group = Alignment_position_sequence_group('chr','+',3)
         group.add_counts(0,0,0,assume_new_sequences=False)
         assert group.unique_sequence_count == 0
         group.add_counts(1,1,1,assume_new_sequences=False)
@@ -527,7 +537,7 @@ class Testing_Alignment_position_sequence_group(unittest.TestCase):
         group.add_counts(2,2,2,assume_new_sequences=False)
         assert group.unique_sequence_count == 2
         #  - if True and group.unique_sequence_count is new_seq_count + group.unique_sequence_count
-        group = Alignment_position_sequence_group('chr',3)
+        group = Alignment_position_sequence_group('chr','+',3)
         group.add_counts(0,0,0,assume_new_sequences=True)
         assert group.unique_sequence_count == 0
         group.add_counts(1,1,1,assume_new_sequences=True)
@@ -542,7 +552,7 @@ class Testing_Alignment_position_sequence_group(unittest.TestCase):
         assert group.unique_sequence_count == 6
 
     def test__add_sequence_and_counts(self):
-        group = Alignment_position_sequence_group('chr',3)
+        group = Alignment_position_sequence_group('chr','+',3)
         # adding sequence/count to group.sequences_and_counts, WITHOUT touching group.unique_sequence_count
         group.add_sequence_and_counts('AAA',2,add_to_uniqseqcount=False)
         assert group.sequences_and_counts == {'AAA':2}
@@ -566,7 +576,7 @@ class Testing_Alignment_position_sequence_group(unittest.TestCase):
             self.assertRaises(TypeError,group.add_sequence_and_counts,'CCC',not_a_number)
 
     def test__get_main_sequence(self):
-        group = Alignment_position_sequence_group('chr',3)
+        group = Alignment_position_sequence_group('chr','+',3)
         assert group.get_main_sequence() == ('',0)
         assert group.get_main_sequence(1) == ('',0)
         assert group.get_main_sequence(4) == ('',0)
@@ -605,8 +615,8 @@ class Testing_All_alignments_grouped_by_pos(unittest.TestCase):
 
     def test__add_alignment_reader_to_data(self):
         pass
-        # TODO make sure it fails if self.position_type isn't defined...
         # MAYBE-TODO implement using a mock-up of HTSeq_alignment?  (see Testing_single_functions for how I did that)
+        #   make sure it fails if self.position_type isn't defined...
 
     def test__print_summary(self):
         pass
@@ -617,12 +627,12 @@ class Testing_All_alignments_grouped_by_pos(unittest.TestCase):
         # MAYBE-TODO implement based on stuff in test_data, like do_test_run in deepseq_count_alignments.py?
 
     def test__read_from_file(self):
-        input_file = 'test_data/test_output__U_leftmost.txt'
+        input_file = 'test_data/test_output__leftmost.txt'
         data = All_alignments_grouped_by_pos(None)
         data.read_from_file(input_file)
-        assert data.aligned_read_count == 29
+        assert data.aligned_read_count == 30
         assert data.unaligned_read_count == 0
-        assert data.total_read_count == 29
+        assert data.total_read_count == 30
         # just spot-checking some of the outputs
         group = data.data_by_position[('reads_2_seqs_1',199)]
         assert group.chromosome == 'reads_2_seqs_1'
