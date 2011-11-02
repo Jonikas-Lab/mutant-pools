@@ -230,7 +230,6 @@ if __name__ == "__main__":
     run_main_function(infile, outfile, options)
 
 
-    # MAYBE-TODO we DON'T want the grouping to be based only on alignment location, but also strand, I think?  What if we have two mutants that inserted into the same location but in opposite orientations?  12--->345 and 123<---45 - position should be "3" in both cases (is that really how it comes out? check!), but I think those are separate mutants and should be treated separately, right?  EXTREMELY UNLIKELY, of course, but still incorrect. 
-    # MAYBE-TODO Also, if we have two mutants that inserted into the exact same location in opposite directions, WOULD they actually get reported as the same position, or offset by one?  Offset by one, probably: 12-->345 would deepseq "345" and get 3 as the position; 12345 would deepseq "12" and get 2 as the position, I think.  May want to fix that. Again, though, this is EXTREMELY UNLIKELY to make a difference (would have to be right on the edge of a gene/feature/something).
+    # MAYBE-TODO If we have two mutants that inserted into the exact same location in opposite directions, WOULD they actually get reported as the same position, or offset by one?  Offset by one, probably: 12-->345 would deepseq "345" and get 3 as the position; 12345 would deepseq "12" and get 2 as the position, I think.  May want to fix that. Again, though, this is EXTREMELY UNLIKELY to make a difference (would have to be right on the edge of a gene/feature/something).
 
     # MAYBE-TODO do I want to try outputting this in some existing bioinformatics format instead of a made-up one?

@@ -237,6 +237,7 @@ class All_alignments_grouped_by_pos():
             raise ValueError("The position_type variable must be one of %s!"%VALID_POSITION_TYPES)
         self.position_type = position_type
         self.total_read_count, self.aligned_read_count, self.unaligned_read_count = 0,0,0
+        self.strand_read_counts = defaultdict(lambda: 0)
         self.specific_region_read_counts = defaultdict(lambda: 0)
 
     def add_alignment_reader_to_data(self, HTSeq_alignment_reader, 
@@ -248,8 +249,10 @@ class All_alignments_grouped_by_pos():
         Set uncollapse_read_counts to True if the original deepseq data was collapsed to unique sequences using
          fastx_uncollapser before alignment, to get the correct original read counts.
         Treat_unknown_as_match governs whether alignments with no detailed information are treated as perfect or not.
-        Chromosomes_to_count is a list of chromosomes that should have aligned read counts kept and added to the summary. 
-        Reads that align to any chromosome on the chromosomes_to_ignore list will be ignored completely. 
+        Chromosomes_to_count is a list of chromosomes that should have aligned read counts kept 
+         and added to the header summary (they're treated normally otherwise). 
+        Reads that align to a chromosome in the chromosomes_to_ignore list will be ignored in the data 
+         (but not the total counts contained in the header). 
         """
 
         if self.position_type is None:
@@ -263,11 +266,13 @@ class All_alignments_grouped_by_pos():
                 continue
             self.aligned_read_count += read_count
             (chrom,strand,pos) = get_chrom_strand_pos_from_HTSeq_position(aln.iv, self.position_type)
-            # TODO keep track of + and - strand total read counts!
+            self.strand_read_counts[strand] += read_count
+            # MAYBE-TODO should reads in chromosomes_to_ignore be counted for self.strand_read_counts etc?  Make an option?
             if chrom in chromosomes_to_count:
                 self.specific_region_read_counts[chrom] += read_count
             if chrom not in chromosomes_to_ignore:
                 self.data_by_position[(chrom,strand,pos)].add_read(aln, read_count, treat_unknown_as_match)
+            # TODO keep track of overall percent of perfect/imperfect reads - how?  Make add_read return that information.
 
     def print_summary(self, OUTPUT=None, line_prefix = ''):
         """ Print basic read and group counts (prints to stdout by default, can also pass an open file object)."""
@@ -276,13 +281,13 @@ class All_alignments_grouped_by_pos():
         OUTPUT.write("%s Total reads processed: %s\n"%(line_prefix, self.total_read_count))
         OUTPUT.write("%s Aligned reads: %s\n"%(line_prefix, self.aligned_read_count))
         OUTPUT.write("%s Unaligned reads: %s\n"%(line_prefix, self.unaligned_read_count))
+        for (strand,count) in self.strand_read_counts.iteritems():
+            OUTPUT.write("%s Reads aligned to strand %s: %s\n"%(line_prefix, strand, count))
         for (region,count) in self.specific_region_read_counts.iteritems():
             OUTPUT.write("%s Reads aligned to %s: %s\n"%(line_prefix, region, count))
         position_info = " (looking at %s end of read)"%self.position_type if self.position_type else ''
         OUTPUT.write("%s Read groups by alignment position (distinct mutants)%s: %s\n"%(line_prefix, position_info, 
                                                                                         len(self.data_by_position)))
-        # TODO print + and - strand total read counts!
-        # TODO add overall percent of perfect/imperfect reads
 
     def print_data(self, OUTPUT=None, sort_data=False, N_sequences=2, header_line=True, header_prefix="# "):
         """ Print the full data:  the read count for each group of sequences with the same position.
@@ -295,12 +300,10 @@ class All_alignments_grouped_by_pos():
             OUTPUT = sys.stdout
 
         if header_line:
-            headers = ['chromosome','position','gene','total_reads','perfect_reads', 'N_sequence_variants']
+            headers = ['chromosome','strand','position','gene','total_reads','perfect_reads', 'N_sequence_variants']
             for N in range(1,N_sequences+1):
                 headers.extend(['sequence_%s'%N,'count_seq_%s'%N])
             OUTPUT.write(header_prefix + '\t'.join(headers) + "\n")
-
-        # TODO print strand as well!  Also add it to the headers
 
         if sort_data:
             data = sorted(self.data_by_position.values(), key = lambda x: (x.chromosome, x.position))
@@ -308,7 +311,7 @@ class All_alignments_grouped_by_pos():
             data = self.data_by_position.itervalues()
 
         for group in data:
-            group_data = [group.chromosome, group.position, group.gene, group.total_read_count, 
+            group_data = [group.chromosome, group.strand, group.position, group.gene, group.total_read_count, 
                           group.perfect_read_count, group.unique_sequence_count]
             OUTPUT.write('\t'.join([str(x) for x in group_data]))
             for N in range(1,N_sequences+1):
@@ -328,16 +331,16 @@ class All_alignments_grouped_by_pos():
             # TODO get unaligned/discarded/etc read count from summary, so we can keep track of full counts!
             # ignore comment and header lines
             if line.startswith('#'):    continue
-            if line.startswith('chromosome\tposition\t'):    continue
+            if line.startswith('chromosome\tstrand\tposition\t'):    continue
             fields = line.split('\t')
-            # TODO read strand info as well!  (and remember to change the header search pattern so it has strand)
             chromosome = fields[0]
-            pos = int(fields[1])
-            gene = fields[2]
-            total_reads,perfect_reads,sequence_variants = [int(x) for x in fields[3:6]]
-            self.data_by_position[(chromosome,pos)].add_counts(total_reads, perfect_reads, 
+            strand = fields[1]
+            pos = int(fields[2])
+            gene = fields[3]
+            total_reads,perfect_reads,sequence_variants = [int(x) for x in fields[4:7]]
+            self.data_by_position[(chromosome,strand,pos)].add_counts(total_reads, perfect_reads, 
                                                                            sequence_variants, assume_new_sequences)
-            self.data_by_position[(chromosome,pos)].gene = gene
+            self.data_by_position[(chromosome,strand,pos)].gene = gene
             # MAYBE-TODO split the remaining fields into twos (seq,count) (we don't know how many there will be) 
             #   and use self.data_by_position[(chromosome, position)].add_sequence_and_counts(seq,count) 
             #   to add specific sequences and counts to the data.  Add to unit-test!
@@ -634,19 +637,19 @@ class Testing_All_alignments_grouped_by_pos(unittest.TestCase):
         assert data.unaligned_read_count == 0
         assert data.total_read_count == 30
         # just spot-checking some of the outputs
-        group = data.data_by_position[('reads_2_seqs_1',199)]
+        group = data.data_by_position[('reads_2_seqs_1','+',199)]
         assert group.chromosome == 'reads_2_seqs_1'
         assert group.position == 199
         assert group.total_read_count == 2
         assert group.perfect_read_count == 2 
         assert group.unique_sequence_count == 1
-        group = data.data_by_position[('mutation_yes',199)]
+        group = data.data_by_position[('mutation_yes','+',199)]
         assert group.chromosome == 'mutation_yes'
         assert group.position == 199
         assert group.total_read_count == 6
         assert group.perfect_read_count == 0
         assert group.unique_sequence_count == 1
-        group = data.data_by_position[('strandedness_+_reference',99)]
+        group = data.data_by_position[('strandedness_+_reference','+',99)]
         assert group.chromosome == 'strandedness_+_reference'
         assert group.position == 99
         assert group.total_read_count == 1
@@ -654,7 +657,7 @@ class Testing_All_alignments_grouped_by_pos(unittest.TestCase):
         assert group.unique_sequence_count == 1
         # try adding more data to a file that already has some...
         data.read_from_file(input_file, assume_new_sequences=False)
-        group = data.data_by_position[('reads_2_seqs_1',199)]
+        group = data.data_by_position[('reads_2_seqs_1','+',199)]
         assert group.chromosome == 'reads_2_seqs_1'
         assert group.position == 199
         assert group.total_read_count == 4
