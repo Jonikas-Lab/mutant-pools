@@ -54,6 +54,8 @@ TEST:2:1:0311:958#0/1	0	mutation_none	100	255	4M	*	0	0	AAAA	____	XA:i:0	MD:Z:1P2
 @ reads with ambiguous CIGAR string and no info in other fields: should be detected by default (-U), but not detected with -u option (--treat_unknown_as_match)
 TEST:2:1:0311:958#0/1	0	mutation_ifU	200	255	4M	*	0	0	AAAA	____	
 @
+@@@ testing special treatment of some chromosomes (counting in summary, ignoring) (-b/-B options)
+TEST:2:1:8790:931#0/1	0	special_chromosome	100	255	4M	*	0	0	AAAA	____	XA:i:0	MD:Z:4	NM:i:0
 @
 @@@ unaligned reads test (should be ten of them)
 TEST:2:1:3000:928#0/1	4	*	0	0	*	*	0	0	AAAA	____	XM:i:0

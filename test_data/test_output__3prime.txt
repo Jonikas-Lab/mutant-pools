@@ -1,9 +1,9 @@
 ### SUMMARY:
-#  Total reads processed: 39
-#  Aligned reads: 29
-#  Unaligned reads: 10
-#  Read groups by alignment position (distinct mutants) (looking at rightmost end of read): 17
 #  Reads discarded in preprocessing: 5
+#  Total reads processed: 40
+#  Aligned reads: 30
+#  Unaligned reads: 10
+#  Read groups by alignment position (distinct mutants) (looking at 3prime end of read): 18
 ### DATA:
 chromosome	position	gene	total_reads	perfect_reads	N_sequence_variants	sequence_1	count_seq_1	sequence_2	count_seq_2	sequence_3	count_seq_3
 mutation_ifU	203	gene_unknown	1	0	1	AAAA	1		0		0
@@ -14,12 +14,13 @@ reads_2_seqs_1	203	gene_unknown	2	2	1	AAAA	2		0		0
 reads_2_seqs_2	303	gene_unknown	2	2	2	CCCC	1	AAAA	1		0
 reads_3_seqs_2	403	gene_unknown	3	3	2	AAAA	2	CCCC	1		0
 reads_3_seqs_3	503	gene_unknown	3	3	3	GGGG	1	CCCC	1	AAAA	1
+special_chromosome	103	gene_unknown	1	1	1	AAAA	1		0		0
 strandedness_+_reference	103	gene_unknown	1	1	1	AAAA	1		0		0
 strandedness_+_same-3prime	103	gene_unknown	1	1	1	AAAAAA	1		0		0
 strandedness_+_same-5prime	105	gene_unknown	1	1	1	AAAAAA	1		0		0
 strandedness_+_same-left	105	gene_unknown	1	1	1	AAAAAA	1		0		0
 strandedness_+_same-right	103	gene_unknown	1	1	1	AAAAAA	1		0		0
-strandedness_-_same-3prime	107	gene_unknown	1	1	1	AAAA	1		0		0
-strandedness_-_same-5prime	99	gene_unknown	1	1	1	AAAA	1		0		0
-strandedness_-_same-left	103	gene_unknown	1	1	1	AAAA	1		0		0
-strandedness_-_same-right	103	gene_unknown	1	1	1	AAAA	1		0		0
+strandedness_-_same-3prime	103	gene_unknown	1	1	1	AAAA	1		0		0
+strandedness_-_same-5prime	95	gene_unknown	1	1	1	AAAA	1		0		0
+strandedness_-_same-left	99	gene_unknown	1	1	1	AAAA	1		0		0
+strandedness_-_same-right	99	gene_unknown	1	1	1	AAAA	1		0		0

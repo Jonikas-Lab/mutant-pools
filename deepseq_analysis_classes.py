@@ -234,11 +234,21 @@ class All_alignments_grouped_by_pos():
             raise ValueError("The position_type variable must be one of %s!"%VALID_POSITION_TYPES)
         self.position_type = position_type
         self.total_read_count, self.aligned_read_count, self.unaligned_read_count = 0,0,0
+        self.specific_region_read_counts = defaultdict(lambda: 0)
 
     def add_alignment_reader_to_data(self, HTSeq_alignment_reader, 
-                                     uncollapse_read_counts=False, treat_unknown_as_match=False):
+                                     uncollapse_read_counts=False, treat_unknown_as_match=False, 
+                                     chromosomes_to_count=[], chromosomes_to_ignore=[]):
         """ Adds all alignments to self.data_by_position based on position.
-        Input must be a list/generator/etc of HTSeq.Alignment objects (usually an HTSeq.SAM_Reader)."""
+
+        Input must be a list/generator/etc of HTSeq.Alignment objects (usually an HTSeq.SAM_Reader).
+        Set uncollapse_read_counts to True if the original deepseq data was collapsed to unique sequences using
+         fastx_uncollapser before alignment, to get the correct original read counts.
+        Treat_unknown_as_match governs whether alignments with no detailed information are treated as perfect or not.
+        Chromosomes_to_count is a list of chromosomes that should have aligned read counts kept and added to the summary. 
+        Reads that align to any chromosome on the chromosomes_to_ignore list will be ignored completely. 
+        """
+
         if self.position_type is None:
             raise Exception("Cannot add data from an alignment reader if position_type isn't specified! Please set the position_type attribute of this All_alignments_grouped_by_pos instance to one of %s first."%VALID_POSITION_TYPES)
         for aln in HTSeq_alignment_reader:
@@ -249,8 +259,11 @@ class All_alignments_grouped_by_pos():
                 self.unaligned_read_count += read_count
                 continue
             self.aligned_read_count += read_count
-            position_info = get_chrom_and_pos_from_HTSeq_position(aln.iv, self.position_type)
-            self.data_by_position[position_info].add_read(aln, read_count, treat_unknown_as_match)
+            (chrom,pos) = get_chrom_and_pos_from_HTSeq_position(aln.iv, self.position_type)
+            if chrom in chromosomes_to_count:
+                self.specific_region_read_counts[chrom] += read_count
+            if chrom not in chromosomes_to_ignore:
+                self.data_by_position[(chrom,pos)].add_read(aln, read_count, treat_unknown_as_match)
 
     def print_summary(self, OUTPUT=None, line_prefix = ''):
         """ Print basic read and group counts (prints to stdout by default, can also pass an open file object)."""
@@ -259,6 +272,8 @@ class All_alignments_grouped_by_pos():
         OUTPUT.write("%s Total reads processed: %s\n"%(line_prefix, self.total_read_count))
         OUTPUT.write("%s Aligned reads: %s\n"%(line_prefix, self.aligned_read_count))
         OUTPUT.write("%s Unaligned reads: %s\n"%(line_prefix, self.unaligned_read_count))
+        for (region,count) in self.specific_region_read_counts.iteritems():
+            OUTPUT.write("%s Reads aligned to %s: %s\n"%(line_prefix, region, count))
         position_info = " (looking at %s end of read)"%self.position_type if self.position_type else ''
         OUTPUT.write("%s Read groups by alignment position (distinct mutants)%s: %s\n"%(line_prefix, position_info, 
                                                                                         len(self.data_by_position)))
