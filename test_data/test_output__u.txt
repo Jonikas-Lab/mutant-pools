@@ -3,8 +3,8 @@
 #  Total reads processed: 40
 #  Aligned reads: 30
 #  Unaligned reads: 10
-#  Reads aligned to strand +: 26
-#  Reads aligned to strand -: 4
+#  Reads aligned to + strand of chromosome: 26
+#  Reads aligned to - strand of chromosome: 4
 #  Read groups by alignment position (distinct mutants) (looking at leftmost end of read): 18
 ### DATA:
 chromosome	strand	position	gene	total_reads	perfect_reads	N_sequence_variants	sequence_1	count_seq_1	sequence_2	count_seq_2	sequence_3	count_seq_3

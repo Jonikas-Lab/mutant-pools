@@ -237,8 +237,16 @@ class All_alignments_grouped_by_pos():
             raise ValueError("The position_type variable must be one of %s!"%VALID_POSITION_TYPES)
         self.position_type = position_type
         self.total_read_count, self.aligned_read_count, self.unaligned_read_count = 0,0,0
+        self.discarded_read_count = 'unknown'
         self.strand_read_counts = defaultdict(lambda: 0)
         self.specific_region_read_counts = defaultdict(lambda: 0)
+    
+    def add_discarded_reads(self, N, reset_count=False):
+        """ Add N to self.discarded_read_count (or set self.discarded_read_count to N if reset_count is True). """
+        if reset_count or self.discarded_read_count=='unknown':
+            self.discarded_read_count = int(N)
+        else:
+            self.discarded_read_count += int(N)
 
     def add_alignment_reader_to_data(self, HTSeq_alignment_reader, 
                                      uncollapse_read_counts=False, treat_unknown_as_match=False, 
@@ -267,24 +275,26 @@ class All_alignments_grouped_by_pos():
             self.aligned_read_count += read_count
             (chrom,strand,pos) = get_chrom_strand_pos_from_HTSeq_position(aln.iv, self.position_type)
             self.strand_read_counts[strand] += read_count
-            # MAYBE-TODO should reads in chromosomes_to_ignore be counted for self.strand_read_counts etc?  Make an option?
+            # TODO reads in chromosomes_to_ignore should not be counted for self.strand_read_counts etc!  It might be biasing the overall result and I don't think we want that.  In fact maybe they shouldn't even be counted in self.aligned_read_count (I'd need to adjust the summary message to reflect that, and also put counts for chromosomes_to_ignore BEFORE aligned count in summary).  Also really should have separate dictionaries for counting ignored stuff and counting non-ignored stuff, with separate outputs in summary, with the output lines specifying whether they were ignored or not.  And I don't think -not- counting ignored stuff should really be an option, that's just stupid throwing away of data.
+            # MAYBE-TODO do I want info on how many reads were aligned to which strand for the chromosomes_to_count or the chromosomes_to_ignore?  Or even for all the chromosomes?  Maybe optionally...
             if chrom in chromosomes_to_count:
                 self.specific_region_read_counts[chrom] += read_count
             if chrom not in chromosomes_to_ignore:
                 self.data_by_position[(chrom,strand,pos)].add_read(aln, read_count, treat_unknown_as_match)
             # TODO keep track of overall percent of perfect/imperfect reads - how?  Make add_read return that information.
 
-    def print_summary(self, OUTPUT=None, line_prefix = ''):
+    def print_summary(self, OUTPUT=sys.stdout, line_prefix = ''):
         """ Print basic read and group counts (prints to stdout by default, can also pass an open file object)."""
-        if OUTPUT is None:
-            OUTPUT = sys.stdout
+        OUTPUT.write("%s Reads discarded in preprocessing: %s\n"%(line_prefix, self.discarded_read_count))
         OUTPUT.write("%s Total reads processed: %s\n"%(line_prefix, self.total_read_count))
         OUTPUT.write("%s Aligned reads: %s\n"%(line_prefix, self.aligned_read_count))
         OUTPUT.write("%s Unaligned reads: %s\n"%(line_prefix, self.unaligned_read_count))
         for (strand,count) in self.strand_read_counts.iteritems():
-            OUTPUT.write("%s Reads aligned to strand %s: %s\n"%(line_prefix, strand, count))
+            OUTPUT.write("%s Reads aligned to %s strand of chromosome: %s\n"%(line_prefix, strand, count))
         for (region,count) in self.specific_region_read_counts.iteritems():
             OUTPUT.write("%s Reads aligned to %s: %s\n"%(line_prefix, region, count))
+        # TODO add percentages of total (or aligned) reads to all of these numbers in addition to raw counts!
+        # MAYBE-TODO keep track of the count of separate groups (mutants) in each category, as well as total read counts?
         position_info = " (looking at %s end of read)"%self.position_type if self.position_type else ''
         OUTPUT.write("%s Read groups by alignment position (distinct mutants)%s: %s\n"%(line_prefix, position_info, 
                                                                                         len(self.data_by_position)))
