@@ -175,8 +175,8 @@ class Alignment_position_sequence_group():
     # MAYBE-TODO give each mutant some kind of unique ID at some point in the process?  If we end up using per-mutant barcodes (in addition to the flanking sequences), we could use that, probably, or that plus genomic location
 
     def add_read(self, HTSeq_alignment, read_count=1, treat_unknown_as_match=False):
-        """ Add a read to the data (or multiple identical reads, if read_count>1): 
-        increment total_read_count, increment perfect_read_count if read is a perfect 
+        """ Add a read to the data (or multiple identical reads, if read_count>1); return True if perfect match.
+        Specifically: increment total_read_count, increment perfect_read_count if read is a perfect 
         alignment, increment the appropriate field of sequences_and_counts based on read sequence.
         Note: this does NOT check the read chrom/strand/pos to make sure it matches that of the object."""
         # MAYBE-TODO check HTSeq_alignment chromosome/strand to make sure it matches data in self?  Don't check position, that's more complicated (it can be either start or end) - could maybe check that position is within, idk, 10bp of either alignment start or alignment end
@@ -191,6 +191,9 @@ class Alignment_position_sequence_group():
         mutation_count = check_mutation_count_try_all_methods(HTSeq_alignment, treat_unknown_as=treat_unknown_as)
         if mutation_count==0:  
             self.perfect_read_count += read_count
+            return True
+        else:
+            return False
 
     def add_counts(self, total_count, perfect_count, sequence_variant_count, assume_new_sequences=False):
         """ Increment self.total_read_count, self.perfect_read_count and self.unique_sequence_count based on inputs.
@@ -236,8 +239,9 @@ class All_alignments_grouped_by_pos():
         if not position_type in VALID_POSITION_TYPES+[None]: 
             raise ValueError("The position_type variable must be one of %s!"%VALID_POSITION_TYPES)
         self.position_type = position_type
-        self.total_read_count, self.aligned_read_count, self.unaligned_read_count = 0,0,0
         self.discarded_read_count = 'unknown'
+        self.total_read_count, self.aligned_read_count, self.unaligned_read_count, self.perfect_read_count = 0,0,0,0
+        self.ignored_region_read_counts = defaultdict(lambda: 0)
         self.strand_read_counts = defaultdict(lambda: 0)
         self.specific_region_read_counts = defaultdict(lambda: 0)
     
@@ -269,31 +273,40 @@ class All_alignments_grouped_by_pos():
             if uncollapse_read_counts:      read_count = get_seq_count_from_collapsed_header(aln.read.name)
             else:                           read_count = 1
             self.total_read_count += read_count
+            # if read is unaligned, add to unaligned count and skip to the next read
             if (not aln.aligned) or (aln.iv is None):
                 self.unaligned_read_count += read_count
                 continue
-            self.aligned_read_count += read_count
+            # get the alignment position
             (chrom,strand,pos) = get_chrom_strand_pos_from_HTSeq_position(aln.iv, self.position_type)
+            # if read is aligned to one of the chromosomes_to_ignore, add to the right count and skip to the next read
+            if chrom in chromosomes_to_ignore:
+                self.ignored_region_read_counts[chrom] += read_count
+                continue
+            # if read is aligned to anything else, add to aligned count, strand counts etc
+            self.aligned_read_count += read_count
             self.strand_read_counts[strand] += read_count
-            # TODO reads in chromosomes_to_ignore should not be counted for self.strand_read_counts etc!  It might be biasing the overall result and I don't think we want that.  In fact maybe they shouldn't even be counted in self.aligned_read_count (I'd need to adjust the summary message to reflect that, and also put counts for chromosomes_to_ignore BEFORE aligned count in summary).  Also really should have separate dictionaries for counting ignored stuff and counting non-ignored stuff, with separate outputs in summary, with the output lines specifying whether they were ignored or not.  And I don't think -not- counting ignored stuff should really be an option, that's just stupid throwing away of data.
-            # MAYBE-TODO do I want info on how many reads were aligned to which strand for the chromosomes_to_count or the chromosomes_to_ignore?  Or even for all the chromosomes?  Maybe optionally...
+            # MAYBE-TODO do I want info on how many reads were aligned to which strand for the chromosomes_to_count or even all chromosomes?  Maybe optionally...  And how many were perfect, and how many groups there were... Might want to write a separate class or function just for this.  If so, should output it in a tabular format, with all the different data (reads, +, -, perfect, ...) printed tab-separated in one row.
             if chrom in chromosomes_to_count:
                 self.specific_region_read_counts[chrom] += read_count
-            if chrom not in chromosomes_to_ignore:
-                self.data_by_position[(chrom,strand,pos)].add_read(aln, read_count, treat_unknown_as_match)
-            # TODO keep track of overall percent of perfect/imperfect reads - how?  Make add_read return that information.
+            # add_read adds the read to the full data; also returns True if alignment was perfect
+            if self.data_by_position[(chrom,strand,pos)].add_read(aln, read_count, treat_unknown_as_match):
+                self.perfect_read_count += read_count
 
     def print_summary(self, OUTPUT=sys.stdout, line_prefix = ''):
         """ Print basic read and group counts (prints to stdout by default, can also pass an open file object)."""
         OUTPUT.write("%s Reads discarded in preprocessing: %s\n"%(line_prefix, self.discarded_read_count))
         OUTPUT.write("%s Total reads processed: %s\n"%(line_prefix, self.total_read_count))
-        OUTPUT.write("%s Aligned reads: %s\n"%(line_prefix, self.aligned_read_count))
         OUTPUT.write("%s Unaligned reads: %s\n"%(line_prefix, self.unaligned_read_count))
+        for (region,count) in self.ignored_region_read_counts.iteritems():
+            OUTPUT.write("%s Discarded reads aligned to %s: %s\n"%(line_prefix, region, count))
+        OUTPUT.write("%s Aligned reads (non-discarded): %s\n"%(line_prefix, self.aligned_read_count))
+        OUTPUT.write("%s Perfectly aligned reads (no mismatches): %s\n"%(line_prefix, self.perfect_read_count))
         for (strand,count) in self.strand_read_counts.iteritems():
             OUTPUT.write("%s Reads aligned to %s strand of chromosome: %s\n"%(line_prefix, strand, count))
         for (region,count) in self.specific_region_read_counts.iteritems():
             OUTPUT.write("%s Reads aligned to %s: %s\n"%(line_prefix, region, count))
-        # TODO add percentages of total (or aligned) reads to all of these numbers in addition to raw counts!
+        # MAYBE-TODO add percentages of total (or aligned) reads to all of these numbers in addition to raw counts!
         # MAYBE-TODO keep track of the count of separate groups (mutants) in each category, as well as total read counts?
         position_info = " (looking at %s end of read)"%self.position_type if self.position_type else ''
         OUTPUT.write("%s Read groups by alignment position (distinct mutants)%s: %s\n"%(line_prefix, position_info, 
@@ -337,8 +350,9 @@ class All_alignments_grouped_by_pos():
          If assume_new_sequences is True, the total is old+new; if it's False, the total is max(old,new).
         Currently doesn't read the specific sequences and counts - even if it did, some information could 
         always be missing, since the file only has N first sequences. """
+        # NOTE: this function is half-finished, really (basic functionality fine but things missing, see MAYBE-TODOs), and I'm not sure it's actually going to be necessary after some more rewrites, or in what form, so I'm leaving it as is for the moment.
         for line in open(infile):
-            # TODO get unaligned/discarded/etc read count from summary, so we can keep track of full counts!
+            # MAYBE-TODO get unaligned/discarded/etc read count from summary, so we can keep track of full counts!
             # ignore comment and header lines
             if line.startswith('#'):    continue
             if line.startswith('chromosome\tstrand\tposition\t'):    continue

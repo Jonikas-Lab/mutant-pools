@@ -161,7 +161,7 @@ def run_main_function(infile, outfile, options):
     ### parse input file and store data - the add_alignment_reader_to_data function here does pretty much all the work!
     # parse the -b/-B options
     chromosomes_to_ignore = set(options.bad_chromosomes_count_and_ignore.split(',')) - set([''])
-    chromosomes_to_count = ( chromosomes_to_ignore | set(options.bad_chromosomes_count_only.split(',')) ) - set([''])
+    chromosomes_to_count = set(options.bad_chromosomes_count_only.split(',')) - set([''])
     # initialize a parser for the SAM infile
     if options.verbose: print "parsing input file %s - time %s."%(infile, time.ctime())
     infile_reader = HTSeq.SAM_Reader(infile)
