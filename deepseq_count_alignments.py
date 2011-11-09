@@ -9,11 +9,12 @@ other deepseq aligner programs (tested mainly on bowtie).
 The output file is a tab-separated file, with one line per unique genomic
 alignment location of the 3' end of the sequence (by default; other position
 options may be used).  Each line will contain the following fields: chromosome,
-strand, position, gene, total number of aligned reads, number of perfectly
-aligned reads.  Optionally: most common sequence and its count, second most
-common sequence and its count, etc.  (More output fields or separate files with
-details on mutations, lengths, etc, may be added later.) The gene information
-is only filled in if a gene annotation file is provided via options.
+strand, position, gene, orientation vs gene, gene feature, total number of
+aligned reads, number of perfectly aligned reads.  Optionally: most common
+sequence and its count, second most common sequence and its count, etc.  (More
+output fields or separate files with details on mutations, lengths, etc, may be
+added later.) The gene information is only filled in if a gene annotation file
+is provided via options.
 
 The program assumes the SAM file contains only unique matches (i.e. each read
 was reported as aligning to at most one genomic location).
@@ -102,6 +103,26 @@ def define_option_parser():
                           +"Default: <infile_basename>_info.txt. Warning will be raised if not found. "
                           +"Pass NONE to not look for a metadata file at all.")
 
+    ### gene-finding options 
+    parser.add_option('-g', '--gene_position_reference_file', default=None, metavar='FILE', 
+                      help="File to use to look up gene IDs based on chromosomal location (default %default)")
+    parser.add_option('-G', '--gene_info_reference_file', default=None, metavar='FILE', 
+                      help="File to use to look up gene names/descriptions from ID symbols (default %default)"
+                          +"       NOT IMPLEMENTED")
+    # LATER-TODO implement -G! Get gene name and hopefully description, and maybe GO factors and things...
+    parser.add_option('-d', '--detailed_gene_features', action="store_true", default=False,
+                      help="Find out what part of the gene (UTR,intron,exon) a mutant hit, based on the -g file "
+                          +"- may take a LOT of memory! (default %default)"
+                          +"      NOT IMPLEMENTED")
+    # TODO implement -d! GFF parsing already works, the problem is just that it seems to take up a lot of memory... 
+    #   also sometimes gene structure is CONFUSING, there are splice variants and weird-positioned UTRs/exons and what not.
+    #   if I do get this, where should it go?  Possibly in parentheses next to gene name in standard by-mutant output, 
+    #     and I suppose in by-gene output there should be a column for number of mutants hitting various features...
+    parser.add_option('-D', '--no_detailed_gene_features', action="store_false", dest='detailed_gene_features',
+                      help="Turns -d off.")
+    # MAYBE-TODO add a "flank" option (with variable size), to catch mutants that are in the flanks of genes? Do we care?
+    # MAYBE-TODO add a "negative flank" option (with variable size), to ignore mutants that are in the start/end of genes?
+
     ### output format options
     parser.add_option('-H', '--header_level', choices=['0','1','2'], default='2', metavar='0|1|2', 
                       help="Outfile header type:  0 - no header at all, 1 - a single line giving column headers, "
@@ -160,14 +181,22 @@ def run_main_function(infile, outfile, options):
     
     ### parse input file and store data - the add_alignment_reader_to_data function here does pretty much all the work!
     # parse the -b/-B options
-    chromosomes_to_ignore = set(options.bad_chromosomes_count_and_ignore.split(',')) - set([''])
-    chromosomes_to_count = set(options.bad_chromosomes_count_only.split(',')) - set([''])
+    bad_chromosomes_to_ignore = set(options.bad_chromosomes_count_and_ignore.split(',')) - set([''])
+    bad_chromosomes_to_count = set(options.bad_chromosomes_count_only.split(',')) - set([''])
     # initialize a parser for the SAM infile
     if options.verbose: print "parsing input file %s - time %s."%(infile, time.ctime())
     infile_reader = HTSeq.SAM_Reader(infile)
     # fill the new alignment set object with data from the infile parser
     all_alignment_data.add_alignment_reader_to_data(infile_reader, options.input_collapsed_to_unique, 
-                                            options.treat_unknown_as_match, chromosomes_to_count, chromosomes_to_ignore)
+                                     options.treat_unknown_as_match, bad_chromosomes_to_count, bad_chromosomes_to_ignore)
+    
+    ### optionally parse gene position/info files and look up the genes for each mutant in the data
+    if options.gene_position_reference_file:
+        genefile = options.gene_position_reference_file
+        if options.verbose: print "parsing gene file %s and adding data from it - time %s."%(genefile, time.ctime())
+        all_alignment_data.add_gene_positions_to_data(genefile, detailed_features=options.detailed_gene_features, 
+                                                      gene_info_file=options.gene_info_reference_file, 
+                                                      known_bad_chromosomes=bad_chromosomes_to_count)
 
     ### output
     # print summary info to stdout
