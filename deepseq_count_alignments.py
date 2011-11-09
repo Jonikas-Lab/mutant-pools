@@ -9,10 +9,11 @@ other deepseq aligner programs (tested mainly on bowtie).
 The output file is a tab-separated file, with one line per unique genomic
 alignment location of the 3' end of the sequence (by default; other position
 options may be used).  Each line will contain the following fields: chromosome,
-position, total number of aligned reads, number of perfectly aligned reads.
-Optionally: most common sequence and its count, second most common sequence and
-its count, etc.  (More output fields or separate files with details on
-mutations, lengths, etc, may be added later.)
+strand, position, gene, total number of aligned reads, number of perfectly
+aligned reads.  Optionally: most common sequence and its count, second most
+common sequence and its count, etc.  (More output fields or separate files with
+details on mutations, lengths, etc, may be added later.) The gene information
+is only filled in if a gene annotation file is provided via options.
 
 The program assumes the SAM file contains only unique matches (i.e. each read
 was reported as aligning to at most one genomic location).
@@ -22,11 +23,14 @@ It also only deals with single-end alignments at the moment.
 
 USAGE: deepseq_count_alignments.py [options] infile outfile """
 
+# basic libraries
 import sys, os, time
 import filecmp
 import unittest
-from general_utilities import write_header_data
+# other libraries
 import HTSeq
+# my modules
+from general_utilities import write_header_data
 import deepseq_analysis_classes
 
 
@@ -118,6 +122,7 @@ def define_option_parser():
     parser.add_option('-B', '--bad_chromosomes_count_and_ignore', default='', metavar='comma-separated-list', 
                       help="Count reads aligning to these chromosomes and print the count in the header; "
                           +"otherwise ignore them and don't add to normal output. (default %default) (also see -b)")
+    # LATER-TODO should have a line-per-gene output format as well as a line-per-mutant one!
 
     # MAYBE-TODO add user-provided mutation cutoffs like in old_deepseq_count_alignments.py, instead of just all reads and perfet reads?   parser.add_option('-m', '--mutation_cutoffs', default="1,3,10", metavar="<comma-separated-int-list>")
     parser.add_option('-q', '--quiet', action="store_true", default=False, help="Don't print summary to STDOUT.")
@@ -153,7 +158,7 @@ def run_main_function(infile, outfile, options):
     # MAYBE-TODO get the final total number of reads from the metadata infile and make sure it's the same 
     #   as the number of processed reads I get from all_alignment_data.print_summary()?
     
-    ### parse input file - the add_alignment_reader_to_data function here does pretty much all the work!
+    ### parse input file and store data - the add_alignment_reader_to_data function here does pretty much all the work!
     # parse the -b/-B options
     chromosomes_to_ignore = set(options.bad_chromosomes_count_and_ignore.split(',')) - set([''])
     chromosomes_to_count = ( chromosomes_to_ignore | set(options.bad_chromosomes_count_only.split(',')) ) - set([''])
@@ -163,7 +168,6 @@ def run_main_function(infile, outfile, options):
     # fill the new alignment set object with data from the infile parser
     all_alignment_data.add_alignment_reader_to_data(infile_reader, options.input_collapsed_to_unique, 
                                             options.treat_unknown_as_match, chromosomes_to_count, chromosomes_to_ignore)
-    if options.verbose: print "finished parsing input file %s - time %s."%(infile, time.ctime())
 
     ### output
     # print summary info to stdout

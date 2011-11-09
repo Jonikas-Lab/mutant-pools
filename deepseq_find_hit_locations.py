@@ -107,12 +107,12 @@ def define_option_parser():
     parser.add_option('-g', '--gene_name_reference_file', default=None, metavar='FILE', 
                       help="File to use to look up gene names/descriptions from symbols (default %default)"
                           +"       NOT IMPLEMENTED")
-    # TODO implement! Get gene name and hopefully description, and maybe GO factors and things...
+    # TODO implement -g! Get gene name and hopefully description, and maybe GO factors and things...
     parser.add_option('-d', '--detailed_gene_features', action="store_true", default=False,
                       help="In addition to figuring out which gene a mutant falls inside, attempt to find out what "
                           +"part of the gene it hit (UTR,intron,exon) - may take a LOT of memory! (default %default)"
                           +"      NOT IMPLEMENTED")
-    # TODO implement! GFF parsing already works, the problem is just that it seems to take up a lot of memory... 
+    # TODO implement -d! GFF parsing already works, the problem is just that it seems to take up a lot of memory... 
     #   also sometimes gene structure is CONFUSING, there are splice variants and weird-positioned UTRs/exons and what not.
     #   if I do get this, where should it go?  Possibly in parentheses next to gene name in standard by-mutant output, 
     #     and I suppose in by-gene output there should be a column for number of mutants hitting various features...
@@ -245,7 +245,3 @@ if __name__ == "__main__":
 
     run_main_function(mutant_files, gene_file, outfile, options)
 
-
-    # MAYBE-TODO do I want to try outputting this in some existing bioinformatics format instead of a made-up one?
-
-    # MAYBE-TODO add an option to make output go to STDOUT?
