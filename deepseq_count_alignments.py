@@ -89,7 +89,7 @@ def define_option_parser():
                       help="When counting perfect reads, treat undefined alignment regions as matches (default %default)")
     parser.add_option('-U', '--dont_treat_unknown_as_match', action="store_false", dest='treat_unknown_as_match',
                       help="Turn -u off.")
-    # MAYBE-TODO add a check to print a warning if any mutants are closer than X bases to each other; optionally mark/omit those mutants in the output file?
+    # TODO add a check to print a warning if any mutants are closer than X bases to each other - this seems to happen a lot with what looks like mutations, with the alignment locations just 1bp apart!  Should catch those and merge them somenow, or at least mark them as iffy in the output file?
     # MAYBE-TODO add a check to print a warning if any mutant has fewer than X% perfect reads; optionally mark/omit those mutants in the output file?
     # LATER-TODO eventually I want to implement grouping based on sequence (clustering?) instead of just based on alignment position!  See "Notes on grouping mutants based on sequence/position/etc" section in ../notes.txt
 
@@ -143,7 +143,8 @@ def define_option_parser():
     parser.add_option('-B', '--bad_chromosomes_count_and_ignore', default='', metavar='comma-separated-list', 
                       help="Count reads aligning to these chromosomes and print the count in the header; "
                           +"otherwise ignore them and don't add to normal output. (default %default) (also see -b)")
-    # LATER-TODO should have a line-per-gene output format as well as a line-per-mutant one!
+    # LATER-TODO should have a line-per-gene output format as well as a line-per-mutant one!  Which should be a separate dictionary/view in All_alignments_grouped_by_pos in deepseq_analysis_classes.py, I suppose.  Extra options for that: count only mutants that are sense/antisense, only mutants in the exons/introns/UTRs, don't count mutants in the first/last X%/Xbp of the gene, do count mutants flanking the gene...
+        
 
     # MAYBE-TODO add user-provided mutation cutoffs like in old_deepseq_count_alignments.py, instead of just all reads and perfet reads?   parser.add_option('-m', '--mutation_cutoffs', default="1,3,10", metavar="<comma-separated-int-list>")
     parser.add_option('-q', '--quiet', action="store_true", default=False, help="Don't print summary to STDOUT.")

@@ -187,3 +187,6 @@ if __name__ == "__main__":
 
     run_main_function(infile, options)
 
+
+# TODO make sure the gene IDs are all unique! 
+# TODO check for overlapping genes (splice variants?)
