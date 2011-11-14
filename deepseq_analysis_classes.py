@@ -375,6 +375,16 @@ class All_alignments_grouped_by_pos():
             elif orientation=='antisense':          self.read_groups_antisense += 1
         # TODO add a run-test case for this!
 
+    def find_most_common_group(self):
+        """ Return the Alignment_position_sequence_group object from self.data_by_position with the most total reads."""
+        current_readcount = 0
+        current_group = None
+        for read_group in self.data_by_position.itervalues():
+            if read_group.total_read_count > current_readcount:
+                current_readcount = read_group.total_read_count
+                current_group = read_group
+        return current_group
+
     def print_summary(self, OUTPUT=sys.stdout, line_prefix = ''):
         """ Print basic read and group counts (prints to stdout by default, can also pass an open file object)."""
         # MAYBE-TODO organize the output a bit more by adding '##" to some lines (like the main ones) - instead of letting the user specify whatever line prefix they want, just have it either with ''/'*' or '#'/'##' and make an option for picking which (or even decide which based on whether OUTPUT is sys.stdout or something else?  Or even let the user specify whatever, but if they specify 'auto', pick the good one based on what I just said.  Or just let the user specify two prefixes, one for normal lines and one for 'main' lines, that works too!
@@ -395,6 +405,10 @@ class All_alignments_grouped_by_pos():
         # MAYBE-TODO keep track of the count of separate groups (mutants) in each category, as well as total read counts?
         OUTPUT.write("%s Read groups by alignment position (distinct mutants)%s: %s\n"%(line_prefix, position_info, 
                                                                                         len(self.data_by_position)))
+        g = self.find_most_common_group()
+        OUTPUT.write("%s Most common group: %s, position %s, %s strand:"%(line_prefix, g.chromosome, g.position, g.strand))
+        OUTPUT.write(" %s reads (%d%% of aligned)\n"%(g.total_read_count, 100*g.total_read_count/self.aligned_read_count))
+        # MAYBE-TODO may also be a good idea to keep track of the most common SEQUENCE, not just group...
         # print the gene annotation info, but only if there is any
         if self.read_groups_in_genes + self.read_groups_not_in_genes + self.read_groups_undetermined:
             OUTPUT.write("%s Read groups inside genes: %s\n"%(line_prefix, self.read_groups_in_genes))
@@ -405,7 +419,6 @@ class All_alignments_grouped_by_pos():
             all_genes = set([group.gene for group in self.data_by_position.values()]) - set(SPECIAL_GENE_CODES.all_codes)
             OUTPUT.write("%s Genes containing at least one read group: %s\n"%(line_prefix, len(all_genes)))
             # LATER-TODO Add count of genes containing at least two groups! Once I have a per-gene view of the data.
-            # TODO how many of the reads is the most common group responsible for?  Probably a good idea to print that number as a sanity-check, in case it's insanely high. Also print its chromosome/position to make it easy to find.
 
     def print_data(self, OUTPUT=None, sort_data=False, N_sequences=2, header_line=True, header_prefix="# "):
         """ Print the full data:  the read count for each group of sequences with the same position.
