@@ -385,39 +385,37 @@ class All_alignments_grouped_by_pos():
                 current_group = read_group
         return current_group
 
-    def print_summary(self, OUTPUT=sys.stdout, line_prefix = ''):
+    def print_summary(self, OUTPUT=sys.stdout, line_prefix='    ', header_prefix=' * '):
         """ Print basic read and group counts (prints to stdout by default, can also pass an open file object)."""
-        # MAYBE-TODO organize the output a bit more by adding '##" to some lines (like the main ones) - instead of letting the user specify whatever line prefix they want, just have it either with ''/'*' or '#'/'##' and make an option for picking which (or even decide which based on whether OUTPUT is sys.stdout or something else?  Or even let the user specify whatever, but if they specify 'auto', pick the good one based on what I just said.  Or just let the user specify two prefixes, one for normal lines and one for 'main' lines, that works too!
-        # TODO remove that stupid extra space, change formatting to line_prefix+"Text" for easier reading
-        OUTPUT.write("%s Reads discarded in preprocessing: %s\n"%(line_prefix, self.discarded_read_count))
-        OUTPUT.write("%s Total reads processed: %s\n"%(line_prefix, self.total_read_count))
-        OUTPUT.write("%s Unaligned reads: %s\n"%(line_prefix, self.unaligned_read_count))
+        OUTPUT.write(line_prefix+"Reads discarded in preprocessing: %s\n"%(self.discarded_read_count))
+        OUTPUT.write(header_prefix+"Total reads processed: %s\n"%(self.total_read_count))
+        OUTPUT.write(line_prefix+"Unaligned reads: %s\n"%(self.unaligned_read_count))
         for (region,count) in self.ignored_region_read_counts.iteritems():
-            OUTPUT.write("%s Discarded reads aligned to %s: %s\n"%(line_prefix, region, count))
-        OUTPUT.write("%s Aligned reads (non-discarded): %s\n"%(line_prefix, self.aligned_read_count))
-        OUTPUT.write("%s Perfectly aligned reads (no mismatches): %s\n"%(line_prefix, self.perfect_read_count))
+            OUTPUT.write(line_prefix+"Discarded reads aligned to %s: %s\n"%(region, count))
+        OUTPUT.write(line_prefix+"Aligned reads (non-discarded): %s\n"%(self.aligned_read_count))
+        OUTPUT.write(line_prefix+"Perfectly aligned reads (no mismatches): %s\n"%(self.perfect_read_count))
         for (strand,count) in self.strand_read_counts.iteritems():
-            OUTPUT.write("%s Reads aligned to %s strand of chromosome: %s\n"%(line_prefix, strand, count))
+            OUTPUT.write(line_prefix+"Reads aligned to %s strand of chromosome: %s\n"%(strand, count))
         for (region,count) in self.specific_region_read_counts.iteritems():
-            OUTPUT.write("%s Reads aligned to %s: %s\n"%(line_prefix, region, count))
+            OUTPUT.write(line_prefix+"Reads aligned to %s: %s\n"%(region, count))
         position_info = " (looking at %s end of read)"%self.position_type if self.position_type else ''
         # MAYBE-TODO add percentages of total (or aligned) reads to all of these numbers in addition to raw counts!
         # MAYBE-TODO keep track of the count of separate groups (mutants) in each category, as well as total read counts?
-        OUTPUT.write("%s Read groups by alignment position (distinct mutants)%s: %s\n"%(line_prefix, position_info, 
+        OUTPUT.write(header_prefix+"Read groups by alignment position (distinct mutants)%s: %s\n"%(position_info, 
                                                                                         len(self.data_by_position)))
         g = self.find_most_common_group()
-        OUTPUT.write("%s Most common group: %s, position %s, %s strand:"%(line_prefix, g.chromosome, g.position, g.strand))
+        OUTPUT.write(line_prefix+"Most common group: %s, position %s, %s strand:"%(g.chromosome, g.position, g.strand))
         OUTPUT.write(" %s reads (%d%% of aligned)\n"%(g.total_read_count, 100*g.total_read_count/self.aligned_read_count))
         # MAYBE-TODO may also be a good idea to keep track of the most common SEQUENCE, not just group...
         # print the gene annotation info, but only if there is any
         if self.read_groups_in_genes + self.read_groups_not_in_genes + self.read_groups_undetermined:
-            OUTPUT.write("%s Read groups inside genes: %s\n"%(line_prefix, self.read_groups_in_genes))
-            OUTPUT.write("%s Read groups not inside genes: %s\n"%(line_prefix, self.read_groups_not_in_genes))
-            OUTPUT.write("%s Read groups in unknown chromosomes: %s\n"%(line_prefix, self.read_groups_undetermined))
-            OUTPUT.write("%s Read groups in sense orientation to gene: %s\n"%(line_prefix, self.read_groups_sense))
-            OUTPUT.write("%s Read groups in antisense orientation to gene: %s\n"%(line_prefix, self.read_groups_antisense))
+            OUTPUT.write(line_prefix+"Read groups inside genes: %s\n"%(self.read_groups_in_genes))
+            OUTPUT.write(line_prefix+"Read groups not inside genes: %s\n"%(self.read_groups_not_in_genes))
+            OUTPUT.write(line_prefix+"Read groups in unknown chromosomes: %s\n"%(self.read_groups_undetermined))
+            OUTPUT.write(line_prefix+"Read groups in sense orientation to gene: %s\n"%(self.read_groups_sense))
+            OUTPUT.write(line_prefix+"Read groups in antisense orientation to gene: %s\n"%(self.read_groups_antisense))
             all_genes = set([group.gene for group in self.data_by_position.values()]) - set(SPECIAL_GENE_CODES.all_codes)
-            OUTPUT.write("%s Genes containing at least one read group: %s\n"%(line_prefix, len(all_genes)))
+            OUTPUT.write(line_prefix+"Genes containing at least one read group: %s\n"%(len(all_genes)))
             # LATER-TODO Add count of genes containing at least two groups! Once I have a per-gene view of the data.
 
     def print_data(self, OUTPUT=None, sort_data=False, N_sequences=2, header_line=True, header_prefix="# "):

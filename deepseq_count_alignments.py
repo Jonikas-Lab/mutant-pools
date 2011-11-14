@@ -86,6 +86,7 @@ def define_option_parser():
                       help="Which position feature should be used to group reads together? (default %default) "
                           + "leftmost/rightmost refer to where the first aligned base of the read lies on the reference, "
                           + "regardless of read orientation; 5prime/3prime is by position of specific end of the read.")
+    # TODO change the -p option to something simpler! Really, leftmost/rightmost options here are unnecessary for our application (or any sane application, probably!), and the remaining two options should probably get rewritten to something more specific, like --read_at_end_of_cassette (False by default), or --read_position_in_cassette (start or end), or sth.
     parser.add_option('-u', '--treat_unknown_as_match', action="store_true", default=False, 
                       help="When counting perfect reads, treat undefined alignment regions as matches (default %default)")
     parser.add_option('-U', '--dont_treat_unknown_as_match', action="store_false", dest='treat_unknown_as_match',
@@ -220,7 +221,7 @@ def run_main_function(infile, outfile, options):
             write_header_data(OUTFILE,options)
         if options.add_summary_to_file:
             OUTFILE.write("### SUMMARY:\n")
-            all_alignment_data.print_summary(OUTFILE, "# ")
+            all_alignment_data.print_summary(OUTFILE, "#  ", "## ")
         if options.header_level==2:
             OUTFILE.write("### HEADER AND DATA:\n")
         elif options.add_summary_to_file:
