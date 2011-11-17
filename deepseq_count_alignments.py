@@ -93,9 +93,8 @@ def define_option_parser():
                       help="When counting perfect reads, treat undefined alignment regions as matches (default %default)")
     parser.add_option('-U', '--dont_treat_unknown_as_match', action="store_false", dest='treat_unknown_as_match',
                       help="Turn -u off.")
-    # TODO add a check to print a warning if any mutants are closer than X bases to each other - this seems to happen a lot with what looks like mutations, with the alignment locations just 1bp apart!  Should catch those and merge them somenow, or at least mark them as iffy in the output file?
+    # LATER-TODO add a check to print a warning if any mutants are closer than X bases to each other - this seems to happen a lot with what looks like mutations, with the alignment locations just 1bp apart!  Should catch those and merge them somenow, or at least mark them as iffy in the output file?
     # MAYBE-TODO add a check to print a warning if any mutant has fewer than X% perfect reads; optionally mark/omit those mutants in the output file?
-    # LATER-TODO eventually I want to implement grouping based on sequence (clustering?) instead of just based on alignment position!  See "Notes on grouping mutants based on sequence/position/etc" section in ../notes.txt
 
     ### input options
     parser.add_option('-c','--input_collapsed_to_unique', action='store_true', default=False, 
@@ -114,15 +113,10 @@ def define_option_parser():
     parser.add_option('-G', '--gene_info_reference_file', default=None, metavar='FILE', 
                       help="File to use to look up gene names/descriptions from ID symbols (default %default)"
                           +"       NOT IMPLEMENTED")
-    # LATER-TODO implement -G! Get gene name and hopefully description, and maybe GO factors and things...
     parser.add_option('-d', '--detailed_gene_features', action="store_true", default=False,
                       help="Find out what part of the gene (UTR,intron,exon) a mutant hit, based on the -g file "
                           +"- may take a LOT of memory! (default %default)"
                           +"      NOT IMPLEMENTED")
-    # TODO implement -d! GFF parsing already works, the problem is just that it seems to take up a lot of memory... 
-    #   also sometimes gene structure is CONFUSING, there are splice variants and weird-positioned UTRs/exons and what not.
-    #   if I do get this, where should it go?  Possibly in parentheses next to gene name in standard by-mutant output, 
-    #     and I suppose in by-gene output there should be a column for number of mutants hitting various features...
     parser.add_option('-D', '--no_detailed_gene_features', action="store_false", dest='detailed_gene_features',
                       help="Turns -d off.")
     # MAYBE-TODO add a "flank" option (with variable size), to catch mutants that are in the flanks of genes? Do we care?
@@ -148,7 +142,7 @@ def define_option_parser():
     parser.add_option('-B', '--bad_chromosomes_count_and_ignore', default='', metavar='comma-separated-list', 
                       help="Count reads aligning to these chromosomes and print the count in the header; "
                           +"otherwise ignore them and don't add to normal output. (default %default) (also see -b)")
-    # LATER-TODO should have a line-per-gene output format as well as a line-per-mutant one!  Which should be a separate dictionary/view in All_alignments_grouped_by_pos in deepseq_analysis_classes.py, I suppose.  Extra options for that: count only mutants that are sense/antisense, only mutants in the exons/introns/UTRs, don't count mutants in the first/last X%/Xbp of the gene, do count mutants flanking the gene...
+    # LATER-TODO once I have a line-per-gene output format as well as a line-per-mutant one (separate dictionary/view in All_alignments_grouped_by_pos in deepseq_analysis_classes.py, and separate output file):  Add extra options for that: count only mutants that are sense/antisense, only mutants in the exons/introns/UTRs, don't count mutants in the first/last X%/Xbp of the gene, do count mutants flanking the gene...
         
 
     # MAYBE-TODO add user-provided mutation cutoffs like in old_deepseq_count_alignments.py, instead of just all reads and perfet reads?   parser.add_option('-m', '--mutation_cutoffs', default="1,3,10", metavar="<comma-separated-int-list>")
@@ -262,8 +256,7 @@ if __name__ == "__main__":
     except ValueError:
         parser.print_help()
         sys.exit("\nError: exactly one infile and exactly one outfile are required!")
-    # MAYBE-TODO allow it to take multiple infiles if metafile is not provided?  Just in case I want to merge different samples for some reason or another.  Could do it if metafile is AUTO, too, really - I don't include metafile contents in output, just the one discarded read number, and I can add that from all the metafiles together.
+    # LATER-TODO allow it to take multiple infiles if metafile is not provided?  Just in case I want to merge different samples for some reason or another.  Could do it if metafile is AUTO, too, really - I don't include metafile contents in output, just the one discarded read number, and I can add that from all the metafiles together.
 
     run_main_function(infile, outfile, options)
 
-    # MAYBE-TODO If we have two mutants that inserted into the exact same location in opposite directions, WOULD they actually get reported as the same position, or offset by one?  Offset by one, probably: 12-->345 would deepseq "345" and get 3 as the position; 12345 would deepseq "12" and get 2 as the position, I think.  May want to fix that. Again, though, this is EXTREMELY UNLIKELY to make a difference (would have to be right on the edge of a gene/feature/something).

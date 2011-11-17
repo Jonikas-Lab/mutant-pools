@@ -85,7 +85,7 @@ def find_gene_by_pos(chromosome, position, strand, reference_by_chromosome,
 
 def make_joint_position(val_or_list):
     """ Takes a number or an iterator of numbers; returns biopython ExactPosition(val) or WithinPosition(min,max-min). """
-    # MAYBE-TODO do I even need this SeqFeature.ExactPosition/SeqFeature.WithinPosition thing here?  
+    # Do I even need this SeqFeature.ExactPosition/SeqFeature.WithinPosition thing from biopython here?  
     #   I might as well use them, I guess, but I could write something of my own too.
     if val_or_list is None:         
         return None
@@ -152,7 +152,7 @@ class Insertion_position():
         self.all_position_values = (self.chromosome_name, self.chromosome_number, 
                                     self.min_position, self.max_position, self.strand)
 
-    # LATER-TODO add some kind of merge function to merge two positions into one!
+    # LATER-TODO add some kind of merge function to merge two positions into one!  For when I'm merging two position-based groups together because they're actually probably the same mutant with some sequencing errors.
 
     def __cmp__(self,other):
         return cmp(self.all_position_values, other.all_position_values)
@@ -163,7 +163,7 @@ class Insertion_position():
         info_3prime = str(self.position_3prime) if self.position_3prime is not None else '?'
         return info_5prime+divider+info_3prime
 
-    # TODO add unit test for this whole class!
+    # LATER-TODO add unit tests for this whole class!
 
 
 def get_insertion_pos_from_HTSeq_read_position(HTSeq_pos, cassette_end, read_is_reverse=False):
@@ -215,7 +215,7 @@ class Alignment_position_sequence_group():
         self.unique_sequence_count = 0
         self.sequences_and_counts = defaultdict(lambda: 0)
 
-    # MAYBE-TODO give each mutant some kind of unique ID at some point in the process?  If we end up using per-mutant barcodes (in addition to the flanking sequences), we could use that, probably, or that plus genomic location
+    # MAYBE-TODO give each mutant some kind of unique ID at some point in the process?  Or is genomic location sufficient?  If we end up using per-mutant barcodes (in addition to the flanking sequences), we could use that, probably, or that plus genomic location.
 
     def add_read(self, HTSeq_alignment, read_count=1, treat_unknown_as_match=False):
         """ Add a read to the data (or multiple identical reads, if read_count>1); return True if perfect match.
@@ -237,6 +237,8 @@ class Alignment_position_sequence_group():
             return True
         else:
             return False
+
+    # LATER-TODO write a function to merge two instances together!  Merge their position (or just pick one position), add read counts together (should perfect reads from the wrong position still count as perfect though?), merge their sequences (may want to keep more data about sequences! Like exact position and number of mutations) (may want to store a list of HTSeq.alignment objects instead of just sequences+counts, really)
 
     def add_counts(self, total_count, perfect_count, sequence_variant_count, assume_new_sequences=False):
         """ Increment self.total_read_count, self.perfect_read_count and self.unique_sequence_count based on inputs.
@@ -351,11 +353,12 @@ class All_alignments_grouped_by_pos():
             # add_read adds the read to the full data; also returns True if alignment was perfect, to add to perfect_count
             if self.data_by_position[(chrom,strand,pos)].add_read(aln, read_count, treat_unknown_as_match):
                 self.perfect_read_count += read_count
+        # LATER-TODO at this point, may want to go over the full list of groups and see if any of them should be merged (for example because they're only 1bp apart and one of them has only one read and the other has thousands), or have issues (like are too close together, or have more imperfect than perfect reads, or something) - or maybe that should be a separate function?
 
     def add_gene_positions_to_data(self, genefile, detailed_features=False, gene_info_file=None, known_bad_chromosomes=[]):
         """ Look up gene positions for each read group using genefile and add to data; 
-        if detailed_features is True, also look up whether the group is in an exon/intron/UTR; 
-        if gene_info_file is not None, use it to get gene names/descriptions/other info as well.
+        if detailed_features is True, also look up whether the group is in an exon/intron/UTR (NOT IMPLEMENTED); 
+        if gene_info_file is not None, use it to get gene names/descriptions/other info as well (NOT IMPLEMENTED).
         """ 
         # parse the genefile reference using BCBio.GFF - first ONLY look at "gene" features
         reference_by_chromosome = parse_gene_pos_file(genefile)
@@ -373,7 +376,7 @@ class All_alignments_grouped_by_pos():
             else:                                                           self.read_groups_in_genes += 1
             if orientation=='sense':                self.read_groups_sense += 1
             elif orientation=='antisense':          self.read_groups_antisense += 1
-        # TODO add a run-test case for this!
+        # LATER-TODO add a run-test case for this!
 
     def find_most_common_group(self):
         """ Return the Alignment_position_sequence_group object from self.data_by_position with the most total reads."""
@@ -493,10 +496,6 @@ class All_alignments_grouped_by_pos():
 # LATER-TODO at some point I'll probably want to generalize both of those classes to not necessarily be grouped by position...
 # LATER-TODO Hmmm, do I REALLY need my main data type to be a dictionary by position, or could it just be a set? Do I ever look anything up in this dictionary??  Oh, yeah, I do, when adding new reads that were aligned to the same position as some other reads.  But if I did clustering earlier, that would stop being an issue... And if I want to take adjacent groups and merge them together, the position-based key will stop being very meaningful anyway... Hmmmm. May need a more complicated method. For now, could have the dict key be precise alignment chrom/pos/strand, but have a full position object in the read group object. 
 # Okay, so how SHOULD I do the clustering?  Two basic options here: either cluster all the reads FIRST and THEN organize them into Alignment_position_sequence_group objects, or just keep a set of Alignment_position_sequence_group objects and whenever a new read is added, run a function on the new read and the existing set to find which one to add it to.  THIS IS COMPLICATED, I DON'T KNOW IF I SHOULD BE DOING IT RIGHT NOW... Try to implement something very simple that I can expand later?
-
-# LATER-TODO may want to have Alignment_position_sequence_group store a list of HTSeq.alignment objects instead of just sequences+counts?
-
-# MAYBE-TODO may want an output option to just give a single clean tab-separated number, for Excel/whatever?  OR NOT.
 
 
 
@@ -677,9 +676,9 @@ class Testing_All_alignments_grouped_by_pos(unittest.TestCase):
             assert data.unaligned_read_count == 0
         for cassette_end in [True, False, 0, 0.11, 23, 'asdfas', '', 'something', [2,1]]:
             self.assertRaises(ValueError, All_alignments_grouped_by_pos, cassette_end)
-        # TODO rewrite this to add new args/features?
+        # LATER-TODO rewrite this to add new args/features
 
-    # TODO add unit-test for add_discarded_reads, add_gene_positions_to_data, find_most_common_group, 
+    # LATER-TODO add unit-test for add_discarded_reads, add_gene_positions_to_data, find_most_common_group, 
 
     def test__add_alignment_reader_to_data(self):
         pass
