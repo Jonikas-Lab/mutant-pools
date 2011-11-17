@@ -40,14 +40,13 @@ def do_test_run():
     test_infile = "test_data/test_input.sam"
     test_constant_options = "-H 1 -s -n3 -o -q"
     #  (using -s and -H 1 to get all relevant info but not have to deal with changing timestamps/etc)
-    test_runs = [("-U -p leftmost", "test_data/test_output__leftmost.txt"),
-                 ("-U -p rightmost", "test_data/test_output__rightmost.txt"),
-                 ("-U -p 5prime", "test_data/test_output__5prime.txt"),
-                 ("-U -p 3prime", "test_data/test_output__3prime.txt"),
-                 ("-u -p leftmost", "test_data/test_output__u.txt"),
-                 ("-b special_chromosome -U -p leftmost", "test_data/test_output__b.txt"),
-                 ("-B special_chromosome -U -p leftmost", "test_data/test_output__B.txt")]
-    # LATER-TODO add test case for when the reads are reverse (-r option) - wait until after I rewrite the position representation, since that'll change things anyway
+    test_runs = [("-e 5prime -r forward -U", "test_data/test_output__5prime.txt"),
+                 ("-e 3prime -r forward -U", "test_data/test_output__3prime.txt"),
+                 ("-r reverse -e 5prime -U", "test_data/test_output__reverse.txt"),
+                 ("-u -e 5prime -r forward", "test_data/test_output__u.txt"),
+                 ("-b special_chromosome -e 5prime -r forward -U", "test_data/test_output__b.txt"),
+                 ("-B special_chromosome -e 5prime -r forward -U", "test_data/test_output__B.txt")]
+    #  Most common group: mutation_yes, position 204-?, + strand: 6 reads (20% of aligned)
     for variable_option_string, reference_file in test_runs:
         option_string = test_constant_options + ' ' + variable_option_string
         print(" * New test run, with options: %s (infile %s, reference outfile %s)"%(option_string,test_infile,reference_file))
@@ -73,6 +72,9 @@ def define_option_parser():
     from optparse import OptionParser
     parser = OptionParser(__doc__)
 
+    # taken:     --bBcCdDe---gGhH--------m-n-oO--q-r-sStTuUv---------  
+    # free:      aB-------EfF----iIjJkKlL-M-N--pP-Q-R-------VwWxXyYzZ  
+
     ### test options
     parser.add_option('-t','--test_functionality', action='store_true', default=False, 
                       help="Run the built-in unit test suite (ignores all other options/arguments; default %default).")
@@ -81,12 +83,12 @@ def define_option_parser():
                           + "Ignores all other options/arguments. (default %default).")
 
     ### functionality options
-    parser.add_option('-p', '--position_type', choices=deepseq_analysis_classes.VALID_POSITION_TYPES, default='3prime', 
-                      metavar='|'.join(deepseq_analysis_classes.VALID_POSITION_TYPES), 
-                      help="Which position feature should be used to group reads together? (default %default) "
-                          + "leftmost/rightmost refer to where the first aligned base of the read lies on the reference, "
-                          + "regardless of read orientation; 5prime/3prime is by position of specific end of the read.")
-    # TODO change the -p option to something simpler! Really, leftmost/rightmost options here are unnecessary for our application (or any sane application, probably!), and the remaining two options should probably get rewritten to something more specific, like --read_at_end_of_cassette (False by default), or --read_position_in_cassette (start or end), or sth.
+    parser.add_option('-e', '--read_cassette_end', choices=deepseq_analysis_classes.SEQ_ENDS, default='3prime', 
+                      metavar='|'.join(deepseq_analysis_classes.SEQ_ENDS), 
+                      help="Which end of the cassette are the sequenced reads from? (default %default).")
+    parser.add_option('-r','--read_direction', choices=deepseq_analysis_classes.SEQ_DIRECTIONS, default='forward',
+                      metavar='|'.join(deepseq_analysis_classes.SEQ_DIRECTIONS), 
+                      help="Is the read in the forward or reverse direction compared to the cassette? (default %default).")
     parser.add_option('-u', '--treat_unknown_as_match', action="store_true", default=False, 
                       help="When counting perfect reads, treat undefined alignment regions as matches (default %default)")
     parser.add_option('-U', '--dont_treat_unknown_as_match', action="store_false", dest='treat_unknown_as_match',
@@ -105,11 +107,6 @@ def define_option_parser():
                       help="File containing preprocessing and alignment metadata (scripts/options used etc). "
                           +"Default: <infile_basename>_info.txt. Warning will be raised if not found. "
                           +"Pass NONE to not look for a metadata file at all.")
-    parser.add_option('-r','--input_reads_are_reverse', action='store_true', default=False, 
-                      help="Use to get correct cassette-vs-gene sense/antisense orientation data if the original reads "
-                          +"were reverse (antisense to the cassette direction) (default %default).")
-    parser.add_option('-R','--input_reads_not_reverse', action='store_false', dest="input_reads_are_reverse", 
-                      help="Turn -r off.")
 
     ### gene-finding options 
     parser.add_option('-g', '--gene_position_reference_file', default=None, metavar='FILE', 
@@ -167,8 +164,11 @@ def run_main_function(infile, outfile, options):
     """
 
     ### generate empty alignment set object with basic read position/orientation properties defined by options
-    all_alignment_data = deepseq_analysis_classes.All_alignments_grouped_by_pos(options.position_type, 
-                                                                                options.input_reads_are_reverse)
+    all_alignment_data = deepseq_analysis_classes.All_alignments_grouped_by_pos(options.read_cassette_end, 
+                                                                                options.read_direction=='reverse')
+    # MAYBE-TODO rewrite deepseq_analysis_classes.All_alignments_grouped_by_pos to take a read_direction (forward/reverse) 
+    #  argument instead of a read_is_reverse (True/False) argument, to match this?  Do we care?  Or could go back and 
+    #  rewrite the -r option as --read_is_reverse, that might be fine too.  Doesn't matter much.
 
     ### parse preprocessing/alignment metadata file to get discarded read count, pass it to all_alignment_data
     # all_alignment_data initializes it to 'unkown', so if file is not given or can't be found, no need to do anything
