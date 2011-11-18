@@ -300,7 +300,7 @@ class All_alignments_grouped_by_pos():
         if not read_is_reverse in [True,False]: 
             raise ValueError("The read_is_reverse variable must be True or False!")
         self.read_is_reverse = read_is_reverse
-        # MAYBE-TODO should read_is_reverse be specified for the whole dataset, or just for each set of data added? Might be better to make it an option to add_alignment_reader_to_data and just switch the orientation of reads as they're added to the data, to make it possible to add both forward and reverse read sets to one All_alignments_grouped_by_pos dataset.
+        # MAYBE-TODO should read_is_reverse be specified for the whole dataset, or just for each set of data added? Might be better to make it an option to add_alignment_reader_to_data and just switch the orientation of reads as they're added to the data, to make it possible to add both forward and reverse read sets to one All_alignments_grouped_by_pos dataset. - but then I'd have to keep track of (and print in outfile?) cassette_end and read_is_reverse for every read instead of just keeping it once per dataset - complicated.
         # data_by_position is the main data structure here
         self.data_by_position = {}
         # various total read/group counts to keep track of
@@ -419,11 +419,12 @@ class All_alignments_grouped_by_pos():
             OUTPUT.write(line_prefix+"Reads with insertion direction matching chromosome %s strand: %s\n"%(strand, count))
         for (region,count) in self.specific_region_read_counts.iteritems():
             OUTPUT.write(line_prefix+"Reads aligned to %s: %s\n"%(region, count))
-        position_info = " (read at %s end of cassette)"%self.cassette_end if self.cassette_end else ''
         # MAYBE-TODO add percentages of total (or aligned) reads to all of these numbers in addition to raw counts!
         # MAYBE-TODO keep track of the count of separate groups (mutants) in each category, as well as total read counts?
-        OUTPUT.write(header_prefix+"Read groups by cassette insertion position (distinct mutants)%s: %s\n"%(position_info, 
-                                                                                        len(self.data_by_position)))
+        OUTPUT.write(header_prefix+"Read groups by cassette insertion position (distinct mutants): %s\n"%\
+                                                                                     (len(self.data_by_position)))
+        OUTPUT.write(line_prefix+"(read is at %s end of cassette, in %s direction to cassette)\n"%(self.cassette_end, 
+                                                                    ('reverse' if self.read_is_reverse else 'forward')))
         g = self.find_most_common_group()
         OUTPUT.write(line_prefix+"Most common group: %s, position %s, %s strand:"%(g.position.chromosome,
                                                                            g.position.full_position, g.position.strand))
@@ -457,7 +458,7 @@ class All_alignments_grouped_by_pos():
                        'gene','orientation','feature',
                        'total_reads','perfect_reads', 'N_sequence_variants']
             for N in range(1,N_sequences+1):
-                headers.extend(['sequence_%s'%N,'count_seq_%s'%N])
+                headers.extend(['read_sequence_%s'%N,'seq_%s_count'%N])
             OUTPUT.write(header_prefix + '\t'.join(headers) + "\n")
 
         if sort_data:

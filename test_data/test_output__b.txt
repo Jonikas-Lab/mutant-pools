@@ -7,10 +7,11 @@
 #  Reads with insertion direction matching chromosome + strand: 27
 #  Reads with insertion direction matching chromosome - strand: 3
 #  Reads aligned to special_chromosome: 1
-## Read groups by cassette insertion position (distinct mutants) (read at 5prime end of cassette): 17
+## Read groups by cassette insertion position (distinct mutants): 17
+#  (read is at 5prime end of cassette, in forward direction to cassette)
 #  Most common group: mutation_yes, position 204-?, + strand: 6 reads (20% of aligned)
 ### DATA:
-chromosome	strand	min_position	full_position	gene	orientation	feature	total_reads	perfect_reads	N_sequence_variants	sequence_1	count_seq_1	sequence_2	count_seq_2	sequence_3	count_seq_3
+chromosome	strand	min_position	full_position	gene	orientation	feature	total_reads	perfect_reads	N_sequence_variants	read_sequence_1	seq_1_count	read_sequence_2	seq_2_count	read_sequence_3	seq_3_count
 min_position_+_5'_104_3'_100	+	104	104-?	gene_unknown	?	?	1	1	1	AAAA	1		0		0
 min_position_+_5'_106_3'_100	+	106	106-?	gene_unknown	?	?	1	1	1	AAAAAA	1		0		0
 min_position_+_5'_108_3'_104	+	108	108-?	gene_unknown	?	?	1	1	1	AAAA	1		0		0
