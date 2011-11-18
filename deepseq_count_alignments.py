@@ -83,7 +83,7 @@ def define_option_parser():
                           + "Ignores all other options/arguments. (default %default).")
 
     ### functionality options
-    parser.add_option('-e', '--read_cassette_end', choices=deepseq_analysis_classes.SEQ_ENDS, default='3prime', 
+    parser.add_option('-e', '--read_cassette_end', choices=deepseq_analysis_classes.SEQ_ENDS, default='5prime', 
                       metavar='|'.join(deepseq_analysis_classes.SEQ_ENDS), 
                       help="Which end of the cassette are the sequenced reads from? (default %default).")
     parser.add_option('-r','--read_direction', choices=deepseq_analysis_classes.SEQ_DIRECTIONS, default='forward',
