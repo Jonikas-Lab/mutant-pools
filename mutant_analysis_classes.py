@@ -20,9 +20,6 @@ from DNA_basic_utilities import SEQ_ENDS, SEQ_STRANDS, SEQ_DIRECTIONS, SEQ_ORIEN
 from deepseq_utilities import get_seq_count_from_collapsed_header, check_mutation_count_try_all_methods
 
 
-# TODO rename all the program files to some prefix that's more specific than deepseq_?  Like mutant_ or something?
-
-
 class SPECIAL_GENE_CODES(object):
     not_determined = "gene_unknown"
     chromosome_not_in_reference = "unknown_chrom"

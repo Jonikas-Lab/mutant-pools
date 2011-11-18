@@ -32,7 +32,7 @@ import unittest
 import HTSeq
 # my modules
 from general_utilities import write_header_data
-import deepseq_analysis_classes
+import mutant_analysis_classes
 
 
 def do_test_run():
@@ -83,11 +83,11 @@ def define_option_parser():
                           + "Ignores all other options/arguments. (default %default).")
 
     ### functionality options
-    parser.add_option('-e', '--read_cassette_end', choices=deepseq_analysis_classes.SEQ_ENDS, default='5prime', 
-                      metavar='|'.join(deepseq_analysis_classes.SEQ_ENDS), 
+    parser.add_option('-e', '--read_cassette_end', choices=mutant_analysis_classes.SEQ_ENDS, default='5prime', 
+                      metavar='|'.join(mutant_analysis_classes.SEQ_ENDS), 
                       help="Which end of the cassette are the sequenced reads from? (default %default).")
-    parser.add_option('-r','--read_direction', choices=deepseq_analysis_classes.SEQ_DIRECTIONS, default='forward',
-                      metavar='|'.join(deepseq_analysis_classes.SEQ_DIRECTIONS), 
+    parser.add_option('-r','--read_direction', choices=mutant_analysis_classes.SEQ_DIRECTIONS, default='forward',
+                      metavar='|'.join(mutant_analysis_classes.SEQ_DIRECTIONS), 
                       help="Is the read in the forward or reverse direction compared to the cassette? (default %default).")
     parser.add_option('-u', '--treat_unknown_as_match', action="store_true", default=False, 
                       help="When counting perfect reads, treat undefined alignment regions as matches (default %default)")
@@ -146,7 +146,7 @@ def define_option_parser():
     parser.add_option('-B', '--bad_chromosomes_count_and_ignore', default='', metavar='comma-separated-list', 
                       help="Count reads aligning to these chromosomes and print the count in the header; "
                           +"otherwise ignore them and don't add to normal output. (default %default) (also see -b)")
-    # LATER-TODO once I have a line-per-gene output format as well as a line-per-mutant one (separate dictionary/view in Insertional_mutant_library_dataset in deepseq_analysis_classes.py, and separate output file):  Add extra options for that: count only mutants that are sense/antisense, only mutants in the exons/introns/UTRs, don't count mutants in the first/last X%/Xbp of the gene, do count mutants flanking the gene...
+    # LATER-TODO once I have a line-per-gene output format as well as a line-per-mutant one (separate dictionary/view in Insertional_mutant_library_dataset in mutant_analysis_classes.py, and separate output file):  Add extra options for that: count only mutants that are sense/antisense, only mutants in the exons/introns/UTRs, don't count mutants in the first/last X%/Xbp of the gene, do count mutants flanking the gene...
         
 
     # MAYBE-TODO add user-provided mutation cutoffs like in old_deepseq_count_alignments.py, instead of just all reads and perfet reads?   parser.add_option('-m', '--mutation_cutoffs', default="1,3,10", metavar="<comma-separated-int-list>")
@@ -162,9 +162,9 @@ def run_main_function(infile, outfile, options):
     """
 
     ### generate empty alignment set object with basic read position/orientation properties defined by options
-    all_alignment_data = deepseq_analysis_classes.Insertional_mutant_library_dataset(options.read_cassette_end, 
+    all_alignment_data = mutant_analysis_classes.Insertional_mutant_library_dataset(options.read_cassette_end, 
                                                                                 options.read_direction=='reverse')
-    # MAYBE-TODO rewrite deepseq_analysis_classes.Insertional_mutant_library_dataset to take a read_direction 
+    # MAYBE-TODO rewrite mutant_analysis_classes.Insertional_mutant_library_dataset to take a read_direction 
     #  (forward/reverse) argument instead of a read_is_reverse (True/False) argument, to match this?  Do we care?  
     #  Or could go back and rewrite the -r option as --read_is_reverse, that might be fine too.  Doesn't matter much.
 
@@ -240,10 +240,10 @@ if __name__ == "__main__":
     # if ran with -t option, do unit tests and quit
     if options.test_functionality:
         print("*** You used the -t option - ignoring all other options/arguments, running the built-in test suite. ***")
-        print("      (testing both the deepseq_analysis_classes.py module and this module)")
+        print("      (testing both the mutant_analysis_classes.py module and this module)")
         # to run tests for another file, have to use TextTestRunner, not unittest.main -  make a test suite with 
         #   autodetection of all tests (see http://docs.python.org/library/unittest.html#unittest.TestLoader)
-        test_suite_1 = unittest.defaultTestLoader.loadTestsFromModule(deepseq_analysis_classes)
+        test_suite_1 = unittest.defaultTestLoader.loadTestsFromModule(mutant_analysis_classes)
         unittest.TextTestRunner(verbosity=1).run(test_suite_1)
         # to run tests for current module, just run unittest.main, passing it only the filename 
         #   (by default it takes all of sys.argv and complains about options/arguments it can't recognize)
