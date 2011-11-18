@@ -13,10 +13,10 @@
 chromosome	strand	min_position	full_position	gene	orientation	feature	total_reads	perfect_reads	N_sequence_variants	sequence_1	count_seq_1	sequence_2	count_seq_2	sequence_3	count_seq_3
 min_position_+_5'_104_3'_100	+	104	104-?	gene_unknown	?	?	1	1	1	AAAA	1		0		0
 min_position_+_5'_106_3'_100	+	106	106-?	gene_unknown	?	?	1	1	1	AAAAAA	1		0		0
-min_position_+_5'_114_3'_110	+	114	114-?	gene_unknown	?	?	1	1	1	AAAA	1		0		0
-min_position_+_5'_116_3'_110	+	116	116-?	gene_unknown	?	?	1	1	1	AAAAAA	1		0		0
-min_position_-_5'_104_3'_100	-	104	104-?	gene_unknown	?	?	1	1	1	TTTT	1		0		0
-min_position_-_5'_114_3'_110	-	114	114-?	gene_unknown	?	?	1	1	1	TTTT	1		0		0
+min_position_+_5'_108_3'_104	+	108	108-?	gene_unknown	?	?	1	1	1	AAAA	1		0		0
+min_position_+_5'_110_3'_104	+	110	110-?	gene_unknown	?	?	1	1	1	AAAAAA	1		0		0
+min_position_-_5'_100_3'_104	-	100	?-101	gene_unknown	?	?	1	1	1	TTTT	1		0		0
+min_position_-_5'_104_3'_108	-	104	?-105	gene_unknown	?	?	1	1	1	TTTT	1		0		0
 mutation_ifU	+	204	204-?	gene_unknown	?	?	2	0	1	AAAA	2		0		0
 mutation_none	+	104	104-?	gene_unknown	?	?	2	2	1	AAAA	2		0		0
 mutation_yes	+	204	204-?	gene_unknown	?	?	6	0	1	AAAA	6		0		0
@@ -27,4 +27,4 @@ reads_3_seqs_2	+	404	404-?	gene_unknown	?	?	3	3	2	AAAA	2	CCCC	1		0
 reads_3_seqs_3	+	504	504-?	gene_unknown	?	?	3	3	3	GGGG	1	CCCC	1	AAAA	1
 special_chromosome	+	104	104-?	gene_unknown	?	?	1	1	1	AAAA	1		0		0
 strandedness_+_normal_-_reverse	+	104	104-?	gene_unknown	?	?	1	1	1	AAAA	1		0		0
-strandedness_-_normal_+_reverse	-	104	104-?	gene_unknown	?	?	1	1	1	TTTT	1		0		0
+strandedness_-_normal_+_reverse	-	100	?-101	gene_unknown	?	?	1	1	1	TTTT	1		0		0

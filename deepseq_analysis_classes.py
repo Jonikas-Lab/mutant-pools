@@ -102,13 +102,13 @@ def make_joint_position(val_or_list):
 
 
 class Insertion_position():
-    """ A descriptor of the position of a genomic insertion, with handling of 5prime/3prime sides and ambiguity.
+    """ A descriptor of the position of a genomic insertion, with handling of before/after sides and ambiguity.
 
     See the __init__ docstring for how position initialization works.
     
     Attributes: 
      - chromosome and strand - self-explanatory.
-     - position_5prime and position_3prime - biopython SeqFeature.<SomeType>Position objects
+     - position_before and position_after - biopython SeqFeature.<SomeType>Position objects
      - min_position and max_position - lowest/highest possible position values as plain numbers
      - full_position - a string describing the full position in biopython SeqFeature.FeatureLocation format
      - chromosome_name, chromosome_number - two parts of chromosome: 'chr1'->('chr','1'), 'abc'->('abc','')
@@ -119,33 +119,30 @@ class Insertion_position():
      - comparison: __cmp__ is based on all_position_values 
     """
 
-    def __init__(self, chromosome, strand, position_5prime=None, position_3prime=None):
+    def __init__(self, chromosome, strand, position_before=None, position_after=None):
         """ Initialize all the values - dealing with positions is a bit complicated. 
         
         The two position_* arguments can be numbers, or iterators of numbers interpreted as a range of positions, 
          from which a min and max value is taken. 
         If only one of the position_* arguments is provided, the other is inferred based on the assumption that 
-         5prime<3prime, using the biopython AfterPosition/BeforePosition classes to make the uncertainty clear.
+         before<after, using the biopython AfterPosition/BeforePosition classes to make the uncertainty clear.
         """
-
-        # TODO actually, is what we want here position_5prime/position_3prime, or just position_before/position_after?  If the cassette is in forward orientation, 5prime=before and 3prime=after, but if the cassette is in reverse orientation, before=3prime and after=5prime, right?  Which one of those am I actually doing?  Make it clear in variable names and docstring!  Right now this is WRONG - see comparing_old_new_groupings.txt
-
-        if (position_5prime is None) and (position_3prime is None):
+        if (position_before is None) and (position_after is None):
             raise ValueError("can't create an Insertion_position object with no known position values!")
         self.chromosome = chromosome
         self.strand = strand
-        self.position_5prime = make_joint_position(position_5prime)
-        self.position_3prime = make_joint_position(position_3prime)
+        self.position_before = make_joint_position(position_before)
+        self.position_after = make_joint_position(position_after)
         ### non-obvious position descriptors
-        if self.position_3prime is None:
-            self.min_position = self.position_5prime.position
-            self.max_position = self.position_5prime.position+1
-        elif self.position_5prime is None:
-            self.min_position = self.position_3prime.position-1
-            self.max_position = self.position_3prime.position
+        if self.position_after is None:
+            self.min_position = self.position_before.position
+            self.max_position = self.position_before.position+1
+        elif self.position_before is None:
+            self.min_position = self.position_after.position-1
+            self.max_position = self.position_after.position
         else:
-            self.min_position = min(self.position_5prime.position, self.position_3prime.position-1)
-            self.max_position = max(self.position_5prime.position+1, self.position_3prime.position)
+            self.min_position = min(self.position_before.position, self.position_after.position-1)
+            self.max_position = max(self.position_before.position+1, self.position_after.position)
         self.full_position = str(self)
         # split chromosome into name and number (if it has a number), to make chromosome 16 sort after 5 instead of before
         chromosome_data = re.search('^(.*[^\d]?)(\d*)', self.chromosome)
@@ -161,23 +158,36 @@ class Insertion_position():
 
     def __str__(self): 
         divider = '-'
-        info_5prime = str(self.position_5prime) if self.position_5prime is not None else '?'
-        info_3prime = str(self.position_3prime) if self.position_3prime is not None else '?'
-        return info_5prime+divider+info_3prime
+        info_before = str(self.position_before) if self.position_before is not None else '?'
+        info_after = str(self.position_after) if self.position_after is not None else '?'
+        return info_before+divider+info_after
 
     # LATER-TODO add unit tests for this whole class!
 
 
 def get_insertion_pos_from_HTSeq_read_position(HTSeq_pos, cassette_end, read_is_reverse=False):
-    """ Return a (chrom,strand,pos_5prime,pos_3prime) tuple giving the insertion position based on HTSeq read position. 
+    """ Return a Insertion_position instance giving the cassette insertion position based on HTSeq read position. 
 
-    HTSeq_pos should be a HTSeq.GenomicPosition instance; cassette_end gives the side of the insertion that read is on. 
-    Pos_5prime is the base before the insertion, pos_3prime is the base after - depending on cassette_end, one of the pos* 
-     variables is given a numerical value based on the read start or end, and the other is set to None.  
-    Strand will be the same as read strand, unless read_is_reverse is True (i.e. read is in the reverse to the cassette).
-    Uses a 1-based position system (as opposed to HTSeq, which is 0-based).
+    HTSeq_pos should be a HTSeq.GenomicPosition instance; cassette_end gives the side of the insertion that read is on; 
+     read_is_reverse is True if the read is in reverse orientation to the cassette. 
+
+    The cassette chromosome will be the same as read chromosome; the cassette strand will be the same as read strand, 
+     or opposite if read_is_reverse is True.
+
+    The cassette position depends on read position, cassette strand (not read strand) and cassette_end in a complex way:
+     Data I have:  which end of the insertion cassette the read is on, and which orientation the cassette is in. 
+     Data I want:  the position of the base before and after the insertion, regardless of cassette orientation.
+                       (the read orientation in regard to cassette doesn't matter at all here)
+     If read is 5' of cassette and cassette is +, or read is 3' of cassette and cassette is -, read is BEFORE cassette
+     If read is 3' of cassette and cassette is +, or read is 5' of cassette and cassette is -, read is AFTER cassette
+      If read is before cassette, I care about the end of the read; if it's after, I care about the start)
+      SAM alignment position is leftmost/rightmost, i.e. end is always the "later" position in the genome, 
+       regardless of the read orientation, which gives me what I want, i.e. the insertion position.
+
+    Insertion_position uses a 1-based position system (as opposed to HTSeq, which is 0-based).
     """
-    ### chromosome is always the same as read (also checking that the HTSeq_pos has a chrom attribute at all here
+    # MAYBE-TODO should I just move all this to Insertion_position __init__, really?
+    ### chromosome is always the same as read (also checking that the HTSeq_pos has a chrom attribute at all here)
     try:
         chrom = HTSeq_pos.chrom
     except AttributeError:
@@ -185,15 +195,16 @@ def get_insertion_pos_from_HTSeq_read_position(HTSeq_pos, cassette_end, read_is_
     ### cassette strand is the same as read strand, OR the opposite if read_is_reverse is True
     strand = HTSeq_pos.strand
     if read_is_reverse:     strand = '+' if strand=='-' else '-'
-    ### cassette position depends on the read position and cassette_end in a somewhat complex way (see ../notes.txt)
-    # I don't actually care what orientation the READ is in, just which end of the cassette it's on.
-    #  SAM alignment position is leftmost/rightmost, i.e. end is always the "later" position in the genome, 
-    #  regardless of the read orientation, which gives me what I want, i.e. the insertion position.
+    ### cassette position depends on the read position and cassette_end in a somewhat complex way 
+    #   (see description in docstring, and ../notes.txt for even more detail)
     # HTSeq is 0-based and I want 1-based, thus the +1; end has no +1 because in HTSeq end is the base AFTER the alignment.
-    if cassette_end=='5prime':      pos_5prime, pos_3prime = HTSeq_pos.end, None
-    elif cassette_end=='3prime':    pos_5prime, pos_3prime = None, HTSeq_pos.start+1
-    else:                           raise ValueError("cassette_end argument must be one of %s."%SEQ_ENDS)
-    return Insertion_position(chrom, strand, pos_5prime, pos_3prime)
+    if (cassette_end=='5prime' and strand=='+') or (cassette_end=='3prime' and strand=='-'):      
+        pos_before, pos_after = HTSeq_pos.end, None
+    elif (cassette_end=='3prime' and strand=='+') or (cassette_end=='5prime' and strand=='-'):    
+        pos_before, pos_after = None, HTSeq_pos.start+1
+    else:                           
+        raise ValueError("cassette_end argument must be one of %s."%SEQ_ENDS)
+    return Insertion_position(chrom, strand, pos_before, pos_after)
 
 
 ### Main classes describing the reads groups and datasets
@@ -275,7 +286,7 @@ class Alignment_position_sequence_group():
 
 
 class All_alignments_grouped_by_pos():
-    """ Essentially a dictionary of alignment_position_sequence_group with position data (chrom,pos) as keys. """
+    """ Essentially a dictionary of alignment_position_sequence_group with position data (chrom,strand,pos) as keys. """
 
     def __init__(self, cassette_end=None, read_is_reverse=False):
         """ Checks cassette_end and assigns to self.cassette_end; initializes self.data_by_position.
@@ -536,7 +547,25 @@ class Testing_single_functions(unittest.TestCase):
         fake_pos = self.Fake_pos('C', '+', 0, 5)
         for bad_cassette_end in ['','aaa',0,1,[],{},None,True,False,'start','end','middle','read','leftmost','rightmost']:
             self.assertRaises(ValueError, get_insertion_pos_from_HTSeq_read_position, fake_pos, bad_cassette_end)
-        # testing normal functionality: should return an Insertion_position instance with the same chromosome, 
+        ### testing normal functionality: should return an Insertion_position instance with the same chromosome, 
+        #    and strand/position depending on the arguments in a somewhat complicated way.
+        ## a few spot-checks outside the loop 
+        #   (based on the example at the end of "Possible read sides/directions" section in ../notes.txt)
+        # remember HTSeq position is 0-based and end-exclusive, and the position I want is 1-based end-inclusive!  
+        #  So in the end the two relevant 1-based numbers end up being the same as the 0-based positions,
+        #  because in the case of the start, min_position is actually start-1, and in the case of the end, we're adding 1
+        #  to switch from 0-based to 1-based but then subtracting 1 to make the end the last base instead of the base after
+        fake_pos_plus = self.Fake_pos('C', '+', 3, 7)
+        fake_pos_minus = self.Fake_pos('C', '-', 3, 7)
+        assert get_insertion_pos_from_HTSeq_read_position(fake_pos_plus, '5prime',read_is_reverse=False).min_position == 7
+        assert get_insertion_pos_from_HTSeq_read_position(fake_pos_plus, '3prime',read_is_reverse=False).min_position == 3
+        assert get_insertion_pos_from_HTSeq_read_position(fake_pos_minus,'5prime',read_is_reverse=True).min_position == 7
+        assert get_insertion_pos_from_HTSeq_read_position(fake_pos_minus,'3prime',read_is_reverse=True).min_position == 3
+        assert get_insertion_pos_from_HTSeq_read_position(fake_pos_plus, '5prime',read_is_reverse=True).min_position == 3
+        assert get_insertion_pos_from_HTSeq_read_position(fake_pos_plus, '3prime',read_is_reverse=True).min_position == 7
+        assert get_insertion_pos_from_HTSeq_read_position(fake_pos_minus,'5prime',read_is_reverse=False).min_position == 3
+        assert get_insertion_pos_from_HTSeq_read_position(fake_pos_minus,'3prime',read_is_reverse=False).min_position == 7
+        # more checks in a loop - see above for what we expect!
         for (strand_in, if_reverse, strand_out) in [('+',False,'+'), ('-',False,'-'), ('+',True,'-'), ('-',True,'+')]:
             for (start,end) in [(0,5), (0,100), (10,11), (5,44)]:
                 fake_pos = self.Fake_pos('C', strand_in, start, end)
@@ -544,8 +573,12 @@ class Testing_single_functions(unittest.TestCase):
                 result_3prime = get_insertion_pos_from_HTSeq_read_position(fake_pos, '3prime', if_reverse)
                 assert result_5prime.chromosome == result_3prime.chromosome == 'C'
                 assert result_5prime.strand == result_3prime.strand == strand_out
-                assert result_5prime.min_position == end
-                assert result_3prime.min_position == start
+                if strand_out=='+':
+                    assert result_5prime.min_position == end
+                    assert result_3prime.min_position == start
+                elif strand_out=='-':
+                    assert result_5prime.min_position == start
+                    assert result_3prime.min_position == end
 
 
 class Testing_Alignment_position_sequence_group(unittest.TestCase):
@@ -555,8 +588,8 @@ class Testing_Alignment_position_sequence_group(unittest.TestCase):
         for chromosome in ['chr1', 'chromosome_2', 'chrom3', 'a', 'adfads', '100', 'scaffold_88']:
             for strand in ['+','-']:
                 for position in [1,2,5,100,10000,4323423]:
-                    ins_pos_5prime = Insertion_position(chromosome,strand,position_5prime=position)
-                    ins_pos_3prime = Insertion_position(chromosome,strand,position_3prime=position)
+                    ins_pos_5prime = Insertion_position(chromosome,strand,position_before=position)
+                    ins_pos_3prime = Insertion_position(chromosome,strand,position_after=position)
                     group_5prime = Alignment_position_sequence_group(ins_pos_5prime)
                     group_3prime = Alignment_position_sequence_group(ins_pos_3prime)
                     assert group_5prime.position.min_position == position

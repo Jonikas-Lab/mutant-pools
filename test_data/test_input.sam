@@ -12,13 +12,16 @@ TEST:2:1:8790:931#0/1	0	reads_3_seqs_3	501	255	4M	*	0	0	GGGG	____	XA:i:0	MD:Z:4	
 TEST:2:1:8790:931#0/1	0	reads_3_seqs_3	501	255	4M	*	0	0	AAAA	____	XA:i:0	MD:Z:4	NM:i:0
 @ 
 @
-@@@ position test - if read is 5' of insert, insert min position should be read_end; if read is 3' if insert, insert min position should be read_start-1; strand doesn't matter (testing both)
+@@@ position test 
+@   if read is 5' of insert and +, or 3' of insert and -, insert min position should be read_end; 
+@   if read is 3' if insert and +, or 5' of insert and -, insert min position should be read_start-1; 
+@  whether read is forward or reverse compared to the cassette doesn't matter
 TEST:2:1:8790:931#0/1	0	min_position_+_5'_104_3'_100	101	255	4M	*	0	0	AAAA	____	XA:i:0	MD:Z:4	NM:i:0
-TEST:2:1:8790:931#0/1	0	min_position_+_5'_114_3'_110	111	255	4M	*	0	0	AAAA	____	XA:i:0	MD:Z:4	NM:i:0
-TEST:2:1:8790:931#0/1	16	min_position_-_5'_104_3'_100	101	255	4M	*	0	0	AAAA	____	XA:i:0	MD:Z:4	NM:i:0
-TEST:2:1:8790:931#0/1	16	min_position_-_5'_114_3'_110	111	255	4M	*	0	0	AAAA	____	XA:i:0	MD:Z:4	NM:i:0
+TEST:2:1:8790:931#0/1	0	min_position_+_5'_108_3'_104	105	255	4M	*	0	0	AAAA	____	XA:i:0	MD:Z:4	NM:i:0
+TEST:2:1:8790:931#0/1	16	min_position_-_5'_100_3'_104	101	255	4M	*	0	0	AAAA	____	XA:i:0	MD:Z:4	NM:i:0
+TEST:2:1:8790:931#0/1	16	min_position_-_5'_104_3'_108	105	255	4M	*	0	0	AAAA	____	XA:i:0	MD:Z:4	NM:i:0
 TEST:2:1:8790:931#0/1	0	min_position_+_5'_106_3'_100	101	255	6M	*	0	0	AAAAAA	______	XA:i:0	MD:Z:4	NM:i:0
-TEST:2:1:8790:931#0/1	0	min_position_+_5'_116_3'_110	111	255	6M	*	0	0	AAAAAA	______	XA:i:0	MD:Z:4	NM:i:0
+TEST:2:1:8790:931#0/1	0	min_position_+_5'_110_3'_104	105	255	6M	*	0	0	AAAAAA	______	XA:i:0	MD:Z:4	NM:i:0
 @
 @
 @@@ strandedness test - if read is reverse to insertion, the reported strand should be opposite of read strand (read - strand is indicated by 16 in flag field)
