@@ -22,8 +22,6 @@ from deepseq_utilities import get_seq_count_from_collapsed_header, check_mutatio
 
 # TODO rename all the program files to some prefix that's more specific than deepseq_?  Like mutant_ or something?
 
-# TODO rename the main two classes to something more focused on usage than on exact nature, like "Mutant_read_group" instead of "Alignment_position_sequence_group" and "Mutants_by_pos" instead of "All_alignments_grouped_by_pos"?  Especially since All_alignments_grouped_by_pos doesn't HAVE to be by position - it's just a generic dataset collection thing...  Similarly, rename data_by_position to something clearer...
-
 
 class SPECIAL_GENE_CODES(object):
     not_determined = "gene_unknown"
@@ -186,7 +184,6 @@ def get_insertion_pos_from_HTSeq_read_position(HTSeq_pos, cassette_end, read_is_
 
     Insertion_position uses a 1-based position system (as opposed to HTSeq, which is 0-based).
     """
-    # MAYBE-TODO should I just move all this to Insertion_position __init__, really?
     ### chromosome is always the same as read (also checking that the HTSeq_pos has a chrom attribute at all here)
     try:
         chrom = HTSeq_pos.chrom
@@ -209,7 +206,7 @@ def get_insertion_pos_from_HTSeq_read_position(HTSeq_pos, cassette_end, read_is_
 
 ### Main classes describing the reads groups and datasets
 
-class Alignment_position_sequence_group():
+class Insertional_mutant_data():
     """ Data regarding sequences aligned to a particular genomic position (genomic position is set at initialization). 
     Variables: chromosome, position, total_read_count, perfect_read_count, unique_sequence_count, 
       sequences_and_counts (a sequence:count dictionary).
@@ -285,13 +282,13 @@ class Alignment_position_sequence_group():
         except IndexError:  return ('',0)
 
 
-class All_alignments_grouped_by_pos():
-    """ Essentially a dictionary of alignment_position_sequence_group with position data (chrom,strand,pos) as keys. """
+class Insertional_mutant_library_dataset():
+    """ Essentially a dictionary of Insertional_mutant_data with position data (chrom,strand,pos) as keys. """
 
     def __init__(self, cassette_end=None, read_is_reverse=False):
         """ Checks cassette_end and assigns to self.cassette_end; initializes self.data_by_position.
         cassette_end must be one of %s.
-        self.data_by_position is a dictionary that generates a new alignment_position_sequence_group object
+        self.data_by_position is a dictionary that generates a new Insertional_mutant_data object
          based on the key (i.e. position) if the key isn't already in the dictionary.  """%SEQ_ENDS
          # make sure the arguments are valid values
         if not cassette_end in SEQ_ENDS+[None]: 
@@ -300,7 +297,7 @@ class All_alignments_grouped_by_pos():
         if not read_is_reverse in [True,False]: 
             raise ValueError("The read_is_reverse variable must be True or False!")
         self.read_is_reverse = read_is_reverse
-        # MAYBE-TODO should read_is_reverse be specified for the whole dataset, or just for each set of data added? Might be better to make it an option to add_alignment_reader_to_data and just switch the orientation of reads as they're added to the data, to make it possible to add both forward and reverse read sets to one All_alignments_grouped_by_pos dataset. - but then I'd have to keep track of (and print in outfile?) cassette_end and read_is_reverse for every read instead of just keeping it once per dataset - complicated.
+        # MAYBE-TODO should read_is_reverse be specified for the whole dataset, or just for each set of data added? Might be better to make it an option to add_alignment_reader_to_data and just switch the orientation of reads as they're added to the data, to make it possible to add both forward and reverse read sets to one Insertional_mutant_library_dataset dataset. - but then I'd have to keep track of (and print in outfile?) cassette_end and read_is_reverse for every read instead of just keeping it once per dataset - complicated.
         # data_by_position is the main data structure here
         self.data_by_position = {}
         # various total read/group counts to keep track of
@@ -334,7 +331,7 @@ class All_alignments_grouped_by_pos():
         """
 
         if self.cassette_end is None:
-            raise Exception("Cannot add data from an alignment reader if cassette_end isn't specified! Please set the cassette_end attribute of this All_alignments_grouped_by_pos instance to one of %s first."%SEQ_ENDS)
+            raise Exception("Cannot add data from an alignment reader if cassette_end isn't specified! Please set the cassette_end attribute of this Insertional_mutant_library_dataset instance to one of %s first."%SEQ_ENDS)
         for aln in HTSeq_alignment_reader:
             if uncollapse_read_counts:      read_count = get_seq_count_from_collapsed_header(aln.read.name)
             else:                           read_count = 1
@@ -362,7 +359,7 @@ class All_alignments_grouped_by_pos():
             if (chrom,strand,pos) not in self.data_by_position.keys():
                 # LATER-TODO may want to check whether the read should be added to another group before making a new one - 
                 #   for example if it's 1bp away from an existing one?  Or just do all those group-merge checks at the end.
-                self.data_by_position[(chrom,strand,pos)] = Alignment_position_sequence_group(insertion_pos)
+                self.data_by_position[(chrom,strand,pos)] = Insertional_mutant_data(insertion_pos)
             # add_read adds the read to the full data; also returns True if alignment was perfect, to add to perfect_count
             if self.data_by_position[(chrom,strand,pos)].add_read(aln, read_count, treat_unknown_as_match):
                 self.perfect_read_count += read_count
@@ -397,7 +394,7 @@ class All_alignments_grouped_by_pos():
         # LATER-TODO add a run-test case for this!
 
     def find_most_common_group(self):
-        """ Return the Alignment_position_sequence_group object from self.data_by_position with the most total reads."""
+        """ Return the Insertional_mutant_data object from self.data_by_position with the most total reads."""
         current_readcount = 0
         current_group = None
         for read_group in self.data_by_position.itervalues():
@@ -510,11 +507,11 @@ class All_alignments_grouped_by_pos():
         self.aligned_read_count = sum([x.total_read_count for x in self.data_by_position.values()])
         self.total_read_count = self.aligned_read_count + self.unaligned_read_count
     
-# MAYBE-TODO I think later I'll want another way of organizing Alignment_position_sequence_group objects - by gene, or by chromosome instead of chromosome+position, or such... don't get too stuck on All_alignments_grouped_by_pos!  Or I could just add other mutant-organization dictionaries/views to the same class, that might be better really...
+# MAYBE-TODO I think later I'll want another way of organizing Insertional_mutant_data objects - by gene, or by chromosome instead of chromosome+position, or such... don't get too stuck on Insertional_mutant_library_dataset!  Or I could just add other mutant-organization dictionaries/views to the same class, that might be better really...
 
 # LATER-TODO at some point I'll probably want to generalize both of those classes to not necessarily be grouped by position...
 # LATER-TODO Hmmm, do I REALLY need my main data type to be a dictionary by position, or could it just be a set? Do I ever look anything up in this dictionary??  Oh, yeah, I do, when adding new reads that were aligned to the same position as some other reads.  But if I did clustering earlier, that would stop being an issue... And if I want to take adjacent groups and merge them together, the position-based key will stop being very meaningful anyway... Hmmmm. May need a more complicated method. For now, could have the dict key be precise alignment chrom/pos/strand, but have a full position object in the read group object. 
-# Okay, so how SHOULD I do the clustering?  Two basic options here: either cluster all the reads FIRST and THEN organize them into Alignment_position_sequence_group objects, or just keep a set of Alignment_position_sequence_group objects and whenever a new read is added, run a function on the new read and the existing set to find which one to add it to.  THIS IS COMPLICATED, I DON'T KNOW IF I SHOULD BE DOING IT RIGHT NOW... Try to implement something very simple that I can expand later?
+# Okay, so how SHOULD I do the clustering?  Two basic options here: either cluster all the reads FIRST and THEN organize them into Insertional_mutant_data objects, or just keep a set of Insertional_mutant_data objects and whenever a new read is added, run a function on the new read and the existing set to find which one to add it to.  THIS IS COMPLICATED, I DON'T KNOW IF I SHOULD BE DOING IT RIGHT NOW... Try to implement something very simple that I can expand later?
 
 
 
@@ -583,7 +580,7 @@ class Testing_single_functions(unittest.TestCase):
 
 
 class Testing_Alignment_position_sequence_group(unittest.TestCase):
-    """ Unit-tests for the Alignment_position_sequence_group class and its methods. """
+    """ Unit-tests for the Insertional_mutant_data class and its methods. """
 
     def test__init(self):
         for chromosome in ['chr1', 'chromosome_2', 'chrom3', 'a', 'adfads', '100', 'scaffold_88']:
@@ -591,8 +588,8 @@ class Testing_Alignment_position_sequence_group(unittest.TestCase):
                 for position in [1,2,5,100,10000,4323423]:
                     ins_pos_5prime = Insertion_position(chromosome,strand,position_before=position)
                     ins_pos_3prime = Insertion_position(chromosome,strand,position_after=position)
-                    group_5prime = Alignment_position_sequence_group(ins_pos_5prime)
-                    group_3prime = Alignment_position_sequence_group(ins_pos_3prime)
+                    group_5prime = Insertional_mutant_data(ins_pos_5prime)
+                    group_3prime = Insertional_mutant_data(ins_pos_3prime)
                     assert group_5prime.position.min_position == position
                     assert group_3prime.position.min_position == position-1
                     assert group_5prime.position.max_position == position+1
@@ -615,7 +612,7 @@ class Testing_Alignment_position_sequence_group(unittest.TestCase):
         # MAYBE-TODO implement using a mock-up of HTSeq_alignment?  (see Testing_single_functions for how I did that)
 
     def test__add_counts(self):
-        group = Alignment_position_sequence_group(Insertion_position('chr','+',3))
+        group = Insertional_mutant_data(Insertion_position('chr','+',3))
         group.add_counts(0,0,0)
         assert group.total_read_count == 0
         assert group.perfect_read_count == 0
@@ -630,7 +627,7 @@ class Testing_Alignment_position_sequence_group(unittest.TestCase):
         assert group.sequences_and_counts == {}
         # how group.unique_sequence_count changes depends on assume_new_sequences:
         #  - if False, group.unique_sequence_count is max(new_seq_count, group.unique_sequence_count)
-        group = Alignment_position_sequence_group(Insertion_position('chr','+',3))
+        group = Insertional_mutant_data(Insertion_position('chr','+',3))
         group.add_counts(0,0,0,assume_new_sequences=False)
         assert group.unique_sequence_count == 0
         group.add_counts(1,1,1,assume_new_sequences=False)
@@ -642,7 +639,7 @@ class Testing_Alignment_position_sequence_group(unittest.TestCase):
         group.add_counts(2,2,2,assume_new_sequences=False)
         assert group.unique_sequence_count == 2
         #  - if True and group.unique_sequence_count is new_seq_count + group.unique_sequence_count
-        group = Alignment_position_sequence_group(Insertion_position('chr','+',3))
+        group = Insertional_mutant_data(Insertion_position('chr','+',3))
         group.add_counts(0,0,0,assume_new_sequences=True)
         assert group.unique_sequence_count == 0
         group.add_counts(1,1,1,assume_new_sequences=True)
@@ -657,7 +654,7 @@ class Testing_Alignment_position_sequence_group(unittest.TestCase):
         assert group.unique_sequence_count == 6
 
     def test__add_sequence_and_counts(self):
-        group = Alignment_position_sequence_group(Insertion_position('chr','+',3))
+        group = Insertional_mutant_data(Insertion_position('chr','+',3))
         # adding sequence/count to group.sequences_and_counts, WITHOUT touching group.unique_sequence_count
         group.add_sequence_and_counts('AAA',2,add_to_uniqseqcount=False)
         assert group.sequences_and_counts == {'AAA':2}
@@ -681,7 +678,7 @@ class Testing_Alignment_position_sequence_group(unittest.TestCase):
             self.assertRaises(TypeError,group.add_sequence_and_counts,'CCC',not_a_number)
 
     def test__get_main_sequence(self):
-        group = Alignment_position_sequence_group(Insertion_position('chr','+',3))
+        group = Insertional_mutant_data(Insertion_position('chr','+',3))
         assert group.get_main_sequence() == ('',0)
         assert group.get_main_sequence(1) == ('',0)
         assert group.get_main_sequence(4) == ('',0)
@@ -705,18 +702,18 @@ class Testing_Alignment_position_sequence_group(unittest.TestCase):
 
 
 class Testing_All_alignments_grouped_by_pos(unittest.TestCase):
-    """ Unit-tests for the All_alignments_grouped_by_pos class and its methods. """
+    """ Unit-tests for the Insertional_mutant_library_dataset class and its methods. """
 
     def test__init(self):
         for cassette_end in SEQ_ENDS+[None]:
-            data = All_alignments_grouped_by_pos(cassette_end)
+            data = Insertional_mutant_library_dataset(cassette_end)
             assert data.cassette_end == cassette_end
             assert data.data_by_position == {}
             assert data.total_read_count == 0
             assert data.aligned_read_count == 0
             assert data.unaligned_read_count == 0
         for cassette_end in [True, False, 0, 0.11, 23, 'asdfas', '', 'something', [2,1]]:
-            self.assertRaises(ValueError, All_alignments_grouped_by_pos, cassette_end)
+            self.assertRaises(ValueError, Insertional_mutant_library_dataset, cassette_end)
         # LATER-TODO rewrite this to add new args/features
 
     # LATER-TODO add unit-test for add_discarded_reads, add_gene_positions_to_data, find_most_common_group, 
@@ -736,7 +733,7 @@ class Testing_All_alignments_grouped_by_pos(unittest.TestCase):
 
     def no_test__read_from_file(self):
         input_file = 'test_data/test_output__leftmost.txt'
-        data = All_alignments_grouped_by_pos(None)
+        data = Insertional_mutant_library_dataset(None)
         data.read_from_file(input_file)
         assert data.aligned_read_count == 30
         assert data.unaligned_read_count == 0

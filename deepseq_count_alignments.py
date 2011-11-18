@@ -146,7 +146,7 @@ def define_option_parser():
     parser.add_option('-B', '--bad_chromosomes_count_and_ignore', default='', metavar='comma-separated-list', 
                       help="Count reads aligning to these chromosomes and print the count in the header; "
                           +"otherwise ignore them and don't add to normal output. (default %default) (also see -b)")
-    # LATER-TODO once I have a line-per-gene output format as well as a line-per-mutant one (separate dictionary/view in All_alignments_grouped_by_pos in deepseq_analysis_classes.py, and separate output file):  Add extra options for that: count only mutants that are sense/antisense, only mutants in the exons/introns/UTRs, don't count mutants in the first/last X%/Xbp of the gene, do count mutants flanking the gene...
+    # LATER-TODO once I have a line-per-gene output format as well as a line-per-mutant one (separate dictionary/view in Insertional_mutant_library_dataset in deepseq_analysis_classes.py, and separate output file):  Add extra options for that: count only mutants that are sense/antisense, only mutants in the exons/introns/UTRs, don't count mutants in the first/last X%/Xbp of the gene, do count mutants flanking the gene...
         
 
     # MAYBE-TODO add user-provided mutation cutoffs like in old_deepseq_count_alignments.py, instead of just all reads and perfet reads?   parser.add_option('-m', '--mutation_cutoffs', default="1,3,10", metavar="<comma-separated-int-list>")
@@ -162,11 +162,11 @@ def run_main_function(infile, outfile, options):
     """
 
     ### generate empty alignment set object with basic read position/orientation properties defined by options
-    all_alignment_data = deepseq_analysis_classes.All_alignments_grouped_by_pos(options.read_cassette_end, 
+    all_alignment_data = deepseq_analysis_classes.Insertional_mutant_library_dataset(options.read_cassette_end, 
                                                                                 options.read_direction=='reverse')
-    # MAYBE-TODO rewrite deepseq_analysis_classes.All_alignments_grouped_by_pos to take a read_direction (forward/reverse) 
-    #  argument instead of a read_is_reverse (True/False) argument, to match this?  Do we care?  Or could go back and 
-    #  rewrite the -r option as --read_is_reverse, that might be fine too.  Doesn't matter much.
+    # MAYBE-TODO rewrite deepseq_analysis_classes.Insertional_mutant_library_dataset to take a read_direction 
+    #  (forward/reverse) argument instead of a read_is_reverse (True/False) argument, to match this?  Do we care?  
+    #  Or could go back and rewrite the -r option as --read_is_reverse, that might be fine too.  Doesn't matter much.
 
     ### parse preprocessing/alignment metadata file to get discarded read count, pass it to all_alignment_data
     # all_alignment_data initializes it to 'unkown', so if file is not given or can't be found, no need to do anything
