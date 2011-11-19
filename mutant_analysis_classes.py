@@ -145,10 +145,11 @@ class Insertion_position():
             self.min_position = min(self.position_before.position, self.position_after.position-1)
             self.max_position = max(self.position_before.position+1, self.position_after.position)
         self.full_position = str(self)
-        # split chromosome into name and number (if it has a number), to make chromosome 16 sort after 5 instead of before
-        chromosome_data = re.search('^(.*[^\d]?)(\d*)', self.chromosome)
-        self.chromosome_name = chromosome_data.group(1)
-        self.chromosome_number = int(chromosome_data.group(2)) if chromosome_data.group(2) else 0
+        # split chromosome into name (if it has any non-digit characters) and number (if it has a number), 
+        #   to make chromosome_11 sort after chromosome_2 instead of before it, which is what happens with string-sort
+        chromosome_data = re.search('^(?P<name>.*[^\d])?(?P<number>\d*)', self.chromosome)
+        self.chromosome_name = chromosome_data.group('name')    # if there were no non-digit characters, this is None
+        self.chromosome_number = int(chromosome_data.group('number')) if chromosome_data.group('number') else 0
         self.all_position_values = (self.chromosome_name, self.chromosome_number, 
                                     self.min_position, self.max_position, self.strand)
 
