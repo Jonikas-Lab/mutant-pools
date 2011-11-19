@@ -1,28 +1,18 @@
 #!/usr/bin/env python
-""" Group the reads in a deepseq alignment file by genomic alignment position;
-output a new file with one line per group, with total read counts, most common
-sequence variants, and optionally other details. 
+""" Take a deepseq alignment file; group the reads into insertional mutants.
+Output a line-per-mutant file containing position info, gene annotation data (optional), total/perfect read count, number of distinct sequences, and some of the sequences/counts (optional), and a summary of read/mutant counts etc. 
+Also output a line-per-gene file containing gene ID/name/position/annotation and the number and read-counts of mutants that were inserted into that gene (optional, NOT IMPLEMENTED YET).
+Output files are in simple tab-separated plaintext format, with all header/summary lines starting with #.
 
-The input file is a SAM deepseq alignment file created by bowtie, novoalign, or
-other deepseq aligner programs (tested mainly on bowtie).
+Grouping reads into mutants is currently done by alignment position (other options such as sequence clustering or grouping 1bp-adjacent positions together may be implemented later). 
 
-The output file is a tab-separated file, with one line per unique genomic
-alignment location of the 3' end of the sequence (by default; other position
-options may be used).  Each line will contain the following fields: chromosome,
-strand, position, gene, orientation vs gene, gene feature, total number of
-aligned reads, number of perfectly aligned reads.  Optionally: most common
-sequence and its count, second most common sequence and its count, etc.  (More
-output fields or separate files with details on mutations, lengths, etc, may be
-added later.) The gene information is only filled in if a gene annotation file
-is provided via options.
-
-The program assumes the SAM file contains only unique matches (i.e. each read
-was reported as aligning to at most one genomic location).
+The input file should be a SAM-format deepseq alignment file created by bowtie, novoalign, or other deepseq aligner programs (tested mainly on bowtie), with optionally a metadata file created by my deepseq_alignment_wrapper.py or deepseq_preprocessing_wrapper.py scripts.
+The program assumes the SAM file contains only unique matches (i.e. each read was reported as aligning to at most one genomic location).
 It also only deals with single-end alignments at the moment.
 
  -- Weronika Patena, Jonikas Lab, Carnegie Institution, 2011
 
-USAGE: deepseq_count_alignments.py [options] infile outfile """
+USAGE: mutant_count_alignments.py [options] infile outfile """
 
 # basic libraries
 import sys, os, time
@@ -68,7 +58,7 @@ def do_test_run():
 ######### Main function code #########
 
 def define_option_parser():
-    """ Populates and returns an optparse option parser object, with __doc__ as usage."""
+    """ Populates and returns an optparse option parser object, with __doc__ as the usage string."""
     from optparse import OptionParser
     parser = OptionParser(__doc__)
 
@@ -137,7 +127,7 @@ def define_option_parser():
     parser.add_option('-S', '--dont_add_summary_to_file', action="store_false", dest='add_summary_to_file', 
                       help="Turn -s off.")
     parser.add_option('-o', '--sort_data_by_position', action="store_true", default=False, 
-                      help="Sort the output data by alignment position (default %default) - CAUTION: MAY BE SLOW!")
+                      help="Sort the output data by alignment position (default %default) - may be slow for large data!")
     parser.add_option('-O', '--dont_sort_data_by_position', action="store_false", dest='sort_data_by_position', 
                       help="Turn -o off.")
     parser.add_option('-b', '--bad_chromosomes_count_only', default='insertion_cassette', metavar='comma-separated-list', 
@@ -149,7 +139,7 @@ def define_option_parser():
     # LATER-TODO once I have a line-per-gene output format as well as a line-per-mutant one (separate dictionary/view in Insertional_mutant_library_dataset in mutant_analysis_classes.py, and separate output file):  Add extra options for that: count only mutants that are sense/antisense, only mutants in the exons/introns/UTRs, don't count mutants in the first/last X%/Xbp of the gene, do count mutants flanking the gene...
         
 
-    # MAYBE-TODO add user-provided mutation cutoffs like in old_deepseq_count_alignments.py, instead of just all reads and perfet reads?   parser.add_option('-m', '--mutation_cutoffs', default="1,3,10", metavar="<comma-separated-int-list>")
+    # MAYBE-TODO add user-provided mutation cutoffs like in old deepseq_count_alignments.py, instead of just all reads and perfet reads?   parser.add_option('-m', '--mutation_cutoffs', default="1,3,10", metavar="<comma-separated-int-list>")
     parser.add_option('-q', '--quiet', action="store_true", default=False, help="Don't print summary to STDOUT.")
     parser.add_option('-v', '--verbose', action="store_true", default=False, help="Print progress reports to STDOUT.")
 
