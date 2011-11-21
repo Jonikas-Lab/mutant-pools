@@ -101,16 +101,14 @@ def define_option_parser():
     parser.add_option('-g', '--gene_position_reference_file', default=None, metavar='FILE', 
                       help="File to use to look up gene IDs based on chromosomal location (default %default)")
     parser.add_option('-G', '--gene_info_reference_file', default=None, metavar='FILE', 
-                      help="File to use to look up gene names/descriptions from ID symbols (default %default)"
-                          +"       NOT IMPLEMENTED")
+                      help="File to use to look up gene names/descriptions from ID symbols (default %default)")
     parser.add_option('-x', '--liberal_position_test', action="store_true", default=True,
                       help="Should insertions on the border of a gene/feature count as inside it? (default %default)")
     parser.add_option('-X', '--strict_position_test', action="store_false", dest='liberal_position_test',
                       help="Turns -x off.")
     parser.add_option('-d', '--detailed_gene_features', action="store_true", default=False,
                       help="Find out what part of the gene (UTR,intron,exon) a mutant hit, based on the -g file "
-                          +"- may take a LOT of memory! (default %default)"
-                          +"      NOT IMPLEMENTED")
+                          +"- may take a LOT of memory! (default %default)")
     parser.add_option('-D', '--no_detailed_gene_features', action="store_false", dest='detailed_gene_features',
                       help="Turns -d off.")
     # MAYBE-TODO add a "flank" option (with variable size), to catch mutants that are in the flanks of genes? Do we care?
@@ -190,13 +188,16 @@ def run_main_function(infile, outfile, options):
                                      options.treat_unknown_as_match, bad_chromosomes_to_count, bad_chromosomes_to_ignore)
     
     ### optionally parse gene position/info files and look up the genes for each mutant in the data
-    if options.gene_position_reference_file:
+    if options.gene_position_reference_file is not None:
         genefile = options.gene_position_reference_file
-        if options.verbose: print "parsing gene file %s and adding data from it - time %s."%(genefile, time.ctime())
-        all_alignment_data.add_gene_positions_to_data(genefile, detailed_features=options.detailed_gene_features, 
-                                                      gene_info_file=options.gene_info_reference_file, 
-                                                      liberal_position_test=options.liberal_position_test, 
-                                                      known_bad_chromosomes=bad_chromosomes_to_count)
+        if options.verbose: print "adding genes from file %s to mutant data - time %s."%(genefile, time.ctime())
+        all_alignment_data.find_genes_for_mutants(genefile, detailed_features=options.detailed_gene_features, 
+                                                  liberal_position_test=options.liberal_position_test, 
+                                                  known_bad_chromosomes=bad_chromosomes_to_count)
+        if options.gene_info_reference_file is not None:
+            if options.verbose: 
+                print "adding gene details from file %s - time %s."%(options.gene_info_reference_file, time.ctime())
+            all_alignment_data.add_detailed_gene_info(options.gene_info_reference_file)
     ### output
     # print summary info to stdout
     if not options.quiet:   
