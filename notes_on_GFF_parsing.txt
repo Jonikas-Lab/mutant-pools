@@ -77,6 +77,7 @@ Works.
 Using 713-line test file because running this on the full file takes up LOTS of memory, which makes sense...  Should do it on the server, I suppose?  SIGH, installing this on the server may not be very fun... 
 
 >>> from BCBio import GFF
+>>> infile = 'reference_data/Creinhardtii_169_gene.gff3'
 >>> infile = 'reference_data/test_file.gff3'
 >>> INFILE = open(infile)
 >>> GFF_parser = GFF.parse(INFILE)
