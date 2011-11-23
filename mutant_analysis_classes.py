@@ -372,6 +372,7 @@ class Insertional_mutant_library_dataset():
         self.specific_region_read_counts = defaultdict(lambda: 0)
         self.mutants_in_genes, self.mutants_not_in_genes, self.mutants_undetermined = 0,0,0
         self.mutant_counts_by_orientation = defaultdict(lambda: 0)
+        self.mutant_counts_by_feature = defaultdict(lambda: 0)
     
     def add_discarded_reads(self, N, reset_count=False):
         """ Add N to self.discarded_read_count (or set self.discarded_read_count to N if reset_count is True). """
@@ -470,8 +471,7 @@ class Insertional_mutant_library_dataset():
                         if gene_ID==SPECIAL_GENE_CODES.not_found:   self.mutants_not_in_genes += 1
                         else:                                       self.mutants_in_genes += 1
                         if orientation not in ['?','-']:            self.mutant_counts_by_orientation[orientation] += 1
-                    # TODO once I have exon/intron/UTR info (plus maybe more categories, like edge/unknown?), add another self.mutant_*_counts dictionary to keep count of those, and print that data in the summary etc
-                    # MAYBE-TODO should I just stop keeping track of all these counts in every function and make a function that just generates all these counts before the summary is printed?
+                        if feature not in ['?','-']:                self.mutant_counts_by_feature[feature] += 1
 
         # for mutants in chromosomes that weren't listed in the genefile, use special values
         for chromosome in set(mutants_by_chromosome.keys())-set(all_reference_chromosomes):
@@ -532,8 +532,10 @@ class Insertional_mutant_library_dataset():
             OUTPUT.write(header_prefix+"Mutant cassettes inside genes: %s\n"%(self.mutants_in_genes))
             for (orientation,count) in sorted(self.mutant_counts_by_orientation.items(),reverse=True):
                 OUTPUT.write(line_prefix+"Mutant cassettes in %s orientation to gene: %s\n"%(orientation,count))
+            for (feature,count) in sorted(self.mutant_counts_by_feature.items()):
+                OUTPUT.write(line_prefix+"Mutant cassettes in gene feature %s: %s\n"%(feature,count))
             all_genes = set([m.gene for m in self.mutants_by_position.values()]) - set(SPECIAL_GENE_CODES.all_codes)
-            OUTPUT.write(line_prefix+"Genes containing a mutant: %s\n"%(len(all_genes)))
+            OUTPUT.write(header_prefix+"Genes containing a mutant: %s\n"%(len(all_genes)))
             # LATER-TODO Add count of genes containing two or more mutants! Once I have a per-gene view of the data.
 
     def print_data(self, OUTPUT=None, sort_data=False, N_sequences=2, header_line=True, header_prefix="# "):
