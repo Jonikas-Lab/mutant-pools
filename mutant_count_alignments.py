@@ -102,10 +102,6 @@ def define_option_parser():
                       help="File to use to look up gene IDs based on chromosomal location (default %default)")
     parser.add_option('-G', '--gene_info_reference_file', default=None, metavar='FILE', 
                       help="File to use to look up gene names/descriptions from ID symbols (default %default)")
-    parser.add_option('-x', '--liberal_position_test', action="store_true", default=True,
-                      help="Should insertions on the border of a gene/feature count as inside it? (default %default)")
-    parser.add_option('-X', '--strict_position_test', action="store_false", dest='liberal_position_test',
-                      help="Turns -x off.")
     parser.add_option('-d', '--detailed_gene_features', action="store_true", default=True,
                       help="Find out what part of the gene (UTR,intron,exon) a mutant hit, based on the -g file "
                           +"(default %default). May take a lot of memory - increase -Y option value to fix that.")
@@ -199,7 +195,6 @@ def run_main_function(infile, outfile, options):
         genefile = options.gene_position_reference_file
         if options.verbosity_level>1: print "adding genes from file %s to mutant data - time %s."%(genefile, time.ctime())
         all_alignment_data.find_genes_for_mutants(genefile, detailed_features=options.detailed_gene_features, 
-                                                  liberal_position_test=options.liberal_position_test, 
                                                   known_bad_chromosomes=bad_chromosomes_to_count, 
                                                   N_run_groups=options.N_detail_run_groups, 
                                                   verbose=(options.verbosity_level>1))
