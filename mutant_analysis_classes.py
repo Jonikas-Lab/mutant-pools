@@ -16,6 +16,7 @@ import HTSeq
 from BCBio import GFF
 from Bio import SeqFeature
 # my modules
+from general_utilities import split_into_N_sets_by_counts
 from DNA_basic_utilities import SEQ_ENDS, SEQ_STRANDS, SEQ_DIRECTIONS, SEQ_ORIENTATIONS, position_test_contains, position_test_overlap
 from deepseq_utilities import get_seq_count_from_collapsed_header, check_mutation_count_try_all_methods
 
@@ -72,8 +73,7 @@ def find_gene_by_pos(insertion_pos, chromosome_GFF_record, location_in_gene_test
                                                      insertion_pos.min_position, insertion_pos.max_position):
                             gene_feature = subfeature.type
             # TODO okay, so actually what's recorded is UTRs/CDS, so an intron will just register as 'mRNA"...  Okay, I should rewrite this to assume the mRNA->stuff structure, and if the position is in mRNA but not in any of its subfeatures call it an intron, otherwise call it mRNA?  But what if it's before the first feature (UTR or exon) or after the last, should that be special? Yeah...  Okay, this will be a bit more complicated than expected.
-            # TODO also I got one 'feature' as an feature.type - what's that?
-            # TODO should probably try to get better annotation files from Sabeeha Merchant's lab?
+            # Could also get the structure of the records directly from the file using the Inspector thing...
             return gene_ID, orientation, gene_feature
     # if no gene matching insertion_pos was found, return special value
     return SPECIAL_GENE_CODES.not_found, '?', '?'
@@ -380,12 +380,13 @@ class Insertional_mutant_library_dataset():
         # LATER-TODO at this point, may want to go over the full list of mutants and see if any of them should be merged (for example because they're only 1bp apart and one of them has only one read and the other has thousands), or have issues (like are too close together, or have more imperfect than perfect reads, or something) - or maybe that should be a separate function?
 
     def find_genes_for_mutants(self, genefile, detailed_features=False, liberal_position_test=False, 
-                               known_bad_chromosomes=[]):
+                               known_bad_chromosomes=[], N_run_groups=3, verbose=False):
         """ To each mutant in the dataset, add the gene it's in (look up gene positions for each mutant using genefile).
 
         If detailed_features is True, also look up whether the mutant is in an exon/intron/UTR (NOT IMPLEMENTED); 
         If liberal_position_test is False, the insertion position must definitely be inside the gene; 
          if True, it's sufficient that is may be inside or bordering the gene (depending on ambiguity).
+        Read the file in N_run_groups passes to avoid using up too much memory/CPU.
         """ 
 
         # how to tell whether pos is inside gene - pick a (liberal or strict) function from DNA_basic_utilities
@@ -400,19 +401,24 @@ class Insertional_mutant_library_dataset():
 
         # First get the list of all chromosomes in the file, WITHOUT reading it all into memory
         with open(genefile) as GENEFILE:
-            all_reference_chromosomes = set([c for (c,) in GFF.GFFExaminer().available_limits(GENEFILE)['gff_id'].keys()])
+            GFF_limit_data = GFF.GFFExaminer().available_limits(GENEFILE)
+            chromosomes_and_counts = dict([(c,n) for ((c,),n) in GFF_limit_data['gff_id'].items()])
+            all_reference_chromosomes = set(chromosomes_and_counts.keys())
+
+        # Now lump the chromosomes into N_run_groups sets with the feature counts balanced between sets, 
+        #  to avoid using too much memory (by reading the whole file at once), 
+        #   or using too much time (by reading the whole file for each chromosome/scaffold)
+        chromosome_sets = split_into_N_sets_by_counts(chromosomes_and_counts, N_run_groups)
 
         ### go over all mutants on each chromosome, figure out which gene they're in (if any), keep track of totals
         # keep track of all the mutant and reference chromosomes to catch chromosomes that are absent in reference
-        for chromosome in all_reference_chromosomes:
-            # TODO this is still painfully slow even if -d is off!  3min vs 4s...  Looks like I should just write it separately for -d and -D options, dammit. I guess move the inner loop contents into a separate function... Or maybe rewrite the outer loops as iterators of some sort?
-            genefile_parsing_limits = {'gff_id': [chromosome]}
+        for chromosome_set in chromosome_sets:
+            genefile_parsing_limits = {'gff_id': list(chromosome_set)}
             if not detailed_features: 
                 genefile_parsing_limits['gff_type'] = ['gene']
             with open(genefile) as GENEFILE:
                 for chromosome_record in GFF.parse(GENEFILE, limit_info=genefile_parsing_limits):
-                    # (there should actually only be one chromosome_record per iteration, since I'm parsing by chromosome)
-                    print "    parsing %s for mutant gene locations..."%chromosome_record.id
+                    if verbose: print "    parsing %s for mutant gene locations..."%chromosome_record.id
                     for mutant in mutants_by_chromosome[chromosome_record.id]:
                         gene_ID, orientation, feature = find_gene_by_pos(mutant.position, chromosome_record, 
                                                                          location_in_gene_test, detailed_features)

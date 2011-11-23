@@ -62,8 +62,8 @@ def define_option_parser():
     from optparse import OptionParser
     parser = OptionParser(__doc__)
 
-    # taken:     --bBcCdDe---gGhH--------m-n-oO--q-r-sStTuUv---------  
-    # free:      aB-------EfF----iIjJkKlL-M-N--pP-Q-R-------VwWxXyYzZ  
+    # taken:     --bBcCdDe---gGhH--------m-n-oO--q-r-sStTuUvV--xX----  
+    # free:      aB-------EfF----iIjJkKlL-M-N--pP-Q-R--------wW--yYzZ  
 
     ### test options
     parser.add_option('-t','--test_functionality', action='store_true', default=False, 
@@ -106,11 +106,14 @@ def define_option_parser():
                       help="Should insertions on the border of a gene/feature count as inside it? (default %default)")
     parser.add_option('-X', '--strict_position_test', action="store_false", dest='liberal_position_test',
                       help="Turns -x off.")
-    parser.add_option('-d', '--detailed_gene_features', action="store_true", default=False,
+    parser.add_option('-d', '--detailed_gene_features', action="store_true", default=True,
                       help="Find out what part of the gene (UTR,intron,exon) a mutant hit, based on the -g file "
-                          +"- may take a LOT of memory! (default %default)")
+                          +"(default %default). May take a lot of memory - increase -Y option value to fix that.")
     parser.add_option('-D', '--no_detailed_gene_features', action="store_false", dest='detailed_gene_features',
                       help="Turns -d off.")
+    parser.add_option('-Y', '--N_detail_run_groups', type="int", default=5, metavar='N', 
+                      help="How many passes to split reading the detailed_gene_features into (default %default) "
+                          +"- may take a lot of memory (and CPU) if read in a single pass; too many passes waste CPU.")
     # MAYBE-TODO add a "flank" option (with variable size), to catch mutants that are in the flanks of genes? Do we care?
     # MAYBE-TODO add a "negative flank" option (with variable size), to ignore mutants that are in the start/end of genes?
 
@@ -135,11 +138,13 @@ def define_option_parser():
                       help="Count reads aligning to these chromosomes and print the count in the header; "
                           +"otherwise ignore them and don't add to normal output. (default %default) (also see -b)")
     # LATER-TODO once I have a line-per-gene output format as well as a line-per-mutant one (separate dictionary/view in Insertional_mutant_library_dataset in mutant_analysis_classes.py, and separate output file):  Add extra options for that: count only mutants that are sense/antisense, only mutants in the exons/introns/UTRs, don't count mutants in the first/last X%/Xbp of the gene, do count mutants flanking the gene...
-        
 
     # MAYBE-TODO add user-provided mutation cutoffs like in old deepseq_count_alignments.py, instead of just all reads and perfet reads?   parser.add_option('-m', '--mutation_cutoffs', default="1,3,10", metavar="<comma-separated-int-list>")
-    parser.add_option('-q', '--quiet', action="store_true", default=False, help="Don't print summary to STDOUT.")
-    parser.add_option('-v', '--verbose', action="store_true", default=False, help="Print progress reports to STDOUT.")
+    parser.add_option('-V', '--verbosity_level', action="store_true", default=1, 
+                      help="How much information to print to STDOUT: 0 - nothing, 1 - summary only, "
+                          +"2 - summary and progress reports. (Default %default).")
+    parser.add_option('-q', '--quiet', action="store_const", const=0, dest='verbosity_level', help="Equivalent to -V 0.")
+    parser.add_option('-v', '--verbose', action="store_const", const=2, dest='verbosity_level', help="Equivalent to -V 2.")
 
     return parser
 
@@ -161,9 +166,11 @@ def run_main_function(infile, outfile, options):
     if options.input_metadata_file is not 'NONE':
         if options.input_metadata_file == 'AUTO':
             options.input_metadata_file = os.path.splitext(infile)[0] + '_info.txt'
-            if options.verbose:  print 'Automatically determining metadata input file name: %s'%options.input_metadata_file
+            if options.verbosity_level>1:  
+                print 'Automatically determining metadata input file name: %s'%options.input_metadata_file
         else:
-            if options.verbose:  print 'Metadata input file name provided in options: %s'%options.input_metadata_file
+            if options.verbosity_level>1:  
+                print 'Metadata input file name provided in options: %s'%options.input_metadata_file
         if not os.path.exists(options.input_metadata_file):
             print 'Warning: metadata input file %s not found! Proceeding without it.'%options.input_metadata_file
         else:
@@ -181,7 +188,7 @@ def run_main_function(infile, outfile, options):
     bad_chromosomes_to_ignore = set(options.bad_chromosomes_count_and_ignore.split(',')) - set([''])
     bad_chromosomes_to_count = set(options.bad_chromosomes_count_only.split(',')) - set([''])
     # initialize a parser for the SAM infile
-    if options.verbose: print "parsing input file %s - time %s."%(infile, time.ctime())
+    if options.verbosity_level>1: print "parsing input file %s - time %s."%(infile, time.ctime())
     infile_reader = HTSeq.SAM_Reader(infile)
     # fill the new alignment set object with data from the infile parser
     all_alignment_data.add_alignment_reader_to_data(infile_reader, options.input_collapsed_to_unique, 
@@ -190,20 +197,22 @@ def run_main_function(infile, outfile, options):
     ### optionally parse gene position/info files and look up the genes for each mutant in the data
     if options.gene_position_reference_file is not None:
         genefile = options.gene_position_reference_file
-        if options.verbose: print "adding genes from file %s to mutant data - time %s."%(genefile, time.ctime())
+        if options.verbosity_level>1: print "adding genes from file %s to mutant data - time %s."%(genefile, time.ctime())
         all_alignment_data.find_genes_for_mutants(genefile, detailed_features=options.detailed_gene_features, 
                                                   liberal_position_test=options.liberal_position_test, 
-                                                  known_bad_chromosomes=bad_chromosomes_to_count)
+                                                  known_bad_chromosomes=bad_chromosomes_to_count, 
+                                                  N_run_groups=options.N_detail_run_groups, 
+                                                  verbose=(options.verbosity_level>1))
         if options.gene_info_reference_file is not None:
-            if options.verbose: 
+            if options.verbosity_level>1: 
                 print "adding gene details from file %s - time %s."%(options.gene_info_reference_file, time.ctime())
             all_alignment_data.add_detailed_gene_info(options.gene_info_reference_file)
     ### output
     # print summary info to stdout
-    if not options.quiet:   
-        all_alignment_data.print_summary()
+    if options.verbosity_level>1:   print "\nDATA SUMMARY:"
+    if options.verbosity_level>0:   all_alignment_data.print_summary()
     # print full data to outfile
-    if options.verbose: print "printing output - time %s."%time.ctime()
+    if options.verbosity_level>1:   print "printing output - time %s."%time.ctime()
     options.header_level = int(options.header_level)
     with open(outfile,'w') as OUTFILE:
         if options.header_level==2:
