@@ -124,6 +124,7 @@ def find_gene_by_pos(insertion_pos, chromosome_GFF_record, detailed_features=Fal
                 raise Exception("Gene %s in gff file has unexpected (non-mRNA) sub-features! Aborting."%gene.id)
             
             return gene_ID, orientation, gene_feature
+    # MAYBE-TODO do I want to consider the case of an insertion on the edge between two genes?  Or even in two genes and not on the edge, if there are overlapping genes, but hopefully there aren't!
     # if no gene matching insertion_pos was found, return special value
     return SPECIAL_GENE_CODES.not_found, '-', '-'
     # MAYBE-TODO add unit test?

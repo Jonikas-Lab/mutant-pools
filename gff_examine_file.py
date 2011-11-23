@@ -155,7 +155,10 @@ def run_main_function(infile, options):
                 if options.print_seq_details:   print record
                 # MAYBE-TODO get the length from an actual genome fasta file - I think you can add those with GFF parser?
 
-    # MAYBE-TODO check for weird things! Like overlapping genes, genes with more UTRs than expected, with no UTRs, with CDS on the outside of UTRs, ...  See notes_on_GFF_parsing.txt for some examples of this.
+    # TODO check for weird cases! genes with more UTRs than expected, with no UTRs, with CDS on the outside of UTRs, ...  See notes_on_GFF_parsing.txt for some examples of this.
+    # TODO make sure the gene IDs are all unique! 
+    # TODO check for overlapping genes
+    # TODO calculate the lowest distance between two genes
 
     # MAYBE-TODO there are probably going to be various alternative splicing issues...
 
@@ -188,5 +191,3 @@ if __name__ == "__main__":
     run_main_function(infile, options)
 
 
-# TODO make sure the gene IDs are all unique! 
-# TODO check for overlapping genes (splice variants?)
