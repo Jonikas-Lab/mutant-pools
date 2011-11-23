@@ -118,10 +118,10 @@ def find_gene_by_pos(insertion_pos, chromosome_GFF_record, detailed_features=Fal
                     else:
                         gene_feature = '/'.join(features_inside+features_edge) + '??'
                         print("Warning: Location (%s,%s) matched multiple features (%s) in gene %s!"%(ins_start, ins_end, 
-                                                                                                   gene_feature, gene.id)) 
+                                                                                                   gene_feature, gene_ID)) 
             # if gene feature/subfeature structure isn't as expected, raise exception
             else:
-                raise Exception("Gene %s in gff file has unexpected (non-mRNA) sub-features! Aborting."%gene.id)
+                raise Exception("Gene %s in gff file has unexpected (non-mRNA) sub-features! Aborting."%gene_ID)
             
             return gene_ID, orientation, gene_feature
     # MAYBE-TODO do I want to consider the case of an insertion on the edge between two genes?  Or even in two genes and not on the edge, if there are overlapping genes, but hopefully there aren't!
@@ -348,8 +348,8 @@ class Insertional_mutant_library_dataset():
      - ignored_region_read_counts - region_name:read_count dictionary (not counted in total_read_count)
      - total_read_count, aligned_read_count, unaligned_read_count, perfect_read_count - various read counts, obvious
      - strand_read_counts, specific_region_read_counts - name:count dictionaries for strands and specific regions to track
-     - mutants_in_genes, mutants_not_in_genes, mutants_undetermined, 
-         mutants_sense, mutants_antisense - counts of mutants with various obvious properties
+     - mutants_in_genes, mutants_not_in_genes, mutants_undetermined - counts of mutants in genes, not in genes, unknown
+     - mutant_counts_by_orientation, mutant_count_by_feature - name:count dictionaries for mutant gene location properties
     """
 
     def __init__(self, cassette_end=None, reads_are_reverse=False):
@@ -371,7 +371,7 @@ class Insertional_mutant_library_dataset():
         self.strand_read_counts = defaultdict(lambda: 0)
         self.specific_region_read_counts = defaultdict(lambda: 0)
         self.mutants_in_genes, self.mutants_not_in_genes, self.mutants_undetermined = 0,0,0
-        self.mutants_sense, self.mutants_antisense = 0,0
+        self.mutant_counts_by_orientation = defaultdict(lambda: 0)
     
     def add_discarded_reads(self, N, reset_count=False):
         """ Add N to self.discarded_read_count (or set self.discarded_read_count to N if reset_count is True). """
@@ -469,9 +469,7 @@ class Insertional_mutant_library_dataset():
                         mutant.gene, mutant.orientation, mutant.gene_feature = gene_ID, orientation, feature
                         if gene_ID==SPECIAL_GENE_CODES.not_found:   self.mutants_not_in_genes += 1
                         else:                                       self.mutants_in_genes += 1
-                        if orientation=='sense':                self.mutants_sense += 1
-                        elif orientation=='antisense':          self.mutants_antisense += 1
-                    # MAYBE-TODO should self.mutants_sense/antisense be one dictionary, like self.strand_read_counts is?
+                        if orientation not in ['?','-']:            self.mutant_counts_by_orientation[orientation] += 1
                     # TODO once I have exon/intron/UTR info (plus maybe more categories, like edge/unknown?), add another self.mutant_*_counts dictionary to keep count of those, and print that data in the summary etc
                     # MAYBE-TODO should I just stop keeping track of all these counts in every function and make a function that just generates all these counts before the summary is printed?
 
@@ -513,7 +511,7 @@ class Insertional_mutant_library_dataset():
         OUTPUT.write(line_prefix+"Perfectly aligned reads (no mismatches): %s\n"%(self.perfect_read_count))
         for (strand,count) in self.strand_read_counts.iteritems():
             OUTPUT.write(line_prefix+"Reads with insertion direction matching chromosome %s strand: %s\n"%(strand, count))
-        for (region,count) in self.specific_region_read_counts.iteritems():
+        for (region,count) in sorted(self.specific_region_read_counts.items()):
             OUTPUT.write(line_prefix+"Reads aligned to %s: %s\n"%(region, count))
         # MAYBE-TODO add percentages of total (or aligned) reads to all of these numbers in addition to raw counts!
         # MAYBE-TODO keep track of the count of separate mutants in each category, as well as total read counts?
@@ -529,14 +527,14 @@ class Insertional_mutant_library_dataset():
         # MAYBE-TODO may also be a good idea to keep track of the most common SEQUENCE, not just mutant...
         # print the gene annotation info, but only if there is any
         if self.mutants_in_genes + self.mutants_not_in_genes + self.mutants_undetermined:
-            OUTPUT.write(line_prefix+"Mutant cassettes inside genes: %s\n"%(self.mutants_in_genes))
-            OUTPUT.write(line_prefix+"Mutant cassettes not inside genes: %s\n"%(self.mutants_not_in_genes))
             OUTPUT.write(line_prefix+"Mutant cassettes in unknown chromosomes: %s\n"%(self.mutants_undetermined))
-            OUTPUT.write(line_prefix+"Mutant cassettes in sense orientation to gene: %s\n"%(self.mutants_sense))
-            OUTPUT.write(line_prefix+"Mutant cassettes in antisense orientation to gene: %s\n"%(self.mutants_antisense))
+            OUTPUT.write(line_prefix+"Mutant cassettes not inside genes: %s\n"%(self.mutants_not_in_genes))
+            OUTPUT.write(header_prefix+"Mutant cassettes inside genes: %s\n"%(self.mutants_in_genes))
+            for (orientation,count) in sorted(self.mutant_counts_by_orientation.items(),reverse=True):
+                OUTPUT.write(line_prefix+"Mutant cassettes in %s orientation to gene: %s\n"%(orientation,count))
             all_genes = set([m.gene for m in self.mutants_by_position.values()]) - set(SPECIAL_GENE_CODES.all_codes)
-            OUTPUT.write(line_prefix+"Genes containing at least one mutant: %s\n"%(len(all_genes)))
-            # LATER-TODO Add count of genes containing at least two mutants! Once I have a per-gene view of the data.
+            OUTPUT.write(line_prefix+"Genes containing a mutant: %s\n"%(len(all_genes)))
+            # LATER-TODO Add count of genes containing two or more mutants! Once I have a per-gene view of the data.
 
     def print_data(self, OUTPUT=None, sort_data=False, N_sequences=2, header_line=True, header_prefix="# "):
         """ Print full data, one line per mutant: position data, gene info, read counts, optionally sequences.
