@@ -31,7 +31,7 @@ SPECIAL_GENE_CODES.all_codes = [value for (name,value) in SPECIAL_GENE_CODES.__d
 
 ### Various functions
 
-def find_gene_by_pos(insertion_pos, chromosome_GFF_record, detailed_features=False):
+def find_gene_by_pos(insertion_pos, chromosome_GFF_record, detailed_features=False, quiet=False):
     """ Look up insertion_pos in chromosome_GFF_record; return (gene_ID,orientation,subfeature) of insertion in gene.
 
     Insertion_pos is an Insertion_position instance.  If insertion_pos overlaps a gene in chromosome_GFF_record, 
@@ -65,33 +65,46 @@ def find_gene_by_pos(insertion_pos, chromosome_GFF_record, detailed_features=Fal
                 return gene_ID, orientation, '?'
 
             ### Find which feature of the gene the insertion_pos should be annotated as:
-            # if gene has no features listed, use 'no_features' as gene_feature (different from '?' or '-')
-            if gene.sub_features==[]:           
-                gene_feature = 'no_features'
-            elif len(gene.sub_features)==1 and gene.sub_features[0].type=='mRNA':
+            # if gene has no features listed, use 'no_mRNA' as gene_feature (different from '?' or '-')
+            if len(gene.sub_features)==0:
+                gene_feature = 'no_mRNA'
+            # if gene feature/subfeature structure isn't as expected, print warning and return '??'
+            elif len(gene.sub_features)>1:
+                if not quiet:
+                    print("Warning: gene %s in gff file has multiple sub-features (mRNAs?)! "
+                          +"Returning '??' feature."%gene_ID)
+                gene_feature = '??'
+            elif gene.sub_features[0].type != 'mRNA':
+                if not quiet:
+                    print("Warning: gene %s in gff file has unexpected non-mRNA sub-features! "
+                          +"Returning '??' feature."%gene_ID)
+                gene_feature = '??'
+            else:
                 mRNA = gene.sub_features[0]
                 mRNA_start, mRNA_end = mRNA.location.start.position+1,mRNA.location.end.position
                 # if insertion_pos is outside the mRNA, use 'outside_mRNA' as gene_feature
                 if not position_test_overlap(mRNA_start, mRNA_end, ins_start, ins_end):
                     gene_feature = 'outside_mRNA'
+                # if insertion_pos is inside the mRNA and mRNA has no subfeatures, use 'mRNA_no_exons' as gene_feature
+                elif len(mRNA.sub_features)==0:   
+                    if position_test_contains(mRNA_start, mRNA_end, ins_start, ins_end):
+                        gene_feature = 'mRNA_no_exons'
+                    else:
+                        gene_feature = 'mRNA_edge'
                 else: 
-                    # if insertion_pos is inside the mRNA and mRNA has no subfeatures, use 'mRNA' as gene_feature
-                    if mRNA.sub_features==[]:   
-                        if position_test_contains(mRNA_start, mRNA_end, ins_start, ins_end):
-                            gene_feature = 'mRNA'
-                        else:
-                            gene_feature = 'mRNA_edge'
                     # otherwise go over all subfeatures, see which ones contain/overlap insertion_pos
                     #  (check for overlap only if the contains test failed)
                     features_inside = []
                     if position_test_contains(mRNA_start, mRNA_end, ins_start, ins_end): features_edge = []
-                    else:                                                                features_edge = ['outside_mRNA']
+                    else:                                                                features_edge = ['mRNA_edge']
                     for feature in mRNA.sub_features:
                         feature_start, feature_end = feature.location.start.position+1, feature.location.end.position
                         if position_test_contains(feature_start, feature_end, ins_start, ins_end):
-                            features_inside.append('exon' if feature.type=='CDS' else feature.type)
+                            features_inside.append(feature.type)
                         elif position_test_overlap(feature_start, feature_end, ins_start, ins_end):
-                            features_edge.append('exon' if feature.type=='CDS' else feature.type)
+                            features_edge.append(feature.type)
+                    # MAYBE-TODO may want to treat exons before 5'UTR or after 3'UTR specially? (EH, none in current file)
+                    # MAYBE-TODO may want to treat cases with multiple UTRs specially?  We do have those in current file!
                     # if insertion_pos is inside a single mRNA subfeature, use the type of the subfeature as gene_feature
                     if len(features_inside)==1 and len(features_edge)==0:
                         gene_feature = features_inside[0]
@@ -99,29 +112,29 @@ def find_gene_by_pos(insertion_pos, chromosome_GFF_record, detailed_features=Fal
                     elif len(features_inside)==0 and len(features_edge)==2:
                         gene_feature = '/'.join(features_edge)
                     # if insertion_pos is on the edge of one mRNA subfeature, it means it's on the edge of that and 
-                    #  an intron (since introns aren't explicitly annotated), so use 'subfeature/intron'
+                    #  an intron (since introns aren't explicitly annotated), so use 'subfeature/intron' 
+                    # Note that if it's on the edge of an mRNA, it'll be mRNA_edge/feature, no introns; 
+                    #  the only case this will be false is if it's at the outer feature edge and there's a gap between
+                    #   outer feature edges and the mRNA ends, which shouldn't happen.
+                    #   MAYBE-TODO check for it anyway, change the value in that case, and print a warning or something?
                     elif len(features_inside)==0 and len(features_edge)==1:
-                        gene_feature = features_edge[0] + '/' + 'intron'
-                    # if insertion_pos is in the mRNA but not in a subfeature (exon/UTR), use 'intron' as gene_feature:
-                    #  'middle_intron' if it's between features, otherwise special cases:
-                    #   'first_intron' if it's before any features, 'last_intron' if it's after any features
-                    #  
+                        gene_feature = features_edge[0] + '/intron'
+                    # if insertion_pos is in the mRNA but not in a subfeature (exon/UTR), use 'intron' as gene_feature if 
+                    #  it's between features, or just 'mRNA_before/after_exons' if it's at the start/end (SHOULDN'T HAPPEN)
                     elif len(features_inside+features_edge)==0:
                         if ins_end < min([feature.location.start.position+1 for feature in mRNA.sub_features]):
-                            gene_feature = 'first_intron'
+                            gene_feature = 'mRNA_before_exons'
                         elif ins_start > max([feature.location.end.position for feature in mRNA.sub_features]):
-                            gene_feature = 'last_intron'
+                            gene_feature = 'mRNA_after_exons'
                         else:
-                            gene_feature = 'middle_intron'  # MAYBE-TODO is there a better name for this? Just 'intron'?
+                            gene_feature = 'intron'
                     # if insertion_pos is inside two features, or inside one and on the edge of another, 
                     #  print a warning, and use all the feature names, with a ?? at the end to mark strangeness
                     else:
                         gene_feature = '/'.join(features_inside+features_edge) + '??'
-                        print("Warning: Location (%s,%s) matched multiple features (%s) in gene %s!"%(ins_start, ins_end, 
-                                                                                                   gene_feature, gene_ID)) 
-            # if gene feature/subfeature structure isn't as expected, raise exception
-            else:
-                raise Exception("Gene %s in gff file has unexpected (non-mRNA) sub-features! Aborting."%gene_ID)
+                        if not quiet:
+                            print("Warning: Location (%s,%s) matched multiple features (%s) "
+                                  +"in gene %s!"%(ins_start, ins_end, gene_feature, gene_ID)) 
             
             return gene_ID, orientation, gene_feature
     # MAYBE-TODO do I want to consider the case of an insertion on the edge between two genes?  Or even in two genes and not on the edge, if there are overlapping genes, but hopefully there aren't!
@@ -431,7 +444,7 @@ class Insertional_mutant_library_dataset():
         # LATER-TODO at this point, may want to go over the full list of mutants and see if any of them should be merged (for example because they're only 1bp apart and one of them has only one read and the other has thousands), or have issues (like are too close together, or have more imperfect than perfect reads, or something) - or maybe that should be a separate function?
 
     def find_genes_for_mutants(self, genefile, detailed_features=False, known_bad_chromosomes=[], 
-                               N_run_groups=3, verbose=False):
+                               N_run_groups=3, verbosity_level=1):
         """ To each mutant in the dataset, add the gene it's in (look up gene positions for each mutant using genefile).
 
         If detailed_features is True, also look up whether the mutant is in an exon/intron/UTR (NOT IMPLEMENTED); 
@@ -463,10 +476,10 @@ class Insertional_mutant_library_dataset():
                 genefile_parsing_limits['gff_type'] = ['gene']
             with open(genefile) as GENEFILE:
                 for chromosome_record in GFF.parse(GENEFILE, limit_info=genefile_parsing_limits):
-                    if verbose: print "    parsing %s for mutant gene locations..."%chromosome_record.id
+                    if verbosity_level>1:   print "    parsing %s for mutant gene locations..."%chromosome_record.id
                     for mutant in mutants_by_chromosome[chromosome_record.id]:
                         gene_ID, orientation, feature = find_gene_by_pos(mutant.position, chromosome_record, 
-                                                                         detailed_features)
+                                                                         detailed_features, quiet=(verbosity_level==0))
                         mutant.gene, mutant.orientation, mutant.gene_feature = gene_ID, orientation, feature
                         if gene_ID==SPECIAL_GENE_CODES.not_found:   self.mutants_not_in_genes += 1
                         else:                                       self.mutants_in_genes += 1

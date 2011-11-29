@@ -27,17 +27,19 @@ import mutant_analysis_classes
 
 def do_test_run():
     """ Test run: run script on test infile, compare output to reference file."""
-    test_infile = "test_data/test_input.sam"
+    test_infile1 = "test_data/test_input.sam"
     test_constant_options = "-H 1 -s -n3 -o -q"
     #  (using -s and -H 1 to get all relevant info but not have to deal with changing timestamps/etc)
-    test_runs = [("-e 5prime -r forward -U", "test_data/test_output__5prime.txt"),
-                 ("-e 3prime -r forward -U", "test_data/test_output__3prime.txt"),
-                 ("-r reverse -e 5prime -U", "test_data/test_output__reverse.txt"),
-                 ("-u -e 5prime -r forward", "test_data/test_output__u.txt"),
-                 ("-b special_chromosome -e 5prime -r forward -U", "test_data/test_output__b.txt"),
-                 ("-B special_chromosome -e 5prime -r forward -U", "test_data/test_output__B.txt")]
+    test_runs = [("-e 5prime -r forward -U", test_infile1, "test_data/test_output__5prime.txt"),
+                 ("-e 3prime -r forward -U", test_infile1, "test_data/test_output__3prime.txt"),
+                 ("-r reverse -e 5prime -U", test_infile1, "test_data/test_output__reverse.txt"),
+                 ("-u -e 5prime -r forward", test_infile1, "test_data/test_output__u.txt"),
+                 ("-b special_chromosome -e 5prime -r forward -U", test_infile1, "test_data/test_output__b.txt"),
+                 ("-B special_chromosome -e 5prime -r forward -U", test_infile1, "test_data/test_output__B.txt"),
+                 ("-e 5prime -r forward -U -g test_data/test_reference.gff3 -d", 
+                  "test_data/test_input2__for-genes.sam", "test_data/test_output2__with-genes.txt")]
     #  Most common group: mutation_yes, position 204-?, + strand: 6 reads (20% of aligned)
-    for variable_option_string, reference_file in test_runs:
+    for variable_option_string, test_infile, reference_file in test_runs:
         option_string = test_constant_options + ' ' + variable_option_string
         print(" * New test run, with options: %s (infile %s, reference outfile %s)"%(option_string,test_infile,reference_file))
         # regenerate options with test argument string
@@ -168,7 +170,8 @@ def run_main_function(infile, outfile, options):
             if options.verbosity_level>1:  
                 print 'Metadata input file name provided in options: %s'%options.input_metadata_file
         if not os.path.exists(options.input_metadata_file):
-            print 'Warning: metadata input file %s not found! Proceeding without it.'%options.input_metadata_file
+            if options.verbosity_level>0:
+                print 'Warning: metadata input file %s not found! Proceeding without it.'%options.input_metadata_file
         else:
             for line in open(options.input_metadata_file):
                 if line.startswith('## reads removed: '):
@@ -197,7 +200,7 @@ def run_main_function(infile, outfile, options):
         all_alignment_data.find_genes_for_mutants(genefile, detailed_features=options.detailed_gene_features, 
                                                   known_bad_chromosomes=bad_chromosomes_to_count, 
                                                   N_run_groups=options.N_detail_run_groups, 
-                                                  verbose=(options.verbosity_level>1))
+                                                  verbosity_level=options.verbosity_level)
         if options.gene_info_reference_file is not None:
             if options.verbosity_level>1: 
                 print "adding gene details from file %s - time %s."%(options.gene_info_reference_file, time.ctime())
