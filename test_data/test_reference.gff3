@@ -102,8 +102,8 @@ chromosome_C	test	CDS	5401	5500	.	+	1	ID=PAC:geneC5_mRNA.CDS.2;Parent=PAC:geneC5
 chromosome_C	test	CDS	5601	5700	.	+	1	ID=PAC:geneC5_mRNA.CDS.3;Parent=PAC:geneC5_mRNA;pacid=geneC5_mRNA;
 chromosome_C	test	three_prime_UTR	5701	5800	.	+	.	ID=PAC:geneC5_mRNA.three_prime_UTR.1;Parent=PAC:geneC5_mRNA;pacid=geneC5_mRNA;
 
-chromosome_C	test	gene	6101	6800	.	+	.	ID=test.geneC6_gap_in_mRNA_after_UTR_start;Name=test.geneC6_gap_in_mRNA_after_UTR_start;
-chromosome_C	test	mRNA	6101	6800	.	+	.	ID=PAC:geneC6_mRNA;Name=test.geneC6.t1.2;pacid=geneC6_mRNA;Parent=test.geneC6_gap_in_mRNA_after_UTR_start;
+chromosome_C	test	gene	6101	6800	.	+	.	ID=test.geneC6_gap_in_mRNA_after_UTR_end;Name=test.geneC6_gap_in_mRNA_after_UTR_end;
+chromosome_C	test	mRNA	6101	6800	.	+	.	ID=PAC:geneC6_mRNA;Name=test.geneC6.t1.2;pacid=geneC6_mRNA;Parent=test.geneC6_gap_in_mRNA_after_UTR_end;
 chromosome_C	test	five_prime_UTR	6101	6200	.	+	.	ID=PAC:geneC6_mRNA.five_prime_UTR.1;Parent=PAC:geneC6_mRNA;pacid=geneC6_mRNA;
 chromosome_C	test	CDS	6201	6300	.	+	1	ID=PAC:geneC6_mRNA.CDS.2;Parent=PAC:geneC6_mRNA;pacid=geneC6_mRNA;
 chromosome_C	test	CDS	6401	6500	.	+	1	ID=PAC:geneC6_mRNA.CDS.3;Parent=PAC:geneC6_mRNA;pacid=geneC6_mRNA;

@@ -1,18 +1,18 @@
 ### SUMMARY:
 #  Reads discarded in preprocessing: unknown
-## Total reads processed: 38
+## Total reads processed: 40
 #  Unaligned reads: 0
-#  Aligned reads (non-discarded): 38
-#  Perfectly aligned reads (no mismatches): 38
-#  Reads with insertion direction matching chromosome + strand: 36
+#  Aligned reads (non-discarded): 40
+#  Perfectly aligned reads (no mismatches): 40
+#  Reads with insertion direction matching chromosome + strand: 38
 #  Reads with insertion direction matching chromosome - strand: 2
-## Distinct mutants (read groups) by cassette insertion position: 38
+## Distinct mutants (read groups) by cassette insertion position: 40
 #  (read is at 5prime end of cassette, in forward direction to cassette)
-#  Most common mutant: chromosome_C, position 3650-?, + strand: 1 reads (3% of aligned)
+#  Most common mutant: chromosome_C, position 3650-?, + strand: 1 reads (2% of aligned)
 #  Mutant cassettes in unknown chromosomes: 0
 #  Mutant cassettes not inside genes: 1
-## Mutant cassettes inside genes: 37
-#  Mutant cassettes in sense orientation to gene: 35
+## Mutant cassettes inside genes: 39
+#  Mutant cassettes in sense orientation to gene: 37
 #  Mutant cassettes in antisense orientation to gene: 2
 #  Mutant cassettes in gene feature ??: 2
 #  Mutant cassettes in gene feature CDS: 6
@@ -25,6 +25,7 @@
 #  Mutant cassettes in gene feature five_prime_UTR/CDS: 1
 #  Mutant cassettes in gene feature five_prime_UTR/CDS??: 2
 #  Mutant cassettes in gene feature five_prime_UTR/intron: 2
+#  Mutant cassettes in gene feature five_prime_UTR/mRNA_before_exons: 1
 #  Mutant cassettes in gene feature intron: 2
 #  Mutant cassettes in gene feature mRNA_after_exons: 1
 #  Mutant cassettes in gene feature mRNA_before_exons: 1
@@ -36,6 +37,7 @@
 #  Mutant cassettes in gene feature outside_mRNA: 2
 #  Mutant cassettes in gene feature three_prime_UTR: 1
 #  Mutant cassettes in gene feature three_prime_UTR/intron: 2
+#  Mutant cassettes in gene feature three_prime_UTR/mRNA_after_exons: 1
 ## Genes containing a mutant: 19
 ### DATA:
 chromosome	strand	min_position	full_position	gene	orientation	feature	total_reads	perfect_reads	N_sequence_variants	read_sequence_1	seq_1_count	read_sequence_2	seq_2_count	read_sequence_3	seq_3_count
@@ -68,7 +70,9 @@ chromosome_C	+	3650	3650-?	test.geneC3_two_3prime_UTRs	sense	intron	1	1	1	A	1		0
 chromosome_C	+	4200	4200-?	test.geneC4_UTRs_separated_from_exons	sense	five_prime_UTR/intron	1	1	1	A	1		0		0
 chromosome_C	+	4700	4700-?	test.geneC4_UTRs_separated_from_exons	sense	three_prime_UTR/intron	1	1	1	A	1		0		0
 chromosome_C	+	5200	5200-?	test.geneC5_gap_in_mRNA_before_UTR_start	sense	mRNA_before_exons	1	1	1	A	1		0		0
-chromosome_C	+	6700	6700-?	test.geneC6_gap_in_mRNA_after_UTR_start	sense	mRNA_after_exons	1	1	1	A	1		0		0
+chromosome_C	+	5300	5300-?	test.geneC5_gap_in_mRNA_before_UTR_start	sense	five_prime_UTR/mRNA_before_exons	1	1	1	A	1		0		0
+chromosome_C	+	6600	6600-?	test.geneC6_gap_in_mRNA_after_UTR_end	sense	three_prime_UTR/mRNA_after_exons	1	1	1	A	1		0		0
+chromosome_C	+	6700	6700-?	test.geneC6_gap_in_mRNA_after_UTR_end	sense	mRNA_after_exons	1	1	1	A	1		0		0
 chromosome_D	+	2300	2300-?	test.geneD2_bad_touching_exons	sense	CDS/CDS	1	1	1	A	1		0		0
 chromosome_D	+	3300	3300-?	test.geneD3_bad_overlapping_exons	sense	CDS/CDS??	1	1	1	A	1		0		0
 chromosome_D	+	3350	3350-?	test.geneD3_bad_overlapping_exons	sense	CDS/CDS??	1	1	1	A	1		0		0

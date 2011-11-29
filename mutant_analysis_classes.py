@@ -111,23 +111,23 @@ def find_gene_by_pos(insertion_pos, chromosome_GFF_record, detailed_features=Fal
                     # if insertion_pos is on the edge of two mRNA subfeatures, use 'subfeature1/subfeature2'
                     elif len(features_inside)==0 and len(features_edge)==2:
                         gene_feature = '/'.join(features_edge)
-                    # if insertion_pos is on the edge of one mRNA subfeature, it means it's on the edge of that and 
-                    #  an intron (since introns aren't explicitly annotated), so use 'subfeature/intron' 
-                    # Note that if it's on the edge of an mRNA, it'll be mRNA_edge/feature, no introns; 
-                    #  the only case this will be false is if it's at the outer feature edge and there's a gap between
-                    #   outer feature edges and the mRNA ends, which shouldn't happen.
-                    #   MAYBE-TODO check for it anyway, change the value in that case, and print a warning or something?
-                    elif len(features_inside)==0 and len(features_edge)==1:
-                        gene_feature = features_edge[0] + '/intron'
-                    # if insertion_pos is in the mRNA but not in a subfeature (exon/UTR), use 'intron' as gene_feature if 
-                    #  it's between features, or just 'mRNA_before/after_exons' if it's at the start/end (SHOULDN'T HAPPEN)
-                    elif len(features_inside+features_edge)==0:
-                        if ins_end < min([feature.location.start.position+1 for feature in mRNA.sub_features]):
-                            gene_feature = 'mRNA_before_exons'
-                        elif ins_start > max([feature.location.end.position for feature in mRNA.sub_features]):
-                            gene_feature = 'mRNA_after_exons'
+                    # if insertion_pos is on the edge of ONE mRNA subfeature, or not touching any subfeatures at all, 
+                    #  the implied subfeature is either an intron (if between features) or mRNA_before/after_exons, 
+                    #   (which shouldn't happen in normal files).
+                    elif len(features_inside)==0 and len(features_edge)<=1:
+                        # figure out what the implied feature is
+                        if ins_start < min([feature.location.start.position+1 for feature in mRNA.sub_features]):
+                            implied_feature = 'mRNA_before_exons'
+                        elif ins_end > max([feature.location.end.position for feature in mRNA.sub_features]):
+                            implied_feature = 'mRNA_after_exons'
                         else:
-                            gene_feature = 'intron'
+                            implied_feature = 'intron'
+                        # set gene_feature based on whether insertion_pos is on a real/implied feature edge 
+                        #  or completely inside an implied feature
+                        if len(features_edge)==1:
+                            gene_feature = features_edge[0] + '/' + implied_feature
+                        elif len(features_edge)==0:
+                            gene_feature = implied_feature
                     # if insertion_pos is inside two features, or inside one and on the edge of another, 
                     #  print a warning, and use all the feature names, with a ?? at the end to mark strangeness
                     else:

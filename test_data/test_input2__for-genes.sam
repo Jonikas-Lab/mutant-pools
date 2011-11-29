@@ -64,9 +64,13 @@ TEST:2:1:8790:931#0/1	0	chromosome_C	3650	255	1M	*	0	0	A	_	XA:i:0	MD:Z:1	NM:i:0
 TEST:2:1:8790:931#0/1	0	chromosome_C	4200	255	1M	*	0	0	A	_	XA:i:0	MD:Z:1	NM:i:0
 @ 3'UTR inner edge with an intron before
 TEST:2:1:8790:931#0/1	0	chromosome_C	4700	255	1M	*	0	0	A	_	XA:i:0	MD:Z:1	NM:i:0
-@ mRNA before any exons
+@ mRNA before any exons (but exons do exist)
 TEST:2:1:8790:931#0/1	0	chromosome_C	5200	255	1M	*	0	0	A	_	XA:i:0	MD:Z:1	NM:i:0
-@ mRNA after any exons
+@ outer edge of 5'UTR, which is NOT the mRNA edge but the edge of the mRNA_before_exons area 
+TEST:2:1:8790:931#0/1	0	chromosome_C	5300	255	1M	*	0	0	A	_	XA:i:0	MD:Z:1	NM:i:0
+@ inner edge of 3'UTR, which is NOT the mRNA edge but the edge of the mRNA_after_exons area 
+TEST:2:1:8790:931#0/1	0	chromosome_C	6600	255	1M	*	0	0	A	_	XA:i:0	MD:Z:1	NM:i:0
+@ mRNA after any exons (but exons do exist)
 TEST:2:1:8790:931#0/1	0	chromosome_C	6700	255	1M	*	0	0	A	_	XA:i:0	MD:Z:1	NM:i:0
 @
 @@@ Definitely bad cases
