@@ -18,7 +18,7 @@ chromosome_A	test	three_prime_UTR	1101	1200	.	-	.	ID=PAC:geneA1_mRNA.three_prime
 
 
 
-chromosome_B	test	gene	101	800	.	+	.	ID=test.geneB0_no_features;Name=test.geneB0_no_features;
+chromosome_B	test	gene	101	800	.	+	.	ID=test.geneB0_no_mRNA;Name=test.geneB0_no_features;
 
 chromosome_B	test	gene	1101	1800	.	+	.	ID=test.geneB1_only_mRNA;Name=test.geneB1_only_mRNA;
 chromosome_B	test	mRNA	1101	1800	.	+	.	ID=PAC:geneB1_mRNA;Name=test.geneB1.t1.2;pacid=geneB1_mRNA;Parent=test.geneB1_only_mRNA;
@@ -106,9 +106,10 @@ chromosome_C	test	three_prime_UTR	5701	5800	.	+	.	ID=PAC:geneC5_mRNA.three_prime
 chromosome_D	test	gene	201	700	.	+	.	ID=test.geneD0_bad_mRNA_bigger_than_gene;Name=test.geneD0_bad_mRNA_bigger_than_gene;
 chromosome_D	test	mRNA	101	800	.	+	.	ID=PAC:geneD0_mRNA;Name=test.geneD0.t1.2;pacid=geneD0_mRNA;Parent=test.geneD0_bad_mRNA_bigger_than_gene;
 
-chromosome_D	test	gene	1101	1800	.	+	.	ID=test.geneD1_bad_CDS_bigger_than_mRNA;Name=test.geneD1_bad_CDS_bigger_than_mRNA;
-chromosome_D	test	mRNA	1201	1700	.	+	.	ID=PAC:geneD1_mRNA;Name=test.geneD1.t1.2;pacid=geneD1_mRNA;Parent=test.geneDgeneD1_CDS_bigger_than_mRNA;
-chromosome_D	test	CDS	1101	1800	.	-	0	ID=PAC:geneD1_mRNA.CDS.1;Parent=PAC:geneD1_mRNA;pacid=geneD1_mRNA;
+chromosome_D	test	gene	1201	1500	.	+	.	ID=test.geneD1_bad_feature_outside_mRNA;Name=test.geneD1_bad_feature_outside_mRNA;
+chromosome_D	test	mRNA	1201	1500	.	+	.	ID=PAC:geneD1_mRNA;Name=test.geneD1.t1.2;pacid=geneD1_mRNA;Parent=test.geneD1_bad_feature_outside_mRNA;
+chromosome_D	test	CDS	1101	1300	.	+	0	ID=PAC:geneD1_mRNA.CDS.1;Parent=PAC:geneD1_mRNA;pacid=geneD1_mRNA;
+chromosome_D	test	CDS	1401	1500	.	+	1	ID=PAC:geneD1_mRNA.CDS.2;Parent=PAC:geneD1_mRNA;pacid=geneD1_mRNA;
 
 chromosome_D	test	gene	2201	2500	.	+	.	ID=test.geneD2_bad_touching_exons;Name=test.geneD2_bad_touching_exons;
 chromosome_D	test	mRNA	2201	2500	.	+	.	ID=PAC:geneD2_mRNA;Name=test.geneD2.t1.2;pacid=geneD2_mRNA;Parent=test.geneD2_bad_touching_exons;
@@ -120,10 +121,11 @@ chromosome_D	test	mRNA	3201	3500	.	+	.	ID=PAC:geneD3_mRNA;Name=test.geneD3.t1.2;
 chromosome_D	test	CDS	3201	3400	.	+	0	ID=PAC:geneD3_mRNA.CDS.1;Parent=PAC:geneD3_mRNA;pacid=geneD3_mRNA;
 chromosome_D	test	CDS	3301	3500	.	+	1	ID=PAC:geneD3_mRNA.CDS.2;Parent=PAC:geneD3_mRNA;pacid=geneD3_mRNA;
 
-chromosome_D	test	gene	4201	4500	.	+	.	ID=test.geneD4_bad_overlapping_exon_UTR;Name=test.geneD4_bad_overlapping_exon_UTR;
-chromosome_D	test	mRNA	4201	4500	.	+	.	ID=PAC:geneD4_mRNA;Name=test.geneD4.t1.2;pacid=geneD4_mRNA;Parent=test.geneD4_bad_overlapping_exon_UTR;
-chromosome_D	test	CDS	4201	4400	.	+	0	ID=PAC:geneD4_mRNA.CDS.1;Parent=PAC:geneD4_mRNA;pacid=geneD4_mRNA;
-chromosome_D	test	three_prime_UTR	4301	4500	.	+	1	ID=PAC:geneD4_mRNA.three_prime_UTR.1;Parent=PAC:geneD4_mRNA;pacid=geneD4_mRNA;
+chromosome_D	test	gene	4101	4600	.	+	.	ID=test.geneD4_bad_overlapping_exon_UTR;Name=test.geneD4_bad_overlapping_exon_UTR;
+chromosome_D	test	mRNA	4101	4600	.	+	.	ID=PAC:geneD4_mRNA;Name=test.geneD4.t1.2;pacid=geneD4_mRNA;Parent=test.geneD4_bad_overlapping_exon_UTR;
+chromosome_D	test	five_prime_UTR	4101	4300	.	+	1	ID=PAC:geneD4_mRNA.five_prime_UTR.1;Parent=PAC:geneD4_mRNA;pacid=geneD4_mRNA;
+chromosome_D	test	CDS	4201	4500	.	+	0	ID=PAC:geneD4_mRNA.CDS.1;Parent=PAC:geneD4_mRNA;pacid=geneD4_mRNA;
+chromosome_D	test	three_prime_UTR	4401	4600	.	+	1	ID=PAC:geneD4_mRNA.three_prime_UTR.1;Parent=PAC:geneD4_mRNA;pacid=geneD4_mRNA;
 
 chromosome_D	test	gene	5101	5800	.	+	.	ID=test.geneD5_bad_two_mRNAs;Name=test.geneD5_bad_two_mRNAs;
 chromosome_D	test	mRNA	5101	5400	.	+	.	ID=PAC:geneD5_mRNA;Name=test.geneD5.t1.2;pacid=geneD5_mRNA;Parent=test.geneD5_bad_two_mRNAs;
@@ -138,9 +140,4 @@ chromosome_D	test	non_mRNA	7101	7800	.	+	.	ID=PAC:geneD7_mRNA;Name=test.geneD7.t
 
 chromosome_D	test	gene	8101	8500	.	+	.	ID=test.geneD8a_bad_overlapping_genes;Name=test.geneD8a_bad_overlapping_genes;
 chromosome_D	test	gene	8401	8800	.	+	.	ID=test.geneD8b_bad_overlapping_genes;Name=test.geneD8b_bad_overlapping_genes;
-
-chromosome_D	test	gene	9201	9500	.	+	.	ID=test.geneD9_bad_feature_outside_mRNA;Name=test.geneD9_bad_feature_outside_mRNA;
-chromosome_D	test	mRNA	9201	9500	.	+	.	ID=PAC:geneD9_mRNA;Name=test.geneD9.t1.2;pacid=geneD9_mRNA;Parent=test.geneD9_bad_feature_outside_mRNA;
-chromosome_D	test	CDS	9101	9300	.	+	0	ID=PAC:geneD9_mRNA.CDS.1;Parent=PAC:geneD9_mRNA;pacid=geneD9_mRNA;
-chromosome_D	test	CDS	9401	9500	.	+	1	ID=PAC:geneD9_mRNA.CDS.2;Parent=PAC:geneD9_mRNA;pacid=geneD9_mRNA;
 

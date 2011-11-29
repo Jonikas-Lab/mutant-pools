@@ -61,7 +61,6 @@ def check_for_overlapping_features(mRNA, gene_name):
     for feature1_data,feature2_data in itertools.izip(all_feature_positions,all_feature_positions[1:]):
         (_,feature1_end,feature1_name), (feature2_start,feature2_end,feature2_name) = feature1_data, feature2_data
         if feature1_end>=feature2_start:
-            print "WARNING: feature %s overlaps feature %s in gene %s! "%(feature1_name, feature2_name, gene_name)
             overlap_found = True
         # check for "feature1 contains feature2", print a warning, since it can make other things not work right
         if feature1_end>=feature2_end:
@@ -331,7 +330,7 @@ def run_main_function(infile, options):
                                 genes_with_gene_mRNA_gap.add(gene.id)
                             if mRNA_end != gene.location.end.position:
                                 genes_with_gene_mRNA_gap.add(gene.id)
-                            if mRNA.sub_features:
+                            if len(mRNA.sub_features)>0:
                                 if mRNA_start != min([f.location.start.position for f in mRNA.sub_features]):
                                     genes_with_mRNA_feature_gap.add(gene.id)
                                 if mRNA_end != max([f.location.end.position for f in mRNA.sub_features]):
