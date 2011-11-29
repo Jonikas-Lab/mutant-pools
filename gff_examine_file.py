@@ -154,7 +154,7 @@ def define_option_parser():
     parser.add_option('-O', '--no_check_gene_overlaps', action="store_false", dest='check_gene_overlaps')
 
     parser.add_option('-f', '--gene_feature_structure_counts', action="store_true", default=True, 
-                      help='Display gene counts by UTR/exon count, order, etc; check feature overlaps. Default %default') 
+                      help='Give gene counts by UTR/exon count/order; check feature distances/overlaps. Default %default') 
     parser.add_option('-F','--no_gene_feature_structure_counts', action="store_false",dest='gene_feature_structure_counts')
     parser.add_option('-u', '--full_feature_structures', action="store_true", default=False, 
                       help='With -f option, show full as well as simplified feature structures. Default %default') 
@@ -282,6 +282,8 @@ def run_main_function(infile, options):
     if options.gene_feature_structure_counts:
         print "\n *** Gene counts by feature structure ***"
         genes_by_feature_structure = defaultdict(set)       # set() returns an empty set
+        genes_with_gene_mRNA_gap = set()
+        genes_with_mRNA_feature_gap = set()
 
         ## Go over subsets of chromosomes at once, to avoid reading the whole file into memory at once
         # First get the list of all chromosomes in the file, WITHOUT reading it all into memory
@@ -302,6 +304,7 @@ def run_main_function(infile, options):
             with open(infile) as INFILE:
                 for chromosome_record in GFF.parse(INFILE, limit_info=genefile_parsing_limits):
                     for gene in chromosome_record.features:
+                        # figure out subfeature structure (use special cases if it's unexpected)
                         if len(gene.sub_features)==0:
                             genes_by_feature_structure[('NO_mRNA',)].add(gene.id)
                         elif len(gene.sub_features)>1:
@@ -321,9 +324,27 @@ def run_main_function(infile, options):
                                 if mRNA.strand in [-1, '-']:    features_by_pos.reverse()
                                 feature_structure = tuple([t for (p,t) in features_by_pos])
                                 genes_by_feature_structure[feature_structure].add(gene.id)
+                            # check for gaps between gene, mRNA, and feature starts/ends
+                            # MAYBE-TODO the check isn't done if there are multiple mRNAs, but that never happens, whatever
+                            mRNA_start, mRNA_end = mRNA.location.start.position, mRNA.location.end.position
+                            if mRNA_start != gene.location.start.position:
+                                genes_with_gene_mRNA_gap.add(gene.id)
+                            if mRNA_end != gene.location.end.position:
+                                genes_with_gene_mRNA_gap.add(gene.id)
+                            if mRNA.sub_features:
+                                if mRNA_start != min([f.location.start.position for f in mRNA.sub_features]):
+                                    genes_with_mRNA_feature_gap.add(gene.id)
+                                if mRNA_end != max([f.location.end.position for f in mRNA.sub_features]):
+                                    genes_with_mRNA_feature_gap.add(gene.id)
+
 
         for gene in overlapping_feature_genes:      print "Overlapping features in gene!  Gene ID: %s."%gene
         if not overlapping_feature_genes:           print "No genes have overlapping features."
+
+        for gene in genes_with_gene_mRNA_gap:       print "Gene has a gap between gene and mRNA start or end!  %s."%gene
+        if not genes_with_gene_mRNA_gap:            print "The mRNA position is the same as gene position for all genes."
+        for gene in genes_with_mRNA_feature_gap:    print "Gene has a gap between mRNA and feature start or end!  %s."%gene
+        if not genes_with_mRNA_feature_gap:         print "No gap between mRNA edges and first/last features in any genes."
 
         # make new dict with all rows of 'CDS' changed to a single 'exon/s' to end up with fewer structure variants, 
         #   also count genes with different exon numbers
