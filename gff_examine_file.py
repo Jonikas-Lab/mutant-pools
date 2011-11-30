@@ -1,22 +1,19 @@
 #!/usr/bin/env python
-""" Look at a gff file, print some overview info. 
- - print the basic structure of the records in the file (gene->mRNA->UTRs/exons or such)
- - print the gff IDs, sources, types etc and their counts
- - print the lengths (approximate) of each sequence, the number of genes it contains,
-    and what percentage of the length is covered by genes
- - ...
+""" Look at a gff file, print various overview info, check that everything looks sane.
 
-WORK IN PROGRESS.
+See option help messages (run with -h) for details.. 
 
  -- Weronika Patena, Jonikas Lab, Carnegie Institution, 2011
 
-USAGE: gff_check_issues_coverage.py [options] gff_infile """
+USAGE: gff_examine_file.py [options] gff_infile """
 
 # basic libraries
-import sys, time
+import sys, os, time
 import unittest
 import itertools
 from collections import defaultdict
+import subprocess
+import filecmp
 import pprint
 # other libraries
 from BCBio import GFF
@@ -121,9 +118,21 @@ class Testing_(unittest.TestCase):
 
 def do_test_run():
     """ Test run: run script on test infile, compare output to reference file."""
-    print "RUN-TEST NOT IMPLEMENTED"
-    # TODO implement!  The input file should be test_data/test_reference.gff3; write expected output!
-    # see mutant_count_alignments.py do_test_run for how this can be done
+    infile = "test_data/test_reference.gff3"
+    outfile = "test_data/test_output.txt"
+    reference_file = "test_data/test_reference_analysis_output.txt"
+    option_string = "-E -n -1"
+    command = "%s %s %s >%s"%(sys.argv[0], option_string, infile, outfile)
+    print("Test run command: %s"%command)
+    subprocess.call(command, shell=True)
+    # compare outfile to reference file: remove outfile and keep going if correct, otherwise exit with message.
+    if filecmp.cmp(outfile, reference_file, shallow=False):
+        os.remove(outfile)
+        print("*** Test runs finished - EVERYTHING IS FINE. ***")
+        return 0
+    else:
+        print("TEST FAILED!!  Reference file %s and output file %s differ - PLEASE COMPARE."%(reference_file,outfile))
+        return 1
 
 
 ######### Main function code #########
@@ -175,7 +184,7 @@ def define_option_parser():
     parser.add_option('-L', '--no_all_gff_limits', action="store_false", dest='all_gff_limits')
 
     parser.add_option('-E', '--everything', action='store_true', default=False, 
-                      help="Run all tests; ignore other options")
+                      help="Examine the infile in ALL implemented ways (turn on all the True/False options).")
 
     parser.add_option('-t','--test_functionality', action='store_true', default=False, 
                       help="Run the built-in unit test suite (ignores all other options/arguments; default %default).")

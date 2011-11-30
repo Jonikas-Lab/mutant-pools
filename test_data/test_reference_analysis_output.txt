@@ -1,0 +1,152 @@
+
+ *** Record structures ***
+{('test', 'gene'): [('test', 'mRNA'), ('test', 'non_mRNA')],
+ ('test', 'mRNA'): [('test', 'CDS'),
+                    ('test', 'five_prime_UTR'),
+                    ('test', 'three_prime_UTR')]}
+
+ *** Type counts ***
+{'gff_type': {('CDS',): 33,
+              ('five_prime_UTR',): 14,
+              ('gene',): 28,
+              ('mRNA',): 26,
+              ('non_mRNA',): 1,
+              ('three_prime_UTR',): 14}}
+
+ *** Source and source/type counts ***
+{'gff_source': {('test',): 116}}
+{'gff_source_type': {('test', 'CDS'): 33,
+                     ('test', 'five_prime_UTR'): 14,
+                     ('test', 'gene'): 28,
+                     ('test', 'mRNA'): 26,
+                     ('test', 'non_mRNA'): 1,
+                     ('test', 'three_prime_UTR'): 14}}
+
+ *** All GFF file limit field values ***
+{'gff_id': {('chromosome_A',): 14,
+            ('chromosome_B',): 26,
+            ('chromosome_C',): 47,
+            ('chromosome_D',): 29},
+ 'gff_source': {('test',): 116},
+ 'gff_source_type': {('test', 'CDS'): 33,
+                     ('test', 'five_prime_UTR'): 14,
+                     ('test', 'gene'): 28,
+                     ('test', 'mRNA'): 26,
+                     ('test', 'non_mRNA'): 1,
+                     ('test', 'three_prime_UTR'): 14},
+ 'gff_type': {('CDS',): 33,
+              ('five_prime_UTR',): 14,
+              ('gene',): 28,
+              ('mRNA',): 26,
+              ('non_mRNA',): 1,
+              ('three_prime_UTR',): 14}}
+
+ *** Gene and other data per chromosome ***
+       (Caution: approximate sequence length is calculated to last gene only!)
+
+ * sequence chromosome_A: 2 genes
+Approximate length 1800 bp, with 78% covered by genes
+GFF parser details:
+ID: chromosome_A
+Name: <unknown name>
+Description: <unknown description>
+Number of features: 2
+/gff-version=['3']
+UnknownSeq(1800, alphabet = Alphabet(), character = '?')
+
+ * sequence chromosome_B: 9 genes
+Approximate length 8800 bp, with 40% covered by genes
+GFF parser details:
+ID: chromosome_B
+Name: <unknown name>
+Description: <unknown description>
+Number of features: 9
+/gff-version=['3']
+UnknownSeq(8800, alphabet = Alphabet(), character = '?')
+
+ * sequence chromosome_C: 7 genes
+Approximate length 6800 bp, with 72% covered by genes
+GFF parser details:
+ID: chromosome_C
+Name: <unknown name>
+Description: <unknown description>
+Number of features: 7
+/gff-version=['3']
+UnknownSeq(6800, alphabet = Alphabet(), character = '?')
+
+ * sequence chromosome_D: 10 genes
+Approximate length 8800 bp, with 55% covered by genes
+GFF parser details:
+ID: chromosome_D
+Name: <unknown name>
+Description: <unknown description>
+Number of features: 10
+/gff-version=['3']
+UnknownSeq(8800, alphabet = Alphabet(), character = '?')
+
+
+ *** Gene overlaps ***
+Total 28 genes on 4 chromosomes.
+Overlapping gene pair!  IDs: test.geneD8a_bad_overlapping_genes, test.geneD8b_bad_overlapping_genes.
+Minimum distance between two genes is -100 (genes test.geneD8a_bad_overlapping_genes, test.geneD8b_bad_overlapping_genes).
+All gene IDs are unique.
+
+ *** Gene counts by feature structure ***
+Overlapping features in gene!  Gene ID: test.geneD3_bad_overlapping_exons.
+Overlapping features in gene!  Gene ID: test.geneD4_bad_overlapping_exon_UTR.
+Gene has a gap between gene and mRNA start or end!  test.geneD0_bad_mRNA_bigger_than_gene.
+Gene has a gap between gene and mRNA start or end!  test.geneB2_only_mRNA_smaller_than_gene.
+Gene has a gap between mRNA and feature start or end!  test.geneD1_bad_feature_outside_mRNA.
+Gene has a gap between mRNA and feature start or end!  test.geneC5_gap_in_mRNA_before_UTR_start.
+Gene has a gap between mRNA and feature start or end!  test.geneC6_gap_in_mRNA_after_UTR_end.
+
+ * Gene counts by simplified feature structure (adjacent exons/UTRs combined) (total 13 structures)
+8 genes [5'UTR/s, exon/s, 3'UTR/s]:  test.geneC2_two_5prime_UTRs, test.geneC5_gap_in_mRNA_before_UTR_start, test.geneD4_bad_overlapping_exon_UTR, test.geneC3_two_3prime_UTRs, test.geneA0_proper_plus, test.geneA1_proper_minus, test.geneC6_gap_in_mRNA_after_UTR_end, test.geneC4_UTRs_separated_from_exons
+4 genes [exon/s]:  test.geneD1_bad_feature_outside_mRNA, test.geneD2_bad_touching_exons, test.geneB5_only_exon, test.geneD3_bad_overlapping_exons
+3 genes [NO_mRNA_SUBFEATURES]:  test.geneB1_only_mRNA, test.geneD0_bad_mRNA_bigger_than_gene, test.geneB2_only_mRNA_smaller_than_gene
+3 genes [NO_mRNA]:  test.geneD8b_bad_overlapping_genes, test.geneD8a_bad_overlapping_genes, test.geneB0_no_mRNA
+2 genes [MULTIPLE_mRNAs]:  test.geneD6_bad_two_mRNAs_overlapping, test.geneD5_bad_two_mRNAs
+1 genes [exon/s, 5'UTR/s, exon/s, 3'UTR/s]:  test.geneC0_exon_outside_UTR
+1 genes [exon/s, 3'UTR/s]:  test.geneB7_no_5UTR
+1 genes [NON_mRNA_PRIMARY_FEATURE]:  test.geneD7_bad_non_mRNA_feature
+1 genes [5'UTR/s, exon/s, 3'UTR/s, exon/s]:  test.geneC1_exon_outside_UTR
+1 genes [5'UTR/s, exon/s]:  test.geneB6_no_3UTR
+1 genes [5'UTR/s, 3'UTR/s]:  test.geneB8_no_exon
+1 genes [5'UTR/s]:  test.geneB3_only_5UTR
+1 genes [3'UTR/s]:  test.geneB4_only_3UTR
+
+ * Gene counts by exon number (total 4 values)
+12 genes with 0 exons:  test.geneD8b_bad_overlapping_genes, test.geneB1_only_mRNA, test.geneD5_bad_two_mRNAs, test.geneB0_no_mRNA, test.geneD0_bad_mRNA_bigger_than_gene, test.geneB3_only_5UTR, test.geneB4_only_3UTR, test.geneD7_bad_non_mRNA_feature, test.geneB2_only_mRNA_smaller_than_gene, test.geneD6_bad_two_mRNAs_overlapping, test.geneD8a_bad_overlapping_genes, test.geneB8_no_exon
+4 genes with 1 exons:  test.geneB6_no_3UTR, test.geneD4_bad_overlapping_exon_UTR, test.geneB5_only_exon, test.geneB7_no_5UTR
+7 genes with 2 exons:  test.geneC2_two_5prime_UTRs, test.geneC5_gap_in_mRNA_before_UTR_start, test.geneD3_bad_overlapping_exons, test.geneD1_bad_feature_outside_mRNA, test.geneD2_bad_touching_exons, test.geneC6_gap_in_mRNA_after_UTR_end, test.geneC3_two_3prime_UTRs
+5 genes with 3 exons:  test.geneC0_exon_outside_UTR, test.geneC1_exon_outside_UTR, test.geneC4_UTRs_separated_from_exons, test.geneA1_proper_minus, test.geneA0_proper_plus
+
+ * Gene counts by 5'UTR number (total 3 values)
+15 genes with 0 5'UTRs:  test.geneD8b_bad_overlapping_genes, test.geneB1_only_mRNA, test.geneD5_bad_two_mRNAs, test.geneB0_no_mRNA, test.geneD0_bad_mRNA_bigger_than_gene, test.geneD1_bad_feature_outside_mRNA, test.geneD2_bad_touching_exons, test.geneB5_only_exon, test.geneB4_only_3UTR, test.geneD7_bad_non_mRNA_feature, test.geneD6_bad_two_mRNAs_overlapping, test.geneB2_only_mRNA_smaller_than_gene, test.geneD3_bad_overlapping_exons, test.geneB7_no_5UTR, test.geneD8a_bad_overlapping_genes
+12 genes with 1 5'UTRs:  test.geneC5_gap_in_mRNA_before_UTR_start, test.geneB3_only_5UTR, test.geneA1_proper_minus, test.geneA0_proper_plus, test.geneC6_gap_in_mRNA_after_UTR_end, test.geneC3_two_3prime_UTRs, test.geneB8_no_exon, test.geneD4_bad_overlapping_exon_UTR, test.geneB6_no_3UTR, test.geneC0_exon_outside_UTR, test.geneC4_UTRs_separated_from_exons, test.geneC1_exon_outside_UTR
+1 genes with 2 5'UTRs:  test.geneC2_two_5prime_UTRs
+
+ * Gene counts by 3'UTR number (total 3 values)
+15 genes with 0 3'UTRs:  test.geneD8b_bad_overlapping_genes, test.geneB1_only_mRNA, test.geneD5_bad_two_mRNAs, test.geneB5_only_exon, test.geneD0_bad_mRNA_bigger_than_gene, test.geneB3_only_5UTR, test.geneD1_bad_feature_outside_mRNA, test.geneD2_bad_touching_exons, test.geneB2_only_mRNA_smaller_than_gene, test.geneD7_bad_non_mRNA_feature, test.geneD6_bad_two_mRNAs_overlapping, test.geneB6_no_3UTR, test.geneD3_bad_overlapping_exons, test.geneD8a_bad_overlapping_genes, test.geneB0_no_mRNA
+12 genes with 1 3'UTRs:  test.geneC5_gap_in_mRNA_before_UTR_start, test.geneA0_proper_plus, test.geneC6_gap_in_mRNA_after_UTR_end, test.geneB4_only_3UTR, test.geneB8_no_exon, test.geneC2_two_5prime_UTRs, test.geneD4_bad_overlapping_exon_UTR, test.geneC0_exon_outside_UTR, test.geneA1_proper_minus, test.geneB7_no_5UTR, test.geneC4_UTRs_separated_from_exons, test.geneC1_exon_outside_UTR
+1 genes with 2 3'UTRs:  test.geneC3_two_3prime_UTRs
+
+ * Gene counts by full feature structure (total 18 structures)
+3 genes [five_prime_UTR, CDS, CDS, CDS, three_prime_UTR]:  test.geneA0_proper_plus, test.geneC4_UTRs_separated_from_exons, test.geneA1_proper_minus
+3 genes [NO_mRNA_SUBFEATURES]:  test.geneB1_only_mRNA, test.geneD0_bad_mRNA_bigger_than_gene, test.geneB2_only_mRNA_smaller_than_gene
+3 genes [NO_mRNA]:  test.geneD8b_bad_overlapping_genes, test.geneD8a_bad_overlapping_genes, test.geneB0_no_mRNA
+3 genes [CDS, CDS]:  test.geneD1_bad_feature_outside_mRNA, test.geneD2_bad_touching_exons, test.geneD3_bad_overlapping_exons
+2 genes [five_prime_UTR, CDS, CDS, three_prime_UTR]:  test.geneC5_gap_in_mRNA_before_UTR_start, test.geneC6_gap_in_mRNA_after_UTR_end
+2 genes [MULTIPLE_mRNAs]:  test.geneD6_bad_two_mRNAs_overlapping, test.geneD5_bad_two_mRNAs
+1 genes [three_prime_UTR]:  test.geneB4_only_3UTR
+1 genes [five_prime_UTR, three_prime_UTR]:  test.geneB8_no_exon
+1 genes [five_prime_UTR, five_prime_UTR, CDS, CDS, three_prime_UTR]:  test.geneC2_two_5prime_UTRs
+1 genes [five_prime_UTR, CDS, three_prime_UTR]:  test.geneD4_bad_overlapping_exon_UTR
+1 genes [five_prime_UTR, CDS, CDS, three_prime_UTR, three_prime_UTR]:  test.geneC3_two_3prime_UTRs
+1 genes [five_prime_UTR, CDS, CDS, three_prime_UTR, CDS]:  test.geneC1_exon_outside_UTR
+1 genes [five_prime_UTR, CDS]:  test.geneB6_no_3UTR
+1 genes [five_prime_UTR]:  test.geneB3_only_5UTR
+1 genes [NON_mRNA_PRIMARY_FEATURE]:  test.geneD7_bad_non_mRNA_feature
+1 genes [CDS, three_prime_UTR]:  test.geneB7_no_5UTR
+1 genes [CDS, five_prime_UTR, CDS, CDS, three_prime_UTR]:  test.geneC0_exon_outside_UTR
+1 genes [CDS]:  test.geneB5_only_exon
