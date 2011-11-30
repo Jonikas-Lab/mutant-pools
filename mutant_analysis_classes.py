@@ -378,16 +378,16 @@ class Insertional_mutant_library_dataset():
      - mutant_counts_by_orientation, mutant_count_by_feature - name:count dictionaries for mutant gene location properties
     """
 
-    def __init__(self, cassette_end=None, reads_are_reverse=False):
+    def __init__(self, cassette_end='?', reads_are_reverse='?'):
         """ Saves the arguments as properties of the dataset; initializes an empty mutant dict; sets all counts to 0. """
          # make sure the arguments are valid values
-        if not cassette_end in SEQ_ENDS+[None]: 
-            raise ValueError("The cassette_end variable must be one of %s!"%SEQ_ENDS)
+        if not cassette_end in SEQ_ENDS+['?']: 
+            raise ValueError("The cassette_end variable must be one of %s or '?'!"%SEQ_ENDS)
         self.cassette_end = cassette_end
-        if not reads_are_reverse in [True,False]: 
-            raise ValueError("The reads_are_reverse variable must be True or False!")
+        if not reads_are_reverse in [True,False,'?']: 
+            raise ValueError("The reads_are_reverse variable must be True, False, or '?'!")
         self.reads_are_reverse = reads_are_reverse
-        # MAYBE-TODO should reads_are_reverse be specified for the whole dataset, or just for each set of data added? Might be better to make it an option to add_alignment_reader_to_data and just switch the orientation of reads as they're added to the data, to make it possible to add both forward and reverse read sets to one Insertional_mutant_library_dataset dataset. - but then I'd have to keep track of (and print in outfile?) cassette_end and reads_are_reverse for every read instead of just keeping it once per dataset - complicated.
+        # MAYBE-TODO should cassette_end and reads_are_reverse be specified for the whole dataset, or just for each set of data added, in add_alignment_reader_to_data? The only real issue with this would be that then I wouldn't be able to print this information in the summary - or I'd have to keep track of what the value was for each alignment reader added and print that in the summary if it's a single value, or 'varied' if it's different values. Might also want to keep track of how many alignment readers were involved, and print THAT in the summary!  Or even print each (infile_name, cassette_end, reads_are_reverse) tuple as a separate line in the header.
         # mutants_by_position is the main data structure here
         self.mutants_by_position = {}
         # various total read/mutant counts to keep track of
@@ -420,9 +420,12 @@ class Insertional_mutant_library_dataset():
          will be ignored in the data (but not the total counts contained in the header). 
         """
 
-        if self.cassette_end is None:
+        if self.cassette_end == '?':
             raise Exception("Cannot add data from an alignment reader if cassette_end isn't specified! Please set the "
                 +"cassette_end attribute of this Insertional_mutant_library_dataset instance to one of %s first."%SEQ_ENDS)
+        if self.reads_are_reverse == '?':
+            raise Exception("Cannot add data from an alignment reader if reads_are_reverse isn't set! Please set the "
+                +"reads_are_reverse attribute of this Insertional_mutant_library_dataset instance to True/False first.")
         for aln in HTSeq_alignment_reader:
             if uncollapse_read_counts:      read_count = get_seq_count_from_collapsed_header(aln.read.name)
             else:                           read_count = 1
@@ -544,7 +547,7 @@ class Insertional_mutant_library_dataset():
         OUTPUT.write(header_prefix+"Distinct mutants (read groups) by cassette insertion position: %s\n"%\
                                                                                      (len(self.mutants_by_position)))
         OUTPUT.write(line_prefix+"(read is at %s end of cassette, in %s direction to cassette)\n"%(self.cassette_end, 
-                                                                    ('reverse' if self.reads_are_reverse else 'forward')))
+                                                {'?': '?', True: 'reverse', False: 'forward'}[self.reads_are_reverse]))
         g = self.find_most_common_mutant()
         OUTPUT.write(line_prefix+"Most common mutant: %s, position %s, %s strand:"%(g.position.chromosome,
                                                                            g.position.full_position, g.position.strand))
@@ -842,16 +845,23 @@ class Testing_Insertional_mutant_library_dataset(unittest.TestCase):
     """ Unit-tests for the Insertional_mutant_library_dataset class and its methods. """
 
     def test__init(self):
-        for cassette_end in SEQ_ENDS+[None]:
-            data = Insertional_mutant_library_dataset(cassette_end)
-            assert data.cassette_end == cassette_end
-            assert data.mutants_by_position == {}
-            assert data.total_read_count == 0
-            assert data.aligned_read_count == 0
-            assert data.unaligned_read_count == 0
-        for cassette_end in [True, False, 0, 0.11, 23, 'asdfas', '', 'something', [2,1]]:
-            self.assertRaises(ValueError, Insertional_mutant_library_dataset, cassette_end)
-        # LATER-TODO rewrite this to add new args/features
+        for cassette_end in SEQ_ENDS+['?']:
+            for reads_are_reverse in [True,False,'?']:
+                data = Insertional_mutant_library_dataset(cassette_end=cassette_end, reads_are_reverse=reads_are_reverse)
+                assert data.cassette_end == cassette_end
+                assert data.reads_are_reverse == reads_are_reverse
+                assert data.mutants_by_position == {}
+                assert data.total_read_count == data.aligned_read_count == data.perfect_read_count == 0
+                assert data.unaligned_read_count == 0
+                assert data.discarded_read_count == 'unknown'
+                assert data.ignored_region_read_counts == data.strand_read_counts == data.specific_region_read_counts == {}
+                assert data.mutants_in_genes == data.mutants_not_in_genes == data.mutants_undetermined == 0
+                assert data.mutant_counts_by_orientation == data.mutant_counts_by_feature == {}
+        for cassette_end in [True, False, None, 0, 1, 0.11, 23, 'asdfas', '', 'something', [2,1], {}]:
+            self.assertRaises(ValueError, Insertional_mutant_library_dataset, cassette_end, '?')
+        for reads_are_reverse in ['forward', 'reverse', None, 0.11, 23, 'asdfas', '', 'something', [2,1], {}]:
+            # note that this list doesn't include 0/1 because 0==False and 1==True, and that's what "in" tests 
+            self.assertRaises(ValueError, Insertional_mutant_library_dataset, '?', reads_are_reverse)
 
     # LATER-TODO add unit-test for add_discarded_reads, find_genes_for_mutants, find_most_common_mutant, 
 
@@ -871,7 +881,7 @@ class Testing_Insertional_mutant_library_dataset(unittest.TestCase):
     def test__read_from_file(self):
         ## 1. input file with no gene information but more variation in other features
         input_file = 'test_data/test_output__5prime.txt'
-        data = Insertional_mutant_library_dataset(None)
+        data = Insertional_mutant_library_dataset()
         data.read_from_file(input_file)
         assert data.total_read_count == data.aligned_read_count == 30
         assert data.unaligned_read_count == 0
@@ -920,7 +930,7 @@ class Testing_Insertional_mutant_library_dataset(unittest.TestCase):
         assert mutant.unique_sequence_count == 2
         ## 3. input file with gene information
         input_file2 = 'test_data/test_output2__with-genes.txt'
-        data2 = Insertional_mutant_library_dataset(None)
+        data2 = Insertional_mutant_library_dataset()
         data2.read_from_file(input_file2)
         assert data2.total_read_count == data2.aligned_read_count == data2.perfect_read_count == 40
         assert data2.unaligned_read_count == 0
