@@ -36,7 +36,7 @@ def do_test_run():
                  ("-u -e 5prime -r forward", test_infile1, "test_data/test_output__u.txt"),
                  ("-b special_chromosome -e 5prime -r forward -U", test_infile1, "test_data/test_output__b.txt"),
                  ("-B special_chromosome -e 5prime -r forward -U", test_infile1, "test_data/test_output__B.txt"),
-                 ("-e 5prime -r forward -U -g test_data/test_reference.gff3 -d", 
+                 ("-n 0 -e 5prime -r forward -U -g test_data/test_reference.gff3 -d", 
                   "test_data/test_input2__for-genes.sam", "test_data/test_output2__with-genes.txt")]
     #  Most common group: mutation_yes, position 204-?, + strand: 6 reads (20% of aligned)
     for variable_option_string, test_infile, reference_file in test_runs:
