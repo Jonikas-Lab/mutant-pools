@@ -111,6 +111,7 @@ def find_gene_by_pos(insertion_pos, chromosome_GFF_record, detailed_features=Fal
                     # if insertion_pos is on the edge of two mRNA subfeatures, use 'subfeature1/subfeature2'
                     elif len(features_inside)==0 and len(features_edge)==2:
                         gene_feature = '/'.join(features_edge)
+                        # MAYBE-TODO treat insertions CLOSE to an edge specially too? How large is a splice junction?
                     # if insertion_pos is on the edge of ONE mRNA subfeature, or not touching any subfeatures at all, 
                     #  the implied subfeature is either an intron (if between features) or mRNA_before/after_exons, 
                     #   (which shouldn't happen in normal files).
@@ -135,6 +136,7 @@ def find_gene_by_pos(insertion_pos, chromosome_GFF_record, detailed_features=Fal
                         if not quiet:
                             print("Warning: Location (%s,%s) matched multiple features (%s) "
                                   +"in gene %s!"%(ins_start, ins_end, gene_feature, gene_ID)) 
+                # MAYBE-TODO also output distance from start/end of gene/feature?
             
             return gene_ID, orientation, gene_feature
     # MAYBE-TODO do I want to consider the case of an insertion on the edge between two genes?  Or even in two genes and not on the edge, if there are overlapping genes, but hopefully there aren't!
@@ -302,6 +304,7 @@ class Insertional_mutant_data():
         """ Set self.position based on argument; initialize read/sequence counts to 0 and gene-info to unknown. 
         insertion_position argument should be a Insertion_position instance. """
         self.position = insertion_position
+        # MAYBE-TODO should I have a class for the gene data? Especially if I add more of it
         self.gene = SPECIAL_GENE_CODES.not_determined
         self.orientation = '?'
         self.gene_feature = '?'

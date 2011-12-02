@@ -57,6 +57,13 @@ def do_test_run():
     return 0
 
 
+class Testing(unittest.TestCase):
+    """ Unit-tests this module. """
+
+    def test__(self):
+        print "NO UNIT-TESTS FOR THIS MODULE"
+
+
 ######### Main function code #########
 
 def define_option_parser():
@@ -125,8 +132,8 @@ def define_option_parser():
                       help="Print summary at the end of the file (default %default) (also see -H)")
     parser.add_option('-S', '--dont_add_summary_to_file', action="store_false", dest='add_summary_to_file', 
                       help="Turn -s off.")
-    parser.add_option('-o', '--sort_data_by_position', action="store_true", default=False, 
-                      help="Sort the output data by alignment position (default %default) - may be slow for large data!")
+    parser.add_option('-o', '--sort_data_by_position', action="store_true", default=True, 
+                      help="Sort the output data by alignment position (default %default) - may be slow for large lists!")
     parser.add_option('-O', '--dont_sort_data_by_position', action="store_false", dest='sort_data_by_position', 
                       help="Turn -o off.")
     parser.add_option('-b', '--bad_chromosomes_count_only', default='insertion_cassette', metavar='comma-separated-list', 
@@ -238,13 +245,14 @@ if __name__ == "__main__":
     # if ran with -t option, do unit tests and quit
     if options.test_functionality:
         print("*** You used the -t option - ignoring all other options/arguments, running the built-in test suite. ***")
-        print("      (testing both the mutant_analysis_classes.py module and this module)")
+        print("\n * unit-tests for the mutant_analysis_classes.py module")
         # to run tests for another file, have to use TextTestRunner, not unittest.main -  make a test suite with 
         #   autodetection of all tests (see http://docs.python.org/library/unittest.html#unittest.TestLoader)
         test_suite_1 = unittest.defaultTestLoader.loadTestsFromModule(mutant_analysis_classes)
         unittest.TextTestRunner(verbosity=1).run(test_suite_1)
         # to run tests for current module, just run unittest.main, passing it only the filename 
         #   (by default it takes all of sys.argv and complains about options/arguments it can't recognize)
+        print("\n * unit-tests for this module (%s)"%sys.argv[0])
         unittest.main(argv=[sys.argv[0]])   # unittest.main automatically runs sys.exit()
 
     if options.test_run:
