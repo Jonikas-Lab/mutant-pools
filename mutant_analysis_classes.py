@@ -222,6 +222,10 @@ class Insertion_position():
     def __cmp__(self,other):
         return cmp(self.all_position_values, other.all_position_values)
 
+    def __hash__(self):
+        return hash(self.all_position_values)
+        # MAYBE-TODO note that I shouldn't really be hashing Insertion_position instances, since they're mutable!  Maybe I should give it a make_immutable() or such function, that would at the same time freeze all attributes (see FrozenClass in general_utilities.py) and add a __hash___ function?
+
     def __str__(self): 
         info_before = str(self.position_before) if self.position_before is not None else '?'
         info_after = str(self.position_after) if self.position_after is not None else '?'
