@@ -53,44 +53,48 @@ def find_gene_by_pos(insertion_pos, chromosome_GFF_record, detailed_features=Fal
         #  but don't add 1 to the end, because BCBio uses end-exclusive and I use end-inclusive.
         gene_start, gene_end = gene.location.start.position+1, gene.location.end.position
         if position_test_overlap(gene_start, gene_end, ins_start,ins_end):
-            # if insertion_pos is inside the gene, save the gene ID (adding '(edge)' if it only overlaps an edge)
-            if position_test_contains(gene_start, gene_end, ins_start,ins_end): gene_ID = gene.id
-            else:                                                               gene_ID = gene.id + '(edge)'
+            # if insertion_pos is inside the gene, save the gene ID
+            gene_ID = gene.id
+            # if it overlaps an edge, note that in features_gene by adding 'gene_edge'
+            # (MAYBE-TODO if I look at things like inner/outer flanking regions, this is where that would go as well)
+            if position_test_contains(gene_start, gene_end, ins_start,ins_end): features_gene = []
+            else:                                                               features_gene = ['gene_edge']
             # calculate orientation of insertion_pos vs gene
             if gene.strand==1:      orientation = 'sense' if insertion_pos.strand=='+' else 'antisense'
             elif gene.strand==-1:   orientation = 'sense' if insertion_pos.strand=='-' else 'antisense'
             else:                   orientation = '?'
             # if we're not looking for detailed features, just return the data now, using '?' as gene_feature
             if not detailed_features:
-                return gene_ID, orientation, '?'
+                full_feature = '/'.join(features_gene+['?'])
+                return gene_ID, orientation, full_feature
 
             ### Find which feature of the gene the insertion_pos should be annotated as:
             # if gene has no features listed, use 'no_mRNA' as gene_feature (different from '?' or '-')
             if len(gene.sub_features)==0:
-                gene_feature = 'no_mRNA'
+                inner_feature = 'no_mRNA'
             # if gene feature/subfeature structure isn't as expected, print warning and return '??'
             elif len(gene.sub_features)>1:
                 if not quiet:
                     print("Warning: gene %s in gff file has multiple sub-features (mRNAs?)! "
                           +"Returning '??' feature."%gene_ID)
-                gene_feature = '??'
+                inner_feature = '??'
             elif gene.sub_features[0].type != 'mRNA':
                 if not quiet:
                     print("Warning: gene %s in gff file has unexpected non-mRNA sub-features! "
                           +"Returning '??' feature."%gene_ID)
-                gene_feature = '??'
+                inner_feature = '??'
             else:
                 mRNA = gene.sub_features[0]
                 mRNA_start, mRNA_end = mRNA.location.start.position+1,mRNA.location.end.position
-                # if insertion_pos is outside the mRNA, use 'outside_mRNA' as gene_feature
+                # if insertion_pos is outside the mRNA, use 'outside_mRNA' as inner_feature
                 if not position_test_overlap(mRNA_start, mRNA_end, ins_start, ins_end):
-                    gene_feature = 'outside_mRNA'
-                # if insertion_pos is inside the mRNA and mRNA has no subfeatures, use 'mRNA_no_exons' as gene_feature
+                    inner_feature = 'outside_mRNA'
+                # if insertion_pos is inside the mRNA and mRNA has no subfeatures, use 'mRNA_no_exons' as inner_feature
                 elif len(mRNA.sub_features)==0:   
                     if position_test_contains(mRNA_start, mRNA_end, ins_start, ins_end):
-                        gene_feature = 'mRNA_no_exons'
+                        inner_feature = 'mRNA_no_exons'
                     else:
-                        gene_feature = 'mRNA_edge'
+                        inner_feature = 'mRNA_edge'
                 else: 
                     # otherwise go over all subfeatures, see which ones contain/overlap insertion_pos
                     #  (check for overlap only if the contains test failed)
@@ -105,12 +109,12 @@ def find_gene_by_pos(insertion_pos, chromosome_GFF_record, detailed_features=Fal
                             features_edge.append(feature.type)
                     # MAYBE-TODO may want to treat exons before 5'UTR or after 3'UTR specially? (EH, none in current file)
                     # MAYBE-TODO may want to treat cases with multiple UTRs specially?  We do have those in current file!
-                    # if insertion_pos is inside a single mRNA subfeature, use the type of the subfeature as gene_feature
+                    # if insertion_pos is inside a single mRNA subfeature, use the type of the subfeature as inner_feature
                     if len(features_inside)==1 and len(features_edge)==0:
-                        gene_feature = features_inside[0]
+                        inner_feature = features_inside[0]
                     # if insertion_pos is on the edge of two mRNA subfeatures, use 'subfeature1/subfeature2'
                     elif len(features_inside)==0 and len(features_edge)==2:
-                        gene_feature = '/'.join(features_edge)
+                        inner_feature = '/'.join(features_edge)
                         # MAYBE-TODO treat insertions CLOSE to an edge specially too? How large is a splice junction?
                     # if insertion_pos is on the edge of ONE mRNA subfeature, or not touching any subfeatures at all, 
                     #  the implied subfeature is either an intron (if between features) or mRNA_before/after_exons, 
@@ -123,22 +127,24 @@ def find_gene_by_pos(insertion_pos, chromosome_GFF_record, detailed_features=Fal
                             implied_feature = 'mRNA_after_exons'
                         else:
                             implied_feature = 'intron'
-                        # set gene_feature based on whether insertion_pos is on a real/implied feature edge 
+                        # set inner_feature based on whether insertion_pos is on a real/implied feature edge 
                         #  or completely inside an implied feature
                         if len(features_edge)==1:
-                            gene_feature = features_edge[0] + '/' + implied_feature
+                            inner_feature = features_edge[0] + '/' + implied_feature
                         elif len(features_edge)==0:
-                            gene_feature = implied_feature
+                            inner_feature = implied_feature
                     # if insertion_pos is inside two features, or inside one and on the edge of another, 
                     #  print a warning, and use all the feature names, with a ?? at the end to mark strangeness
                     else:
-                        gene_feature = '/'.join(features_inside+features_edge) + '??'
+                        inner_feature = '/'.join(features_inside+features_edge) + '??'
                         if not quiet:
                             print("Warning: Location (%s,%s) matched multiple features (%s) "
-                                  +"in gene %s!"%(ins_start, ins_end, gene_feature, gene_ID)) 
+                                  +"in gene %s!"%(ins_start, ins_end, inner_feature, gene_ID)) 
                 # MAYBE-TODO also output distance from start/end of gene/feature?
             
-            return gene_ID, orientation, gene_feature
+            # prepend whatever gene-level features (edge etc, or []) were found at the start to the full value
+            full_feature = '/'.join(features_gene+[inner_feature])
+            return gene_ID, orientation, full_feature
     # MAYBE-TODO do I want to consider the case of an insertion on the edge between two genes?  Or even in two genes and not on the edge, if there are overlapping genes, but hopefully there aren't!
     # if no gene matching insertion_pos was found, return special value
     return SPECIAL_GENE_CODES.not_found, '-', '-'

@@ -26,23 +26,26 @@
 #  Mutant cassettes in gene feature five_prime_UTR/CDS??: 2
 #  Mutant cassettes in gene feature five_prime_UTR/intron: 2
 #  Mutant cassettes in gene feature five_prime_UTR/mRNA_before_exons: 1
+#  Mutant cassettes in gene feature gene_edge/mRNA_edge: 1
+#  Mutant cassettes in gene feature gene_edge/mRNA_edge/five_prime_UTR: 1
+#  Mutant cassettes in gene feature gene_edge/mRNA_edge/three_prime_UTR: 1
+#  Mutant cassettes in gene feature gene_edge/no_mRNA: 1
+#  Mutant cassettes in gene feature gene_edge/outside_mRNA: 1
 #  Mutant cassettes in gene feature intron: 2
 #  Mutant cassettes in gene feature mRNA_after_exons: 1
 #  Mutant cassettes in gene feature mRNA_before_exons: 1
-#  Mutant cassettes in gene feature mRNA_edge: 2
-#  Mutant cassettes in gene feature mRNA_edge/five_prime_UTR: 1
-#  Mutant cassettes in gene feature mRNA_edge/three_prime_UTR: 1
+#  Mutant cassettes in gene feature mRNA_edge: 1
 #  Mutant cassettes in gene feature mRNA_no_exons: 1
-#  Mutant cassettes in gene feature no_mRNA: 2
-#  Mutant cassettes in gene feature outside_mRNA: 2
+#  Mutant cassettes in gene feature no_mRNA: 1
+#  Mutant cassettes in gene feature outside_mRNA: 1
 #  Mutant cassettes in gene feature three_prime_UTR: 1
 #  Mutant cassettes in gene feature three_prime_UTR/intron: 2
 #  Mutant cassettes in gene feature three_prime_UTR/mRNA_after_exons: 1
-## Genes containing a mutant: 19
+## Genes containing a mutant: 16
 ### DATA:
 chromosome	strand	min_position	full_position	gene	orientation	feature	total_reads	perfect_reads	N_sequence_variants
 chromosome_A	+	20	20-?	no_gene_found	-	-	1	1	1
-chromosome_A	+	100	100-?	test.geneA0_proper_plus(edge)	sense	mRNA_edge/five_prime_UTR	1	1	1
+chromosome_A	+	100	100-?	test.geneA0_proper_plus	sense	gene_edge/mRNA_edge/five_prime_UTR	1	1	1
 chromosome_A	+	150	150-?	test.geneA0_proper_plus	sense	five_prime_UTR	1	1	1
 chromosome_A	+	200	200-?	test.geneA0_proper_plus	sense	five_prime_UTR/CDS	1	1	1
 chromosome_A	+	210	210-?	test.geneA0_proper_plus	sense	CDS	1	1	1
@@ -54,13 +57,13 @@ chromosome_A	+	400	400-?	test.geneA0_proper_plus	sense	CDS/intron	1	1	1
 chromosome_A	+	450	450-?	test.geneA0_proper_plus	sense	CDS	1	1	1
 chromosome_A	+	700	700-?	test.geneA0_proper_plus	sense	CDS/three_prime_UTR	1	1	1
 chromosome_A	+	750	750-?	test.geneA0_proper_plus	sense	three_prime_UTR	1	1	1
-chromosome_A	+	800	800-?	test.geneA0_proper_plus(edge)	sense	mRNA_edge/three_prime_UTR	1	1	1
+chromosome_A	+	800	800-?	test.geneA0_proper_plus	sense	gene_edge/mRNA_edge/three_prime_UTR	1	1	1
 chromosome_A	+	1210	1210-?	test.geneA1_proper_minus	antisense	CDS	1	1	1
 chromosome_A	-	1210	?-1211	test.geneA1_proper_minus	sense	CDS	1	1	1
-chromosome_B	+	100	100-?	test.geneB0_no_mRNA(edge)	sense	no_mRNA	1	1	1
+chromosome_B	+	100	100-?	test.geneB0_no_mRNA	sense	gene_edge/no_mRNA	1	1	1
 chromosome_B	+	400	400-?	test.geneB0_no_mRNA	sense	no_mRNA	1	1	1
-chromosome_B	+	1100	1100-?	test.geneB1_only_mRNA(edge)	sense	mRNA_edge	1	1	1
-chromosome_B	+	2100	2100-?	test.geneB2_only_mRNA_smaller_than_gene(edge)	sense	outside_mRNA	1	1	1
+chromosome_B	+	1100	1100-?	test.geneB1_only_mRNA	sense	gene_edge/mRNA_edge	1	1	1
+chromosome_B	+	2100	2100-?	test.geneB2_only_mRNA_smaller_than_gene	sense	gene_edge/outside_mRNA	1	1	1
 chromosome_B	+	2150	2150-?	test.geneB2_only_mRNA_smaller_than_gene	sense	outside_mRNA	1	1	1
 chromosome_B	+	2200	2200-?	test.geneB2_only_mRNA_smaller_than_gene	sense	mRNA_edge	1	1	1
 chromosome_B	+	2300	2300-?	test.geneB2_only_mRNA_smaller_than_gene	sense	mRNA_no_exons	1	1	1
