@@ -12,7 +12,7 @@ It also only deals with single-end alignments at the moment.
 
  -- Weronika Patena, Jonikas Lab, Carnegie Institution, 2011
 
-USAGE: mutant_count_alignments.py [options] infile outfile """
+USAGE: mutant_count_alignments.py [options] infile1 [infile2 infile3 ...] outfile """
 
 # basic libraries
 import sys, os, time
@@ -107,8 +107,8 @@ def define_option_parser():
                       help="Turn -c off.")
     parser.add_option('-m', '--input_metadata_file', default='AUTO', metavar='FILE', 
                       help="File containing preprocessing and alignment metadata (scripts/options used etc). "
-                          +"Default: <infile_basename>_info.txt. Warning will be raised if not found. "
-                          +"Pass NONE to not look for a metadata file at all.")
+                          +"Can be a filename, AUTO for <infile_basename>_info.txt (warning will be raised if not found), "
+                          +"or NONE to not look for a metadata file at all. Default %default.")
 
     ### gene-finding options 
     parser.add_option('-g', '--gene_position_reference_file', default=None, metavar='FILE', 
@@ -129,11 +129,11 @@ def define_option_parser():
     ### output format options
     parser.add_option('-H', '--header_level', choices=['0','1','2'], default='2', metavar='0|1|2', 
                       help="Outfile header type:  0 - no header at all, 1 - a single line giving column headers, "
-                          + "3 - full header with command, options, date, user etc (default %default) (also see -s)")
+                          + "2 - full header with command, options, date, user etc (default %default) (also see -s)")
     parser.add_option('-n', '--N_sequences_per_group', type='int', default=2, metavar='N', 
                       help="How many most common sequences should be shown per group? (default %default)")
     parser.add_option('-s', '--add_summary_to_file', action="store_true", default=True, 
-                      help="Print summary at the end of the file (default %default) (also see -H)")
+                      help="Print summary at the top of the file (default %default) (also see -H)")
     parser.add_option('-S', '--dont_add_summary_to_file', action="store_false", dest='add_summary_to_file', 
                       help="Turn -s off.")
     parser.add_option('-o', '--sort_data_by_position', action="store_true", default=True, 

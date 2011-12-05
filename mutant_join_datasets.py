@@ -41,14 +41,14 @@ def define_option_parser():
     parser.add_option('-a', '--all_reads', action="store_false", dest='perfect_reads_only',
                       help="Take total read counts (turns -p off).")
     parser.add_option('-m', '--output_only_shared_mutants', action="store_true", default=False,
-                      help="Only output the mutants that have non-zero counts in all input files (default %default)")
+                      help="Only output the mutants that have non-zero counts in ALL input files (default %default)")
     parser.add_option('-M', '--output_all_mutants', action="store_false", dest='output_only_shared_mutants',
                       help="Output all mutants, including ones that only appear in one input file (turns -o off).")
 
     ### output format options
     parser.add_option('-H', '--header_level', choices=['0','1','2'], default='2', metavar='0|1|2', 
                       help="Outfile header type:  0 - no header at all, 1 - a single line giving column headers, "
-                          + "3 - full header with command, options, date, user etc (default %default) (also see -s)")
+                          + "2 - full header with command, options, date, user etc (default %default) (also see -s)")
     parser.add_option('-s', '--add_summary_to_file', action="store_true", default=True, 
                       help="Print summary at the end of the file (default %default) (also see -H)")
     parser.add_option('-S', '--dont_add_summary_to_file', action="store_false", dest='add_summary_to_file', 
