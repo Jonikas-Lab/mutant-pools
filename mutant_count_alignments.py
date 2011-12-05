@@ -28,25 +28,28 @@ import mutant_analysis_classes
 def do_test_run():
     """ Test run: run script on test infile, compare output to reference file."""
     test_infile1 = "test_data/test_input.sam"
+    test_infile2 = "test_data/test_input2__for-genes.sam"
     test_constant_options = "-H 1 -s -n3 -o -q"
     #  (using -s and -H 1 to get all relevant info but not have to deal with changing timestamps/etc)
-    test_runs = [("-e 5prime -r forward -U", test_infile1, "test_data/test_output__5prime.txt"),
-                 ("-e 3prime -r forward -U", test_infile1, "test_data/test_output__3prime.txt"),
-                 ("-r reverse -e 5prime -U", test_infile1, "test_data/test_output__reverse.txt"),
-                 ("-u -e 5prime -r forward", test_infile1, "test_data/test_output__u.txt"),
-                 ("-b special_chromosome -e 5prime -r forward -U", test_infile1, "test_data/test_output__b.txt"),
-                 ("-B special_chromosome -e 5prime -r forward -U", test_infile1, "test_data/test_output__B.txt"),
-                 ("-n 0 -e 5prime -r forward -U -g test_data/test_reference.gff3 -d", 
-                  "test_data/test_input2__for-genes.sam", "test_data/test_output2__with-genes.txt")]
+    test_runs = [("-e 5prime -r forward -U", [test_infile1], "test_data/test_output__5prime.txt"),
+                 ("-e 3prime -r forward -U", [test_infile1], "test_data/test_output__3prime.txt"),
+                 ("-r reverse -e 5prime -U", [test_infile1], "test_data/test_output__reverse.txt"),
+                 ("-u -e 5prime -r forward", [test_infile1], "test_data/test_output__u.txt"),
+                 ("-b special_chromosome -e 5prime -r forward -U", [test_infile1], "test_data/test_output__b.txt"),
+                 ("-B special_chromosome -e 5prime -r forward -U", [test_infile1], "test_data/test_output__B.txt"),
+                 ("-n 0 -e 5prime -r forward -U -g test_data/test_reference.gff3 -d", [test_infile2], 
+                                                                      "test_data/test_output2__with-genes.txt"),
+                 ("-n 0 -e 5prime -r forward -U", [test_infile1,test_infile2], "test_data/test_output12__multiple.txt")]
     #  Most common group: mutation_yes, position 204-?, + strand: 6 reads (20% of aligned)
-    for variable_option_string, test_infile, reference_file in test_runs:
+    for variable_option_string, test_infiles, reference_file in test_runs:
         option_string = test_constant_options + ' ' + variable_option_string
-        print(" * New test run, with options: %s (infile %s, reference outfile %s)"%(option_string,test_infile,reference_file))
+        print(" * New test run, with options: %s (infiles %s; reference outfile %s)"%(option_string,
+                                                                          ', '.join(test_infiles),reference_file))
         # regenerate options with test argument string
         parser = define_option_parser()
         (options, _) = parser.parse_args(option_string.split())
         outfile = "test_data/test_output.txt"
-        run_main_function(test_infile, outfile, options)
+        run_main_function(test_infiles, outfile, options)
         # compare outfile to reference file: remove outfile and keep going if correct, otherwise exit with message.
         if filecmp.cmp(outfile, reference_file, shallow=False):
             os.remove(outfile)
@@ -94,6 +97,7 @@ def define_option_parser():
                       help="Turn -u off.")
     # LATER-TODO add a check to print a warning if any mutants are closer than X bases to each other - this seems to happen a lot with what looks like mutations, with the alignment locations just 1bp apart!  Should catch those and merge them somenow, or at least mark them as iffy in the output file?
     # MAYBE-TODO add a check to print a warning if any mutant has fewer than X% perfect reads; optionally mark/omit those mutants in the output file?
+    # MAYBE-TODO add user-provided mutation cutoffs like in old deepseq_count_alignments.py, instead of just all reads and perfet reads?   parser.add_option('-m', '--mutation_cutoffs', default="1,3,10", metavar="<comma-separated-int-list>")
 
     ### input options
     parser.add_option('-c','--input_collapsed_to_unique', action='store_true', default=False, 
@@ -144,7 +148,6 @@ def define_option_parser():
                           +"otherwise ignore them and don't add to normal output. (default %default) (also see -b)")
     # LATER-TODO once I have a line-per-gene output format as well as a line-per-mutant one (separate dictionary/view in Insertional_mutant_library_dataset in mutant_analysis_classes.py, and separate output file):  Add extra options for that: count only mutants that are sense/antisense, only mutants in the exons/introns/UTRs, don't count mutants in the first/last X%/Xbp of the gene, do count mutants flanking the gene...
 
-    # MAYBE-TODO add user-provided mutation cutoffs like in old deepseq_count_alignments.py, instead of just all reads and perfet reads?   parser.add_option('-m', '--mutation_cutoffs', default="1,3,10", metavar="<comma-separated-int-list>")
     parser.add_option('-V', '--verbosity_level', action="store_true", default=1, 
                       help="How much information to print to STDOUT: 0 - nothing, 1 - summary only, "
                           +"2 - summary and progress reports. (Default %default).")
@@ -154,52 +157,87 @@ def define_option_parser():
     return parser
 
 
-def run_main_function(infile, outfile, options):
+
+def add_discarded_reads_from_metadata_file(infiles, input_metadata_file, verbosity_level):
+    """ Parse metadata files to get total discarded read count; return None if it cannot be determined. 
+    """
+    # if the option specified no metadata files, total discarded readcount cannot be determined
+    if input_metadata_file == 'NONE':
+        return None
+    # make sure the -m option has a value that will work with the number of infiles
+    if len(infiles)>1 and not input_metadata_file=='AUTO':
+        print "Warning: when multiple input files are given, the -m option must be NONE or AUTO - ignoring other value."
+        return None
+    # get the discarded read count for each infile; only return the total at the end, if all values are found
+    discarded_counts = []
+    for infile in infiles:
+        # take the actual input_metadata_file value as the file name, or infer it from the infile name if 'AUTO'
+        if input_metadata_file == 'AUTO':
+            curr_input_metadata_file = os.path.splitext(infile)[0] + '_info.txt'
+            if verbosity_level>1:  
+                print 'Automatically determining metadata input file name: %s'%curr_input_metadata_file
+        else:
+            curr_input_metadata_file = input_metadata_file
+            if verbosity_level>1:  
+                print 'Metadata input file name provided in options: %s'%curr_input_metadata_file
+        # if file is missing, total discarded readcount cannot be determined
+        if not os.path.exists(curr_input_metadata_file):
+            if verbosity_level>0:
+                print 'Warning: metadata input file %s not found! Proceeding without it.'%curr_input_metadata_file
+            return None
+        # go through the metadata file to find the line with the discarded read count; 
+        #  if the line isn't found, total discarded readcount cannot be determined
+        line_found = False
+        for line in open(curr_input_metadata_file):
+            if line.startswith('## reads removed: '):
+                discarded_counts.append(int(line.split()[3]))
+                line_found = True
+                break
+        if not line_found:
+            if verbosity_level>0:
+                print("Warning: metadata input file %s didn't contain discarded read count line! "%curr_input_metadata_file
+                      +"Proceeding without it.")
+            return None
+    # if some metadata files were missing the discarded counts line, total discarded readcount cannot be determined
+    if len(discarded_counts)<len(infiles):
+        if verbosity_level>0:
+            print "Warning: discarded read count not found for some files! Ignoring all values, keeping 'unknown'."
+        return None
+    # if the discarded read counts for all infiles were found, return the sum as the total discarded read count
+    return sum(discarded_counts)
+    
+    
+
+def run_main_function(infiles, outfile, options):
     """ Run the main functionality of the module (see module docstring for more information), excluding testing.
     The options argument should be generated by an optparse parser.
     """
 
-    ### generate empty alignment set object with basic read position/orientation properties defined by options
-    all_alignment_data = mutant_analysis_classes.Insertional_mutant_library_dataset(options.read_cassette_end, 
-                                                                                options.read_direction=='reverse')
-    # MAYBE-TODO rewrite mutant_analysis_classes.Insertional_mutant_library_dataset to take a read_direction 
-    #  (forward/reverse) argument instead of a read_is_reverse (True/False) argument, to match this?  Do we care?  
-    #  Or could go back and rewrite the -r option as --read_is_reverse, that might be fine too.  Doesn't matter much.
-
-    ### parse preprocessing/alignment metadata file to get discarded read count, pass it to all_alignment_data
-    # all_alignment_data initializes it to 'unkown', so if file is not given or can't be found, no need to do anything
-    if options.input_metadata_file is not 'NONE':
-        if options.input_metadata_file == 'AUTO':
-            options.input_metadata_file = os.path.splitext(infile)[0] + '_info.txt'
-            if options.verbosity_level>1:  
-                print 'Automatically determining metadata input file name: %s'%options.input_metadata_file
-        else:
-            if options.verbosity_level>1:  
-                print 'Metadata input file name provided in options: %s'%options.input_metadata_file
-        if not os.path.exists(options.input_metadata_file):
-            if options.verbosity_level>0:
-                print 'Warning: metadata input file %s not found! Proceeding without it.'%options.input_metadata_file
-        else:
-            for line in open(options.input_metadata_file):
-                if line.startswith('## reads removed: '):
-                    all_alignment_data.add_discarded_reads(line.split()[3])
-                    break
-            if all_alignment_data.discarded_read_count=='unknown':
-                print 'Warning: discarded read count not found in metadata input file %s!'%options.input_metadata_file
-    # MAYBE-TODO get the final total number of reads from the metadata infile and make sure it's the same 
-    #   as the number of processed reads I get from all_alignment_data.print_summary()?
-    
-    ### parse input file and store data - the add_alignment_reader_to_data function here does pretty much all the work!
+    ### check/modify a few options
     # parse the -b/-B options
     bad_chromosomes_to_ignore = set(options.bad_chromosomes_count_and_ignore.split(',')) - set([''])
     bad_chromosomes_to_count = set(options.bad_chromosomes_count_only.split(',')) - set([''])
-    # initialize a parser for the SAM infile
-    if options.verbosity_level>1: print "parsing input file %s - time %s."%(infile, time.ctime())
-    infile_reader = HTSeq.SAM_Reader(infile)
-    # fill the new alignment set object with data from the infile parser
-    all_alignment_data.add_alignment_reader_to_data(infile_reader, options.input_collapsed_to_unique, 
-                                     options.treat_unknown_as_match, bad_chromosomes_to_count, bad_chromosomes_to_ignore)
+
+    ### generate empty alignment set object with basic read position/orientation properties defined by options
+    all_alignment_data = mutant_analysis_classes.Insertional_mutant_library_dataset(options.read_cassette_end, 
+                                                                                    options.read_direction=='reverse')
+
+    ### parse preprocessing/alignment metadata file to get discarded read count, pass it to all_alignment_data
+    #   (all_alignment_data initializes it to 'unkown', so if file is not given or can't be found, no need to do anything)
+    N_discarded = add_discarded_reads_from_metadata_file(infiles, options.input_metadata_file, options.verbosity_level)
+    if N_discarded is not None:     all_alignment_data.add_discarded_reads(N_discarded)
+    # MAYBE-TODO also get the final total number of reads from the metadata infile and make sure it's the same 
+    #   as the number of processed reads I get from all_alignment_data.print_summary()?
     
+    ### parse input file and store data - the add_alignment_reader_to_data function here does pretty much all the work!
+    for infile in infiles:
+        # initialize a parser for the SAM infile
+        if options.verbosity_level>1: print "parsing input file %s - time %s."%(infile, time.ctime())
+        infile_reader = HTSeq.SAM_Reader(infile)
+        # fill the new alignment set object with data from the infile parser
+        all_alignment_data.add_alignment_reader_to_data(infile_reader, options.input_collapsed_to_unique, 
+                                     options.treat_unknown_as_match, bad_chromosomes_to_count, bad_chromosomes_to_ignore)
+
     ### optionally parse gene position/info files and look up the genes for each mutant in the data
     if options.gene_position_reference_file is not None:
         genefile = options.gene_position_reference_file
@@ -212,6 +250,7 @@ def run_main_function(infile, outfile, options):
             if options.verbosity_level>1: 
                 print "adding gene details from file %s - time %s."%(options.gene_info_reference_file, time.ctime())
             all_alignment_data.add_detailed_gene_info(options.gene_info_reference_file)
+
     ### output
     # print summary info to stdout
     if options.verbosity_level>1:   print "\nDATA SUMMARY:"
@@ -261,12 +300,11 @@ if __name__ == "__main__":
         sys.exit(test_result)
 
     # otherwise parse the arguments and run main function
-    try:
-        [infile,outfile] = args
-    except ValueError:
+    if len(args)<2:
         parser.print_help()
-        sys.exit("\nError: exactly one infile and exactly one outfile are required!")
-    # LATER-TODO allow it to take multiple infiles if metafile is not provided?  Just in case I want to merge different samples for some reason or another.  Could do it if metafile is AUTO, too, really - I don't include metafile contents in output, just the one discarded read number, and I can add that from all the metafiles together.
+        sys.exit("\nError: at least one infile and exactly one outfile are required!")
+    outfile = args[-1]
+    infiles = args[:-1]
 
-    run_main_function(infile, outfile, options)
+    run_main_function(infiles, outfile, options)
 

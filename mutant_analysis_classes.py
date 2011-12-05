@@ -75,13 +75,13 @@ def find_gene_by_pos(insertion_pos, chromosome_GFF_record, detailed_features=Fal
             # if gene feature/subfeature structure isn't as expected, print warning and return '??'
             elif len(gene.sub_features)>1:
                 if not quiet:
-                    print("Warning: gene %s in gff file has multiple sub-features (mRNAs?)! "
-                          +"Returning '??' feature."%gene_ID)
+                    print("Warning: gene %s in gff file has multiple sub-features (mRNAs?)! "%gene_ID
+                          +"Returning '??' feature.")
                 inner_feature = '??'
             elif gene.sub_features[0].type != 'mRNA':
                 if not quiet:
-                    print("Warning: gene %s in gff file has unexpected non-mRNA sub-features! "
-                          +"Returning '??' feature."%gene_ID)
+                    print("Warning: gene %s in gff file has unexpected non-mRNA sub-features! "%gene_ID
+                          +"Returning '??' feature.")
                 inner_feature = '??'
             else:
                 mRNA = gene.sub_features[0]
@@ -138,8 +138,8 @@ def find_gene_by_pos(insertion_pos, chromosome_GFF_record, detailed_features=Fal
                     else:
                         inner_feature = '/'.join(features_inside+features_edge) + '??'
                         if not quiet:
-                            print("Warning: Location (%s,%s) matched multiple features (%s) "
-                                  +"in gene %s!"%(ins_start, ins_end, inner_feature, gene_ID)) 
+                            print(("Warning: Location (%s,%s) matched multiple features (%s) "
+                                  +"in gene %s!")%(ins_start, ins_end, inner_feature, gene_ID)) 
                 # MAYBE-TODO also output distance from start/end of gene/feature?
             
             # prepend whatever gene-level features (edge etc, or []) were found at the start to the full value
