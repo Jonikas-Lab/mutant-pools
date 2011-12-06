@@ -580,7 +580,7 @@ class Insertional_mutant_library_dataset():
             OUTPUT.write(header_prefix+"Genes containing a mutant: %s\n"%(len(all_genes)))
             # LATER-TODO Add count of genes containing two or more mutants! Once I have a per-gene view of the data.
 
-    def print_data(self, OUTPUT=None, sort_data=False, N_sequences=2, header_line=True, header_prefix="# "):
+    def print_data(self, OUTPUT=None, sort_data_by=None, N_sequences=2, header_line=True, header_prefix="# "):
         """ Print full data, one line per mutant: position data, gene info, read counts, optionally sequences.
         (see the file header line for exactly what all the output fields are).
 
@@ -600,9 +600,12 @@ class Insertional_mutant_library_dataset():
                 headers.extend(['read_sequence_%s'%N,'seq_%s_count'%N])
             OUTPUT.write(header_prefix + '\t'.join(headers) + "\n")
 
-        if sort_data:
+        if sort_data_by=='position':
             data = sorted(self.mutants_by_position.values(), key = lambda x: x.position)
             # x.position here is an Insertion_position object and has a sensible cmp function
+        elif sort_data_by=='read_count':
+            data = sorted(self.mutants_by_position.values(), 
+                          key = lambda x: (x.total_read_count, x.perfect_read_count, x.position), reverse=True)
         else:
             data = self.mutants_by_position.itervalues()
 

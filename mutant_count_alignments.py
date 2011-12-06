@@ -29,7 +29,7 @@ def do_test_run():
     """ Test run: run script on test infile, compare output to reference file."""
     test_infile1 = "test_data/test_input.sam"
     test_infile2 = "test_data/test_input2__for-genes.sam"
-    test_constant_options = "-H 1 -s -n3 -o -q"
+    test_constant_options = "-H 1 -s -n3 -o position -q"
     #  (using -s and -H 1 to get all relevant info but not have to deal with changing timestamps/etc)
     test_runs = [("-e 5prime -r forward -U", [test_infile1], "test_data/test_output__5prime.txt"),
                  ("-e 3prime -r forward -U", [test_infile1], "test_data/test_output__3prime.txt"),
@@ -37,6 +37,7 @@ def do_test_run():
                  ("-u -e 5prime -r forward", [test_infile1], "test_data/test_output__u.txt"),
                  ("-b special_chromosome -e 5prime -r forward -U", [test_infile1], "test_data/test_output__b.txt"),
                  ("-B special_chromosome -e 5prime -r forward -U", [test_infile1], "test_data/test_output__B.txt"),
+                 ("-o read_count -e 5prime -r forward -U", [test_infile1], "test_data/test_output__sorted-by-count.txt"),
                  ("-n 0 -e 5prime -r forward -U -g test_data/test_reference.gff3 -d", [test_infile2], 
                                                                       "test_data/test_output2__with-genes.txt"),
                  ("-n 0 -e 5prime -r forward -U", [test_infile1,test_infile2], "test_data/test_output12__multiple.txt")]
@@ -74,8 +75,8 @@ def define_option_parser():
     from optparse import OptionParser
     parser = OptionParser(__doc__)
 
-    # taken:     --bBcCdDe---gGhH--------m-n-oO--q-r-sStTuUvV--xX----  
-    # free:      aB-------EfF----iIjJkKlL-M-N--pP-Q-R--------wW--yYzZ  
+    # taken:     --bBcCdDe---gGhH--------m-n-o---q-r-sStTuUvV--xX----  
+    # free:      aB-------EfF----iIjJkKlL-M-N-OpP-Q-R--------wW--yYzZ  
 
     ### test options
     parser.add_option('-t','--test_functionality', action='store_true', default=False, 
@@ -136,10 +137,9 @@ def define_option_parser():
                       help="Print summary at the top of the file (default %default) (also see -H)")
     parser.add_option('-S', '--dont_add_summary_to_file', action="store_false", dest='add_summary_to_file', 
                       help="Turn -s off.")
-    parser.add_option('-o', '--sort_data_by_position', action="store_true", default=True, 
-                      help="Sort the output data by alignment position (default %default) - may be slow for large lists!")
-    parser.add_option('-O', '--dont_sort_data_by_position', action="store_false", dest='sort_data_by_position', 
-                      help="Turn -o off.")
+    parser.add_option('-o', '--sort_data_key', choices=['position','read_count','none'], default='position', 
+                      metavar='position|read_count|none', help="Sort the output data: by alignment position, read count, "
+                             +"or don't sort at all (default %default) - sorting may be slow for large lists!")
     parser.add_option('-b', '--bad_chromosomes_count_only', default='insertion_cassette', metavar='comma-separated-list', 
                       help="Count reads aligning to these chromosomes and print the count in the header; "
                           +"otherwise treat them normally. (default %default) (also see -B)")
@@ -270,7 +270,7 @@ def run_main_function(infiles, outfile, options):
             OUTFILE.write("### DATA:\n")
         header_line = True if options.header_level else False
         header_prefix = '' if options.header_level==1 else '# '
-        all_alignment_data.print_data(OUTPUT=OUTFILE, sort_data=options.sort_data_by_position, 
+        all_alignment_data.print_data(OUTPUT=OUTFILE, sort_data_by=options.sort_data_key, 
                                       N_sequences=options.N_sequences_per_group, 
                                       header_line=header_line, header_prefix=header_prefix)
 
