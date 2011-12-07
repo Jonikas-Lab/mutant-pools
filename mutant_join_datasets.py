@@ -73,7 +73,8 @@ def define_option_parser():
 
 class Mutant_multi_counts():
     """ Simple container class for a mutant with multiple counts from different datasets: 
-    contains a position (mutant_analysis_classes.Insertion_position instance), gene data, and a filename:count dictionary.
+          contains a position (mutant_analysis_classes.Insertion_position instance), 
+          gene data, and a filename:count dictionary (defaultdict with default value 0).
     """
     def __init__(self, position, gene, orientation, gene_feature):
         self.position = position
