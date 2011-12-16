@@ -75,8 +75,8 @@ def define_option_parser():
     from optparse import OptionParser
     parser = OptionParser(__doc__)
 
-    # taken:     --bBcCdDe---gGhH--------m-n-o---q-r-sStTuUvV--xX----  
-    # free:      aB-------EfF----iIjJkKlL-M-N-OpP-Q-R--------wW--yYzZ  
+    # taken:     --bBcCdDe---gGhH--------mMn-o---q-r-sStTuUvVwWxX----  
+    # free:      aB-------EfF----iIjJkKlL---N-OpP-Q-R------------yYzZ  
 
     ### test options
     parser.add_option('-t','--test_functionality', action='store_true', default=False, 
@@ -92,6 +92,12 @@ def define_option_parser():
     parser.add_option('-r','--read_direction', choices=mutant_analysis_classes.SEQ_DIRECTIONS, default='forward',
                       metavar='|'.join(mutant_analysis_classes.SEQ_DIRECTIONS), 
                       help="Is the read in the forward or reverse direction compared to the cassette? (default %default).")
+    parser.add_option('-M', '--merge_adjacent_mutants', action="store_true", default=False, 
+                      help="Merge adjacent mutants if they satisfy the -w/-W constraints (default %default)")
+    parser.add_option('-w', '--merge_max_distance', type='int', default=1, metavar='N',
+                      help="For -M: merge mutants only if they're at most N bases distant (default %default)")
+    parser.add_option('-W', '--merge_count_ratio', type='int', default=1000, metavar='K',
+                      help="For -M: merge mutants only if one has K x fewer reads than the other (default %default)")
     parser.add_option('-u', '--treat_unknown_as_match', action="store_true", default=False, 
                       help="When counting perfect reads, treat undefined alignment regions as matches (default %default)")
     parser.add_option('-U', '--dont_treat_unknown_as_match', action="store_false", dest='treat_unknown_as_match',
@@ -235,8 +241,18 @@ def run_main_function(infiles, outfile, options):
         if options.verbosity_level>1: print "parsing input file %s - time %s."%(infile, time.ctime())
         infile_reader = HTSeq.SAM_Reader(infile)
         # fill the new alignment set object with data from the infile parser
-        all_alignment_data.add_alignment_reader_to_data(infile_reader, options.input_collapsed_to_unique, 
-                                     options.treat_unknown_as_match, bad_chromosomes_to_count, bad_chromosomes_to_ignore)
+        all_alignment_data.add_alignment_reader_to_data(infile_reader, 
+                                                        uncollapse_read_counts = options.input_collapsed_to_unique, 
+                                                        treat_unknown_as_match = options.treat_unknown_as_match, 
+                                                        chromosomes_to_count = bad_chromosomes_to_count, 
+                                                        chromosomes_to_ignore = bad_chromosomes_to_ignore)
+
+    ### optionally merge adjacent mutants (since they're probably just artifacts of indels during deepseq)
+    if options.merge_adjacent_mutants: 
+        all_alignment_data.merge_adjacent_mutants(merge_max_distance = options.merge_max_distance, 
+                                                  merge_count_ratio = options.merge_count_ratio, 
+                                                  dont_change_positions = True, 
+                                                  verbosity_level=options.verbosity_level)
 
     ### optionally parse gene position/info files and look up the genes for each mutant in the data
     if options.gene_position_reference_file is not None:

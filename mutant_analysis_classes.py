@@ -11,6 +11,7 @@ This is a module to be imported and used by other programs.  Running it directly
 import sys, re
 import unittest
 from collections import defaultdict
+from itertools import combinations
 # other libraries
 import HTSeq
 from BCBio import GFF
@@ -342,7 +343,30 @@ class Insertional_mutant_data():
         else:
             return False
 
-    # LATER-TODO write a function to merge two instances together!  Merge their position (or just pick one position), add read counts together (should perfect reads from the wrong position still count as perfect though?), merge their sequences (may want to keep more data about sequences! Like exact position and number of mutations) (may want to store a list of HTSeq.alignment objects instead of just sequences+counts, really)
+    def merge_mutant(self, other, dont_modify_position=False, dont_check_gene_data=False):
+        """ Merge other mutant into this mutant: merge counts, sequences, optionally position; set other's counts to 0."""
+        # merge read counts
+        self.total_read_count += other.total_read_count
+        # note: not incrementing perfect read counts, because "perfect" read counts from the wrong position aren't perfect!
+        other.total_read_count = 0
+        other.perfect_read_count = 0
+        # merge sequences
+        # LATER-TODO may want to keep more data about sequences! Like exact position and number of mutations - may want to store a list of HTSeq.alignment objects instead of just sequences+counts, really
+        for (seq,count) in other.sequences_and_counts.iteritems():
+            self.sequences_and_counts[seq] += count
+        self.unique_sequence_count = len(self.sequences_and_counts)
+        other.sequences_and_counts = defaultdict(lambda: 0)
+        other.unique_sequence_count = 0
+        # merge positions
+        if not dont_modify_position:
+            raise Exception("Mutant merging with merging positions NOT IMPLEMENTED!")
+            # TODO implement this!
+        if not dont_check_gene_data:
+            assert self.gene == other.gene
+            assert self.orientation == other.orientation
+            assert self.gene_feature == other.gene_feature
+        # TODO add unit-tests!
+
 
     def add_counts(self, total_count, perfect_count, sequence_variant_count, assume_new_sequences=False):
         """ Increment self.total_read_count, self.perfect_read_count and self.unique_sequence_count based on inputs.
@@ -464,13 +488,84 @@ class Insertional_mutant_library_dataset():
                 self.specific_region_read_counts[chrom] += read_count
             # check if there's already a mutant at that position; if not, make a new one
             if (chrom,strand,pos) not in self.mutants_by_position.keys():
-                # LATER-TODO may want to check whether the read should be added to another mutant before making a new one,
-                #  for example if it's 1bp away from an existing one?  Or just do all those group-merge checks at the end.
                 self.mutants_by_position[(chrom,strand,pos)] = Insertional_mutant_data(insertion_pos)
             # add_read adds the read to the full data; also returns True if alignment was perfect, to add to perfect_count
             if self.mutants_by_position[(chrom,strand,pos)].add_read(aln, read_count, treat_unknown_as_match):
                 self.perfect_read_count += read_count
-        # LATER-TODO at this point, may want to go over the full list of mutants and see if any of them should be merged (for example because they're only 1bp apart and one of them has only one read and the other has thousands), or have issues (like are too close together, or have more imperfect than perfect reads, or something) - or maybe that should be a separate function?
+
+
+    def merge_adjacent_mutants(self, merge_max_distance=1, merge_count_ratio=1000, dont_change_positions=False, verbosity_level=1):
+        """ Merge adjacent mutants based on strand, distance, and count ratio; optionally merge positions; print counts.
+        Merge mutants if they're distant by merge_max_distance or less and one has at least merge_count_ratio x fewer 
+         reads than the other; merge their read counts, sequences etc, and remove the lower-read-count one from 
+         self.mutants_by_position.  
+        If dont_change_positions is True, also change the full position data of the remaining mutant to reflect the merge.
+        """
+
+        # TODO implement the dont_change_positions=False option, maybe with a separate ratio cutoff?
+        # MAYBE-TODO After this merging, a dictionary by position would no longer really make sense, would it?  Well, I guess it sort of would, really.  Should be fine for now.  But I could change it to just a list - the dictionary by positoin isn't used that often, except in mutant_join_datasets.py.
+
+        if verbosity_level>0:
+            print "Merging adjacent mutants... (max distance %s, min ratio %x)"%(merge_max_distance, merge_count_ratio)
+        all_positions = sorted(self.mutants_by_position.keys())
+        adjacent_opposite_strands_count = 0
+        adjacent_same_strands_merged = 0
+        adjacent_same_strands_left = 0
+        # go over each pos1,pos2 pair (only once)
+        for ((chr1,strand1,pos1), (chr2,strand2,pos2)) in combinations(all_positions,2):
+            # if the two positions are on different chromosomes or aren't adjacent, skip
+            if not (chr1==chr2 and abs(pos2-pos1)<=merge_max_distance):  
+                continue
+            # if the two positions are adjacent but on different strands, they can't be merged, count and skip
+            if not strand1==strand2:
+                adjacent_opposite_strands_count += 1
+                if verbosity_level>1:
+                    print "LEAVING adjacent mutants: %s, strand %s %s and strand %s %s."%(chr1,strand1,pos1,strand2,pos2)
+                continue
+            # make sure these positions still exist in self.mutants_by_position (haven't been merged)
+            try:
+                mutant1 = self.mutants_by_position[(chr1,strand1,pos1)]
+            except KeyError:
+                if verbosity_level>1:
+                    print "Warning: attempting to merge a mutant that no longer exists %s with %s!"%((chr1,strand1,pos1),
+                                                                                                     (chr2,strand2,pos2))
+                continue
+            try:
+                mutant2 = self.mutants_by_position[(chr2,strand2,pos2)]
+            except KeyError:
+                if verbosity_level>1:
+                    print "Warning: attempting to merge a mutant that no longer exists %s with %s!"%((chr2,strand2,pos2),
+                                                                                                     (chr1,strand1,pos1))
+                continue
+            mutant1_readcount, mutant2_readcount = mutant1.total_read_count, mutant2.total_read_count
+            readcount_ratio = max(mutant1_readcount/mutant2_readcount, mutant2_readcount/mutant1_readcount)
+            # if the two mutants are adjacent, but the readcounts aren't different enough , count and skip
+            if not readcount_ratio>=merge_count_ratio:
+                adjacent_same_strands_left += 1
+                if verbosity_level>1:
+                    print "LEAVING adjacent mutants: %s, strand %s %s and strand %s %s"%(chr1,strand1,pos1,strand2,pos2),
+                    print ", %s and %s reads."%(mutant1_readcount, mutant2_readcount)
+                continue
+            # if the two mutants are adjacent and with sufficiently different readcounts, count, 
+            #  MERGE the lower-readcount mutant into the higher-readcount one, 
+            #  and remove the lower one from the mutants_by_position dictionary
+            adjacent_same_strands_merged += 1
+            if verbosity_level>1:
+                print "MERGING adjacent mutants: %s, strand %s %s and strand %s %s"%(chr1,strand1,pos1,strand2,pos2),
+                print ", %s and %s reads."%(mutant1_readcount, mutant2_readcount)
+            if mutant1_readcount > mutant2_readcount:
+                mutant1.merge_mutant(mutant2, dont_modify_position=dont_change_positions)
+                del self.mutants_by_position[(chr2,strand2,pos2)]
+            elif mutant2_readcount > mutant1_readcount:
+                mutant2.merge_mutant(mutant1, dont_modify_position=dont_change_positions)
+                del self.mutants_by_position[(chr1,strand1,pos1)]
+        if verbosity_level>0:
+            print "Finished merging: merged %s pairs of same-strand mutants,"%adjacent_same_strands_merged, 
+            print "left %s same-strand pairs and %s opposite-strand pairs"%(adjacent_same_strands_left, 
+                                                                            adjacent_opposite_strands_count)
+        # TODO make print_summary print this data, and I guess make self store it!  At least the merged count.
+        # TODO add unit-tests or run-tests for this!
+
 
     def find_genes_for_mutants(self, genefile, detailed_features=False, known_bad_chromosomes=[], 
                                N_run_groups=3, verbosity_level=1):
