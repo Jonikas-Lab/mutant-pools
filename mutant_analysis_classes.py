@@ -748,6 +748,13 @@ class Insertional_mutant_library_dataset():
             self.mutants_by_position[basic_position_data].gene = gene
             self.mutants_by_position[basic_position_data].orientation = orientation
             self.mutants_by_position[basic_position_data].gene_feature = gene_feature
+            # get however many specific sequences/counts are listed (this is variable)
+            sequence_fields = fields[10::2]
+            count_fields = fields[11::2]
+            for seq, count in zip(sequence_fields, count_fields):
+                if int(count)>0:
+                    assert seq!=''
+                    self.mutants_by_position[basic_position_data].sequences_and_counts[seq] += int(count)
             # add to dataset total read/mutant counts
             # MAYBE-TODO Might just want to write a function that recalculates all of the total counts below, to be ran at the end of read_from_file and add_alignment_reader_to_data and I guess find_genes_for_mutants, instead of doing it this way
             self.total_read_count += total_reads

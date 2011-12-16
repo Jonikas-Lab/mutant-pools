@@ -74,13 +74,16 @@ def define_option_parser():
 class Mutant_multi_counts():
     """ Simple container class for a mutant with multiple counts from different datasets: 
           contains a position (mutant_analysis_classes.Insertion_position instance), 
-          gene data, and a filename:count dictionary (defaultdict with default value 0).
+          gene data, a main sequence, and a filename:count dictionary (defaultdict with default value 0).
     """
+    # TODO I'm not sure if I like this - might want it to be based on the Insertional_mutant_data class in mutant_analysis_classes.py instead of separate like this!  Just use mutant-merging to merge multiple Insertional_mutant_data instances into one, and give the result an extra self.dataset_counts attribute... 
+
     def __init__(self, position, gene, orientation, gene_feature):
         self.position = position
         self.gene = gene
         self.orientation = orientation
         self.gene_feature = gene_feature
+        self.main_sequence = ''
         self.dataset_counts = defaultdict(lambda: 0)
 
 
@@ -115,6 +118,7 @@ def run_main_function(infiles, outfile, options):
     if options.verbosity_level>1:   print "merging the multi-dataset data for each mutant - time %s."%(time.ctime())
     all_mutants = []
     for mutant_position in all_mutant_positions:
+        # TODO most of this mutant-merging could probably just be done using the mutant-merging functionality of the standard mutant class, without writing something completely new for it... This new Mutant_multi_counts class seems like ugly code duplication.
         # make a dictionary of full mutant data per dataset
         current_mutant_data = {}
         for infile,dataset in all_datasets:
@@ -137,6 +141,18 @@ def run_main_function(infiles, outfile, options):
         else:                           count_getter_function = lambda mutant: mutant.total_read_count
         for infile,mutant in current_mutant_data.items():
             current_mutant.dataset_counts[infile] = count_getter_function(mutant)
+        # figure out the overall main sequence - if it's always the same, take that, else take the one with most counts
+        sequence_set = set([mutant.get_main_sequence() for mutant in current_mutant_data.values()])
+        if len(set([seq for seq,count in sequence_set]))==1:      
+            current_mutant.main_sequence = sequence_set.pop()[0]
+        else:
+            print("Warning: different main sequences found for a mutant in different datasets! %s Result may be inaccurate."%sequence_set)
+            sequence_counts = defaultdict(lambda: 0)
+            # TODO the result here isn't accurate, because I'm JUST counting the main sequence from each mutant, instead of counting ALL sequences!  For instance if mutA has 100 A and 99 G, and mutB has 50 G, the main sequence should be G, but it will be A...
+            for (seq,count) in sequence_set:
+                sequence_counts[seq] += count
+            sequences_by_count = sorted(sequence_counts.iteritems(), key=lambda x: x[1], reverse=True)
+            current_mutant.main_sequence = sequences_by_count[0][0]
         # make sure the mutant has a non-zero count in all/any datasets (may not be true if we're taking perfect counts)
         if options.output_only_shared_mutants:
             if all(current_mutant.dataset_counts.values()):     all_mutants.append(current_mutant)
@@ -163,7 +179,7 @@ def run_main_function(infiles, outfile, options):
         # print header line 
         if options.header_level>0:
             if options.header_level==2:     OUTFILE.write("# ")
-            OUTFILE.write("chromosome\tstrand\tmin_position\tfull_position\tgene\torientation\tfeature\t")
+            OUTFILE.write("chromosome\tstrand\tmin_position\tfull_position\tgene\torientation\tfeature\tmain_sequence\t")
             OUTFILE.write('\t'.join([os.path.splitext(os.path.basename(infile))[0] for infile,dataset in all_datasets]))
             OUTFILE.write("\n")
         all_mutants.sort(key = lambda m: m.position)
@@ -171,7 +187,8 @@ def run_main_function(infiles, outfile, options):
             # print basic info (chrom, strand, min_pos, full_pos, gene, orientation, feature) from first_dataset_mutants
             # then print the read count (total or perfect depending on options) from each dataset
             all_data = (mutant.position.chromosome, mutant.position.strand, mutant.position.min_position, 
-                        mutant.position.full_position, mutant.gene, mutant.orientation, mutant.gene_feature)
+                        mutant.position.full_position, mutant.gene, mutant.orientation, mutant.gene_feature, 
+                        mutant.main_sequence)
             for infile,dataset in all_datasets:
                 all_data += (mutant.dataset_counts[infile],)
             OUTFILE.write('\t'.join([str(x) for x in all_data]) + '\n')
