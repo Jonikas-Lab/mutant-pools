@@ -360,12 +360,12 @@ class Insertional_mutant_data():
         # merge positions
         if not dont_modify_position:
             raise Exception("Mutant merging with merging positions NOT IMPLEMENTED!")
-            # TODO implement this!
+            # LATER-TODO implement this!
         if not dont_check_gene_data:
             assert self.gene == other.gene
             assert self.orientation == other.orientation
             assert self.gene_feature == other.gene_feature
-        # TODO add unit-tests!
+        # LATER-TODO add unit-tests!
 
 
     def add_counts(self, total_count, perfect_count, sequence_variant_count, assume_new_sequences=False):
@@ -436,6 +436,7 @@ class Insertional_mutant_library_dataset():
         self.mutants_in_genes, self.mutants_not_in_genes, self.mutants_undetermined = 0,0,0
         self.mutant_counts_by_orientation = defaultdict(lambda: 0)
         self.mutant_counts_by_feature = defaultdict(lambda: 0)
+        self.mutant_merging_info = []
     
     def add_discarded_reads(self, N, reset_count=False):
         """ Add N to self.discarded_read_count (or set self.discarded_read_count to N if reset_count is True). """
@@ -502,11 +503,11 @@ class Insertional_mutant_library_dataset():
         If dont_change_positions is True, also change the full position data of the remaining mutant to reflect the merge.
         """
 
-        # TODO implement the dont_change_positions=False option, maybe with a separate ratio cutoff?
+        # LATER-TODO implement the dont_change_positions=False option, maybe with a separate ratio cutoff?
         # MAYBE-TODO After this merging, a dictionary by position would no longer really make sense, would it?  Well, I guess it sort of would, really.  Should be fine for now.  But I could change it to just a list - the dictionary by positoin isn't used that often, except in mutant_join_datasets.py.
 
-        if verbosity_level>0:
-            print "Merging adjacent mutants... (max distance %s, min ratio %x)"%(merge_max_distance, merge_count_ratio)
+        if verbosity_level>1:
+            print "Merging adjacent mutants: max distance %s, min count ratio %s..."%(merge_max_distance,merge_count_ratio)
         all_positions = sorted(self.mutants_by_position.keys())
         adjacent_opposite_strands_count = 0
         adjacent_same_strands_merged = 0
@@ -520,7 +521,7 @@ class Insertional_mutant_library_dataset():
             if not strand1==strand2:
                 adjacent_opposite_strands_count += 1
                 if verbosity_level>1:
-                    print "LEAVING adjacent mutants: %s, strand %s %s and strand %s %s."%(chr1,strand1,pos1,strand2,pos2)
+                    print "  LEAVING adjacent mutants: %s strand %s %s and strand %s %s."%(chr1,strand1,pos1,strand2,pos2)
                 continue
             # make sure these positions still exist in self.mutants_by_position (haven't been merged)
             try:
@@ -543,28 +544,27 @@ class Insertional_mutant_library_dataset():
             if not readcount_ratio>=merge_count_ratio:
                 adjacent_same_strands_left += 1
                 if verbosity_level>1:
-                    print "LEAVING adjacent mutants: %s, strand %s %s and strand %s %s"%(chr1,strand1,pos1,strand2,pos2),
-                    print ", %s and %s reads."%(mutant1_readcount, mutant2_readcount)
+                    print "  LEAVING adjacent mutants: %s strand %s %s and strand %s %s,"%(chr1,strand1,pos1,strand2,pos2),
+                    print "%s and %s reads."%(mutant1_readcount, mutant2_readcount)
                 continue
             # if the two mutants are adjacent and with sufficiently different readcounts, count, 
             #  MERGE the lower-readcount mutant into the higher-readcount one, 
             #  and remove the lower one from the mutants_by_position dictionary
             adjacent_same_strands_merged += 1
             if verbosity_level>1:
-                print "MERGING adjacent mutants: %s, strand %s %s and strand %s %s"%(chr1,strand1,pos1,strand2,pos2),
-                print ", %s and %s reads."%(mutant1_readcount, mutant2_readcount)
+                print " MERGING adjacent mutants: %s, strand %s %s and strand %s %s,"%(chr1,strand1,pos1,strand2,pos2),
+                print "%s and %s reads."%(mutant1_readcount, mutant2_readcount)
             if mutant1_readcount > mutant2_readcount:
                 mutant1.merge_mutant(mutant2, dont_modify_position=dont_change_positions)
                 del self.mutants_by_position[(chr2,strand2,pos2)]
             elif mutant2_readcount > mutant1_readcount:
                 mutant2.merge_mutant(mutant1, dont_modify_position=dont_change_positions)
                 del self.mutants_by_position[(chr1,strand1,pos1)]
-        if verbosity_level>0:
-            print "Finished merging: merged %s pairs of same-strand mutants,"%adjacent_same_strands_merged, 
-            print "left %s same-strand pairs and %s opposite-strand pairs"%(adjacent_same_strands_left, 
-                                                                            adjacent_opposite_strands_count)
-        # TODO make print_summary print this data, and I guess make self store it!  At least the merged count.
-        # TODO add unit-tests or run-tests for this!
+        self.mutant_merging_info.append("merged %s pairs of adjacent mutants "%adjacent_same_strands_merged 
+                                        +"(max distance %s, min count ratio %s) "%(merge_max_distance, merge_count_ratio))
+        self.mutant_merging_info.append("  (kept %s pairs on same strand "%adjacent_same_strands_left 
+                                        +"and %s on opposite strands)"%adjacent_opposite_strands_count)
+        # LATER-TODO add unit-tests or run-tests for this!
 
 
     def find_genes_for_mutants(self, genefile, detailed_features=False, known_bad_chromosomes=[], 
@@ -656,6 +656,8 @@ class Insertional_mutant_library_dataset():
                                                                                      (len(self.mutants_by_position)))
         OUTPUT.write(line_prefix+"(read is at %s end of cassette, in %s direction to cassette)\n"%(self.cassette_end, 
                                                 {'?': '?', True: 'reverse', False: 'forward'}[self.reads_are_reverse]))
+        for line in self.mutant_merging_info:
+            OUTPUT.write(line_prefix+line+'\n')
         g = self.find_most_common_mutant()
         OUTPUT.write(line_prefix+"Most common mutant: %s, position %s, %s strand:"%(g.position.chromosome,
                                                                            g.position.full_position, g.position.strand))
