@@ -146,11 +146,12 @@ def run_main_function(infiles, outfile, options):
         if len(set([seq for seq,count in sequence_set]))==1:      
             current_mutant.main_sequence = sequence_set.pop()[0]
         else:
-            print("Warning: different main sequences found for a mutant in different datasets! %s Result may be inaccurate."%sequence_set)
+            print("Warning: different main sequences found for a mutant in different datasets! %s  "%sequence_set
+                  + "Taking the sequence with the most overall counts.")
             sequence_counts = defaultdict(lambda: 0)
-            # TODO the result here isn't accurate, because I'm JUST counting the main sequence from each mutant, instead of counting ALL sequences!  For instance if mutA has 100 A and 99 G, and mutB has 50 G, the main sequence should be G, but it will be A...
-            for (seq,count) in sequence_set:
-                sequence_counts[seq] += count
+            for mutant in current_mutant_data.values():
+                for (seq,count) in mutant.sequences_and_counts.items():
+                    sequence_counts[seq] += count
             sequences_by_count = sorted(sequence_counts.iteritems(), key=lambda x: x[1], reverse=True)
             current_mutant.main_sequence = sequences_by_count[0][0]
         # make sure the mutant has a non-zero count in all/any datasets (may not be true if we're taking perfect counts)
