@@ -1,0 +1,74 @@
+Current output on the actual chlamy annotation file I'm using, with default options:  Looks good! All the genes have a sensible structure (no overlapping genes or features, no exons outside of UTRs, all gene IDs are unique, no genes without any features, etc).  There are many genes with multiple UTRs, which probably means splice variants or such - be careful.  
+
+deepseq_analysis_vs_genome/code >> gff_examine_file.py -n2 reference_data/Creinhardtii_169_gene.gff3
+
+ *** Type counts ***
+{'gff_type': {('CDS',): 144581,
+              ('five_prime_UTR',): 19233,
+              ('gene',): 17114,
+              ('mRNA',): 17114,
+              ('three_prime_UTR',): 17564}}
+
+ *** Gene overlaps ***
+Total 17114 genes on 86 chromosomes.
+Total genome length 111811715bp, with 80% covered by genes.
+No overlapping genes.
+Minimum distance between two genes is 1 (genes Cre01.g004250, Cre01.g004300).
+All gene IDs are unique.
+
+ *** Gene counts by feature structure ***
+No genes have overlapping features.
+The mRNA position is the same as gene position for all genes.
+No gap between mRNA edges and first/last features in any genes.
+
+ * Gene counts by simplified feature structure (adjacent exons/UTRs combined) (total 3 structures)
+17034 genes [5'UTR/s, exon/s, 3'UTR/s]:  Cre03.g164550, Cre10.g444250
+44 genes [exon/s, 3'UTR/s]:  Cre67.g793800, Cre78.g795700
+36 genes [5'UTR/s, exon/s]:  Cre75.g795550, Cre82.g796050
+
+ * Gene counts by exon number (total 30 values)
+1211 genes with 1 exons:  Cre08.g374913, Cre18.g746650
+1216 genes with 2 exons:  Cre07.g343300, Cre10.g444317
+1419 genes with 3 exons:  Cre13.g571450, Cre01.g060250
+1458 genes with 4 exons:  Cre03.g164550, Cre16.g683250
+1479 genes with 5 exons:  Cre06.g276400, Cre06.g288300
+1451 genes with 6 exons:  Cre13.g590350, Cre03.g181950
+1320 genes with 7 exons:  Cre07.g323000, Cre23.g767250
+1196 genes with 8 exons:  Cre06.g281600, Cre05.g240050
+961 genes with 9 exons:  Cre17.g724800, Cre03.g195050
+880 genes with 10 exons:  Cre16.g695900, Cre09.g410750
+687 genes with 11 exons:  Cre02.g115508, Cre02.g117650
+624 genes with 12 exons:  Cre03.g209700, Cre10.g444250
+457 genes with 13 exons:  Cre03.g185950, Cre12.g525400
+422 genes with 14 exons:  Cre01.g026250, Cre16.g673800
+307 genes with 15 exons:  Cre12.g542100, Cre12.g553450
+313 genes with 16 exons:  Cre06.g255000, Cre06.g294200
+229 genes with 17 exons:  Cre07.g332500, Cre07.g355450
+216 genes with 18 exons:  Cre01.g070400, Cre06.g264250
+151 genes with 19 exons:  Cre15.g635750, Cre01.g004850
+135 genes with 20 exons:  Cre07.g332750, Cre12.g531950
+134 genes with 21 exons:  Cre10.g420500, Cre14.g610750
+112 genes with 22 exons:  Cre15.g641150, Cre16.g696050
+94 genes with 23 exons:  Cre05.g237650, Cre01.g052650
+80 genes with 24 exons:  Cre67.g793800, Cre17.g708400
+79 genes with 25 exons:  Cre12.g539650, Cre13.g590150
+58 genes with 26 exons:  Cre03.g189605, Cre11.g473500
+45 genes with 27 exons:  Cre06.g304550, Cre02.g138950
+50 genes with 28 exons:  Cre01.g073050, Cre17.g720700
+41 genes with 29 exons:  Cre04.g227700, Cre14.g612200
+289 genes with 30+ exons:  Cre13.g586650, Cre14.g631150
+
+ * Gene counts by 5'UTR number (total 8 values)
+44 genes with 0 5'UTRs:  Cre67.g793800, Cre78.g795700
+15194 genes with 1 5'UTRs:  Cre03.g164550, Cre10.g444250
+1664 genes with 2 5'UTRs:  Cre02.g115508, Cre02.g117650
+164 genes with 3 5'UTRs:  Cre36.g784300, Cre02.g133685
+34 genes with 4 5'UTRs:  Cre38.g785150, Cre02.g129200
+9 genes with 5 5'UTRs:  Cre02.g078300, Cre09.g393850
+4 genes with 6 5'UTRs:  Cre03.g157500, Cre05.g237900
+1 genes with 14 5'UTRs:  Cre10.g425250
+
+ * Gene counts by 3'UTR number (total 3 values)
+36 genes with 0 3'UTRs:  Cre75.g795550, Cre82.g796050
+16592 genes with 1 3'UTRs:  Cre03.g164550, Cre10.g444250
+486 genes with 2 3'UTRs:  Cre02.g075500, Cre17.g722550

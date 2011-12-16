@@ -17,6 +17,7 @@ import filecmp
 import pprint
 # other libraries
 from BCBio import GFF
+from Bio import SeqIO
 # my modules
 from general_utilities import count_list_values, split_into_N_sets_by_counts
 
@@ -69,7 +70,7 @@ def check_for_overlapping_features(mRNA, gene_name):
 def find_min_gene_distance(sequence_record, starting_values=None):
     """ Given a GFF record from BCBio.GFF parser, return the lowest distance between adjacent genes, and the two gene IDs. 
     May not be accurate if some genes are completely contained inside other genes. """
-    min_distance = sequence_record.seq._length if starting_values is None else starting_values[0]
+    min_distance = len(sequence_record.seq) if starting_values is None else starting_values[0]
     min_gene1 = 'none' if starting_values is None else starting_values[1]
     min_gene2 = 'none' if starting_values is None else starting_values[2]
     all_gene_positions = []
@@ -87,16 +88,18 @@ def find_min_gene_distance(sequence_record, starting_values=None):
     return min_distance, min_gene1, min_gene2
 
 
-def check_gene_coverage(sequence_record, length=None, check_for_overlap=True):
-    """ Given a GFF sequence record (from BCBio.GFF parser), determine what fraction of its length is covered by genes.
-    Length can be passed separately, or determined from the record (Caution: approximate! First-last feature only).
+def check_gene_coverage(sequence_records, check_for_overlap=True):
+    """ Given a list of GFF sequence records (from BCBio.GFF parser), return the fraction of their length covered by genes.
+    (Caution: length may be approximate! If gff parsing was done based on a fasta file, length is accurate; 
+      otherwise it's an underestimate based on last feature position).
     """
-    if length is None:  length = sequence_record.seq._length
-
+    length_total = 0
     gene_length_total = 0
-    for gene in sequence_record.features:
-        gene_length_total += gene.location.end.position - gene.location.start.position
-    gene_coverage_fraction = float(gene_length_total)/length
+    for sequence_record in sequence_records:
+        length_total += len(sequence_record.seq)
+        for gene in sequence_record.features:
+            gene_length_total += gene.location.end.position - gene.location.start.position
+    gene_coverage_fraction = float(gene_length_total)/length_total
 
     # Check for overlapping genes and print a warning, since overlapping genes will make the measurement inaccurate
     if check_for_overlap:
@@ -152,6 +155,8 @@ def define_option_parser():
     parser.add_option('-g', '--gene_counts', action="store_true", default=False, 
                       help="Count genes per chromosome, and the approximate fraction of each chromosome covered by genes. "
                           +"Default %default") 
+    parser.add_option('-a', '--fasta_sequence_file', default='', metavar='FILE', 
+                      help="Fasta file containing the sequences listed in gff infile (default %default).")
     parser.add_option('-G', '--no_gene_counts', action="store_false", dest='gene_counts')
     parser.add_option('-d', '--print_seq_details', action="store_true", default=False, 
                       help='Print full GFF details for each chromosome (only if -g). Default %default') 
@@ -168,9 +173,9 @@ def define_option_parser():
                       help='With -f option, show full as well as simplified feature structures. Default %default') 
     parser.add_option('-U','--no_full_feature_structures', action="store_false",dest='full_feature_structures')
     parser.add_option('-n', '--genes_to_display', type="int", default=5, metavar='N', 
-                      help="When showing gene counts per group (-f), show N example genes (-1: all) (default %default) ")
+                      help="When showing gene counts per group (-f), show N example genes (-1: all) (default %default).")
     parser.add_option('-e', '--exon_number_cutoff', type="int", default=30, metavar='N', 
-                      help="When categorizing genes by exon number, lump together all above N (default %default) ")
+                      help="When categorizing genes by exon number, lump together all above N (default %default).")
     parser.add_option('-Y', '--N_detail_run_groups', type="int", default=5, metavar='N', 
                       help="How many passes to split reading the file into with -f option (default %default) "
                           +"- may take a lot of memory (and CPU) if read in a single pass; too many passes waste CPU.")
@@ -242,7 +247,7 @@ def run_main_function(infile, options):
     if options.gene_counts or options.print_seq_details or options.check_gene_overlaps:
         if options.gene_counts or options.print_seq_details:
             print "\n *** Gene and other data per chromosome ***"
-        if options.gene_counts:
+        if options.gene_counts and not options.fasta_sequence_file:
             print "       (Caution: approximate sequence length is calculated to last gene only!)"
         if options.gene_counts or options.print_seq_details:
             print ""
@@ -252,14 +257,22 @@ def run_main_function(infile, options):
             overlapping_gene_pairs = []
             min_gene_distance_data = None
             gene_IDs = []
+        # get the sequences from the fasta file if present, otherwise leave an empty dict to overlay the gff data on
+        if options.fasta_sequence_file:
+            with open(options.fasta_sequence_file) as FASTAFILE:
+                fasta_seq_dict = SeqIO.to_dict(SeqIO.parse(FASTAFILE, "fasta"))
+        else:
+            fasta_seq_dict = {}
         with open(infile) as INFILE:
-            for record in GFF.parse(INFILE, limit_info={'gff_type': ['gene']}):
+            all_records = GFF.parse(INFILE, limit_info={'gff_type': ['gene']}, base_dict=fasta_seq_dict)
+            if options.check_gene_overlaps:
+                total_length = 0
+            for record in all_records:
                 if options.gene_counts or options.print_seq_details:
                     print " * sequence %s: %s genes"%(record.id, len(record.features))
                 if options.gene_counts:
-                    gene_coverage_percent = "%.0f%%"%(100*check_gene_coverage(record,None,False))
-                    print "Approximate length %s bp, with %s covered by genes"%(record.seq._length, gene_coverage_percent)
-                    # MAYBE-TODO get the chromosome length from genome fasta file - I think GFF parser can add those?
+                    gene_coverage_percent = "%.0f%%"%(100*check_gene_coverage([record],False))
+                    print "length %s bp, with %s covered by genes"%(len(record.seq), gene_coverage_percent)
                 if options.print_seq_details:               
                     print "GFF parser details:"
                     print record
@@ -267,6 +280,7 @@ def run_main_function(infile, options):
                     print ""
                 if options.check_gene_overlaps:
                     total_chromosomes += 1
+                    total_length += len(record.seq)
                     total_genes += len(record.features)
                     overlapping_gene_pairs += check_for_overlapping_genes(record)
                     min_gene_distance_data = find_min_gene_distance(record, min_gene_distance_data)
@@ -274,10 +288,17 @@ def run_main_function(infile, options):
 
     if options.check_gene_overlaps:
         print "\n *** Gene overlaps ***"
+        with open(infile) as INFILE:
+            all_records = GFF.parse(INFILE, limit_info={'gff_type': ['gene']}, base_dict=fasta_seq_dict)
+            total_gene_coverage_percent = "%.0f%%"%(100*check_gene_coverage(all_records, False))
         print "Total %s genes on %s chromosomes."%(total_genes, total_chromosomes)
+        print "Total genome length %sbp, with %s covered by genes."%(total_length, total_gene_coverage_percent)
+
+        # TODO calculate the number of ambiguous bases, inside and outside genes
+
         for geneA,geneB in overlapping_gene_pairs:  print "Overlapping gene pair!  IDs: %s, %s."%(geneA,geneB)
         if not overlapping_gene_pairs:              print "No overlapping genes."
-        print "Minimum distance between two genes is %s (genes %s, %s)."%min_gene_distance_data 
+        print "Minimum distance between two genes is %s (genes %s, %s)."%min_gene_distance_data
         IDs_are_unique = True
         for gene_ID,count in count_list_values(gene_IDs).iteritems():
             if count>1:    
@@ -292,6 +313,9 @@ def run_main_function(infile, options):
         genes_by_feature_structure = defaultdict(set)       # set() returns an empty set
         genes_with_gene_mRNA_gap = set()
         genes_with_mRNA_feature_gap = set()
+        overlapping_feature_genes = []
+
+        # TODO calculate total gene area covered by exons/UTRs/introns?  (and print a warning that it only applies to genes with a normal structure, i.e. a single mRNA covering the whole gene.)
 
         ## Go over subsets of chromosomes at once, to avoid reading the whole file into memory at once
         # First get the list of all chromosomes in the file, WITHOUT reading it all into memory
@@ -303,7 +327,6 @@ def run_main_function(infile, options):
         #  to avoid using too much memory (by reading the whole file at once), 
         #   or using too much time (by reading the whole file for each chromosome/scaffold)
         chromosome_sets = split_into_N_sets_by_counts(chromosomes_and_counts, options.N_detail_run_groups)
-        overlapping_feature_genes = []
 
         ### go over all mutants on each chromosome, figure out which gene they're in (if any), keep track of totals
         # keep track of all the mutant and reference chromosomes to catch chromosomes that are absent in reference
