@@ -36,6 +36,8 @@ def define_option_parser():
     parser = OptionParser(__doc__)
 
     ### functionality options
+    parser.add_option('-G', '--gene_annotation_file', metavar='FILE',
+                      help="Tab-separated gene annotated file (must have Cre gene IDs in first column) (default %default)")
     parser.add_option('-p', '--perfect_reads_only', action="store_true", default=False,
                       help="Take perfect read counts (default %default)")
     parser.add_option('-a', '--all_reads', action="store_false", dest='perfect_reads_only',
@@ -71,6 +73,105 @@ def define_option_parser():
     return parser
 
 
+def parse_gene_annotation_file(gene_annotation_filename, header_list=None, add_empty_fields_to_length=False, 
+                               strip_last_fields=0, field_delimiter='.', ignore_comments=False, verbosity_level=1):
+    """ Parse tab-separated gene annotation file; return a geneID:data_list dict, and a column header list (if present).
+    Try to automatically detect if the file has a header; optionally use header provided; 
+     return None for header if none was provided or detected. 
+    Remove columns with no contents.
+    """
+    if verbosity_level>0:
+        print " *** Parsing file %s for gene annotation info..."%gene_annotation_filename
+
+    # parse the lines into lists of tab-separated fields
+    data_by_row = []
+    for line in open(gene_annotation_filename):
+        if ignore_comments and line[0]=='#':    continue
+        fields = line.strip().split('\t')
+        data_by_row.append(fields)
+        
+    # if the first line doesn't start with a Cre* gene ID, assume it's a header
+    if not data_by_row[0][0].startswith("Cre"):
+        header = data_by_row[0]
+        del data_by_row[0]
+        if verbosity_level>0:
+            print "Assuming the first line is a header: %s"%'\t'.join(header)
+    else: 
+        header = None
+    # if any of the other lines doesn't start with a Cre* gene ID, fail!
+    for row in data_by_row:
+        if not row[0].startswith("Cre"):
+            sys.exit("Can't parse file %s - found line that doesn't start with a Cre gene ID!"%(gene_annotation_filename, 
+                                                                                                '\t'.join(row)))
+    # use the header from arguments if provided
+    if header_list is not None:
+        header = header_list
+        if verbosity_level>1: print "Using header provided: %s"%'\t'.join(header)
+
+    # check that all the data lengths line up (if they don't, don't throw an error
+    mismatched_lengths = False
+    data_lengths = set([len(row) for row in data_by_row])
+    if not len(data_lengths)==1:
+        if verbosity_level>1 or (not add_empty_fields_to_length and verbosity_level>0):
+            print "Warning: not all data rows have the same length! Lengths found: %s"%list(data_lengths)
+        mismatched_lengths = True
+    if header is not None and len(header) not in data_lengths:
+        if verbosity_level>1 or (not add_empty_fields_to_length and verbosity_level>0):
+            print("Warning: header has a different number of fields than the data! "
+                  +"Header length: %s. Data lengths: %s"%(len(header),list(data_lengths)))
+        mismatched_lengths = True
+    
+    if len(data_lengths)>1 and add_empty_fields_to_length:
+        max_length = max(max(data_lengths), len(header))
+        if verbosity_level>0:
+            print "Data field numbers vary between rows - padding all lower-length data rows to length %s"%max_length
+        for row in data_by_row:
+            if len(row)<max_length:
+                row += ['' for x in range(max_length-len(row))]
+        if len(header)<max_length:
+            header += ['?' for x in range(max_length-len(header))]
+        mismatched_lengths = False
+
+    # remove empty columns (only if all the data lengths match!)
+    if not mismatched_lengths:
+        data_length = len(header)
+        columns_to_remove = []
+        for pos in range(data_length):
+            values = set([row[pos] for row in data_by_row])
+            if len(values)==1:
+                value = values.pop()
+                if value.strip()=='':
+                    if verbosity_level>0:
+                        if header:  print "Column %s (%s) is always empty - removing it."%(pos+1, header[pos])
+                        else:       print "Column %s is always empty - removing it."%(pos+1)
+                    columns_to_remove.append(pos)
+                else:
+                    if verbosity_level>0:
+                        print "Note: all the values in column %s are the same! (%s)"%(pos+1, value)
+        for pos in sorted(columns_to_remove, reverse=True):
+            if header:  del header[pos]
+            for row in data_by_row: 
+                del row[pos]
+
+    # convert the list-format data into a by-gene dictionary
+    data_by_gene = {}
+    for row in data_by_row:
+        gene = row[0]
+        if strip_last_fields:
+            gene = field_delimiter.join(gene.split(field_delimiter)[:-strip_last_fields])
+        data = row[1:]
+        if gene in data_by_gene:
+            if verbosity_level>0:
+                print "Warning: gene %s appears twice in the data! Using last appearance."%gene
+        data_by_gene[gene] = data
+    # remove the first word from the header, since it should be "gene ID" or such
+    if header:  del header[0]
+
+    if verbosity_level>0:
+        print " *** DONE Parsing gene annotation file"
+    return data_by_gene, header
+
+
 class Mutant_multi_counts():
     """ Simple container class for a mutant with multiple counts from different datasets: 
           contains a position (mutant_analysis_classes.Insertion_position instance), 
@@ -91,6 +192,8 @@ def run_main_function(infiles, outfile, options):
     """ Run the main functionality of the module (see module docstring for more information), excluding testing.
     The options argument should be generated by an optparse parser.
     """
+
+    # TODO this is a ridiculous wall of code, split it into functions!!  Or extract some functionality to Mutant_multi_counts class or something... 
 
     summary_lines = []
     dataset_combination_info = "every dataset" if options.output_only_shared_mutants else "at least one dataset"
@@ -146,8 +249,9 @@ def run_main_function(infiles, outfile, options):
         if len(set([seq for seq,count in sequence_set]))==1:      
             current_mutant.main_sequence = sequence_set.pop()[0]
         else:
-            print("Warning: different main sequences found for a mutant in different datasets! %s  "%sequence_set
-                  + "Taking the sequence with the most overall counts.")
+            if options.verbosity_level>1:
+                print("Warning: different main sequences found for a mutant in different datasets! %s  "%sequence_set
+                      + "Taking the sequence with the most overall counts.")
             sequence_counts = defaultdict(lambda: 0)
             for mutant in current_mutant_data.values():
                 for (seq,count) in mutant.sequences_and_counts.items():
@@ -164,6 +268,29 @@ def run_main_function(infiles, outfile, options):
     summary_lines.append("total %s mutants with a non-zero %s count in %s"%(len(all_mutants), 
                                        ('perfect' if options.perfect_reads_only else 'total'), dataset_combination_info))
     if options.verbosity_level>0:   print summary_lines[-1]
+
+    # if requested, add gene annotation info from separate file
+    if not options.gene_annotation_file:
+        gene_annotation_dict, gene_annotation_header = None, None
+    elif not os.path.lexists(options.gene_annotation_file):
+        print "Warning: couldn't find the %s gene annotation file! Going on without it."%options.gene_annotation_file
+        gene_annotation_dict, gene_annotation_header = None, None
+    else:
+        # special case for the Creinhardtii_169_annotation_info.txt file (from README)
+        if os.path.basename(options.gene_annotation_file)=='Creinhardtii_169_annotation_info.txt':
+            header = ['Phytozome transcript name', 'PFAM', 'Panther', 'KOG', 'KEGG ec', 'KEGG Orthology', 
+                      'best arabidopsis TAIR10 hit name', 'best arabidopsis TAIR10 hit symbol', 
+                      'best arabidopsis TAIR10 hit defline', 
+                      'best rice hit name', 'best rice hit symbol', 'best rice hit defline']
+            strip_last_fields = 2
+            pad_lines = True
+        else:
+            header = None
+            strip_last_fields = 0
+            pad_lines = False
+        gene_annotation_dict, gene_annotation_header = parse_gene_annotation_file(options.gene_annotation_file, 
+                                          header_list=header, add_empty_fields_to_length=pad_lines, 
+                                          strip_last_fields=strip_last_fields, verbosity_level=options.verbosity_level)
 
     # print full data to outfile
     if options.verbosity_level>1:   print "printing output to file %s - time %s."%(outfile, time.ctime())
@@ -182,17 +309,25 @@ def run_main_function(infiles, outfile, options):
             if options.header_level==2:     OUTFILE.write("# ")
             OUTFILE.write("chromosome\tstrand\tmin_position\tfull_position\tgene\torientation\tfeature\tmain_sequence\t")
             OUTFILE.write('\t'.join([os.path.splitext(os.path.basename(infile))[0] for infile,dataset in all_datasets]))
+            if gene_annotation_dict is not None:
+                if gene_annotation_header is not None:  OUTFILE.write('\t' + '\t'.join(gene_annotation_header))
+                else:                                   OUTFILE.write('\t' + '\tgene_annotation_data')
             OUTFILE.write("\n")
+        # print the data for each mutant (sort mutants by position)
         all_mutants.sort(key = lambda m: m.position)
         for mutant in all_mutants:
-            # print basic info (chrom, strand, min_pos, full_pos, gene, orientation, feature) from first_dataset_mutants
-            # then print the read count (total or perfect depending on options) from each dataset
-            all_data = (mutant.position.chromosome, mutant.position.strand, mutant.position.min_position, 
-                        mutant.position.full_position, mutant.gene, mutant.orientation, mutant.gene_feature, 
-                        mutant.main_sequence)
+            # print basic info (chrom, strand, min_pos, full_pos, gene, orientation, feature)
+            all_mutant_data = [mutant.position.chromosome, mutant.position.strand, mutant.position.min_position, 
+                               mutant.position.full_position, mutant.gene, mutant.orientation, mutant.gene_feature, 
+                               mutant.main_sequence]
+            # print the read count (total or perfect depending on options) from each dataset
             for infile,dataset in all_datasets:
-                all_data += (mutant.dataset_counts[infile],)
-            OUTFILE.write('\t'.join([str(x) for x in all_data]) + '\n')
+                all_mutant_data += (mutant.dataset_counts[infile],)
+            # print the gene annotation info if present
+            if gene_annotation_dict is not None:
+                try:                all_mutant_data += gene_annotation_dict[mutant.gene]
+                except KeyError:    all_mutant_data += ['NO GENE DATA']
+            OUTFILE.write('\t'.join([str(x) for x in all_mutant_data]) + '\n')
 
 
 if __name__ == "__main__":
