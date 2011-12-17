@@ -291,6 +291,9 @@ def run_main_function(infiles, outfile, options):
         gene_annotation_dict, gene_annotation_header = parse_gene_annotation_file(options.gene_annotation_file, 
                                           header_list=header, add_empty_fields_to_length=pad_lines, 
                                           strip_last_fields=strip_last_fields, verbosity_level=options.verbosity_level)
+        # change spaces to underscores in headers for readability
+        if gene_annotation_header:
+            gene_annotation_header = [s.replace(' ','_') for s in gene_annotation_header]
 
     # print full data to outfile
     if options.verbosity_level>1:   print "printing output to file %s - time %s."%(outfile, time.ctime())
@@ -308,7 +311,8 @@ def run_main_function(infiles, outfile, options):
         if options.header_level>0:
             if options.header_level==2:     OUTFILE.write("# ")
             OUTFILE.write("chromosome\tstrand\tmin_position\tfull_position\tgene\torientation\tfeature\tmain_sequence\t")
-            OUTFILE.write('\t'.join([os.path.splitext(os.path.basename(infile))[0] for infile,dataset in all_datasets]))
+            OUTFILE.write('\t'.join(['reads_in_'+os.path.splitext(os.path.basename(infile))[0] 
+                                     for infile,dataset in all_datasets]))
             if gene_annotation_dict is not None:
                 if gene_annotation_header is not None:  OUTFILE.write('\t' + '\t'.join(gene_annotation_header))
                 else:                                   OUTFILE.write('\t' + '\tgene_annotation_data')
