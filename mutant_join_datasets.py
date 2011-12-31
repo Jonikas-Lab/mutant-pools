@@ -294,6 +294,8 @@ def run_main_function(infiles, outfile, options):
         # change spaces to underscores in headers for readability
         if gene_annotation_header:
             gene_annotation_header = [s.replace(' ','_') for s in gene_annotation_header]
+        # make a data line for missing data, with the same number of (empty) fields
+        missing_gene_annotation_data = ['NO GENE DATA'] + ['' for x in range(len(gene_annotation_dict.values()[0])-1)]
 
     # print full data to outfile
     if options.verbosity_level>1:   print "printing output to file %s - time %s."%(outfile, time.ctime())
@@ -330,7 +332,7 @@ def run_main_function(infiles, outfile, options):
             # print the gene annotation info if present
             if gene_annotation_dict is not None:
                 try:                all_mutant_data += gene_annotation_dict[mutant.gene]
-                except KeyError:    all_mutant_data += ['NO GENE DATA']
+                except KeyError:    all_mutant_data += missing_gene_annotation_data
             OUTFILE.write('\t'.join([str(x) for x in all_mutant_data]) + '\n')
 
 
