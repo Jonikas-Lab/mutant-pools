@@ -311,7 +311,6 @@ def run_main_function(infiles, outfile, options):
             OUTFILE.write("### DATA:\n")
         # print header line 
         if options.header_level>0:
-            if options.header_level==2:     OUTFILE.write("# ")
             OUTFILE.write("chromosome\tstrand\tmin_position\tfull_position\tgene\torientation\tfeature\tmain_sequence\t")
             OUTFILE.write('\t'.join(['reads_in_'+os.path.splitext(os.path.basename(infile))[0] 
                                      for infile,dataset in all_datasets]))
