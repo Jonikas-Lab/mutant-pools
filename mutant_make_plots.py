@@ -39,13 +39,13 @@ def get_sample(dataset, all_mutants, replace_zeros = 0.1):
         sample_data.append(value)
     return sample_data
 
-def remove_nan_inf_from_two_samples(sample1, sample2):
+def remove_nan_inf_from_two_samples(sample1, sample2, min_val=None):
     """ Given two float lists, return two lists with any elements that are nan/inf in EITHER list removed from both. """
-    assert len(sample1)==len(sample2)
+    assert len(sample1)==len(sample2), "two samples aren't the same length! %s, %s."%(len(sample1),len(sample2))
     new_sample1, new_sample2 = [], []
     for i in range(len(sample1)):
         x,y = sample1[i], sample2[i]
-        if isnan(x) or isnan(y) or isinf(x) or isinf(y) or isneginf(x) or isneginf(y):
+        if isnan(x) or isnan(y) or isinf(x) or isinf(y) or isneginf(x) or isneginf(y) or x<min_val or y<min_val:
             continue
         new_sample1.append(sample1[i])
         new_sample2.append(sample2[i])
@@ -108,13 +108,17 @@ def _get_single_clean_sample(all_sample_data, which_sample, min_value=None):
     #print all_sample_data[0]
     #print "grabbing sample %s, with min_value %s"%(which_sample, min_value)
     sample = [float(data_line[which_sample]) for data_line in all_sample_data]
+    if verbose:
+        print "Parsing sample %s, length %s"%(which_sample,len(sample))
     #print "original:", sample[:10]+sample[-3:]
+    isweird = lambda x: bool(isnan(x) or isinf(x) or isneginf(x))
     if min_value is not None:
-        sample = [x if x>min_value else min_value for x in sample]
+        sample = [x if (x>min_value or isweird(x)) else min_value for x in sample]
+    # TODO for numeric values that just can't be plotted on a given plot (like inf, or 0 for logscale) change them to a min/max value, but also COLOR/SHAPE THEM DIFFERENTLY and put a legend saying that those dots actually represent 0/inf/whatever, and are just plotted as a plottable value.
     #print "cleaned up:", sample[:10]+sample[-3:]
     return sample
 
-def _make_sample_label_text(sample_name, sample, datatype, end_spaces=0, top_newlines=0, end_newlines=0):
+def _make_sample_label_text(sample_name, sample, datatype, min_value=0, end_spaces=0, top_newlines=0, end_newlines=0):
     # LATER-TODO should probably adjust the position in some better way than this hack with spaces and dots at the end - maybe just instead of using xlabel/ylabel, add another row/column of subplots and put text in those?
     text = '\n'*top_newlines + sample_name
     if end_spaces:  text+=' '*end_spaces + '.'
@@ -122,7 +126,7 @@ def _make_sample_label_text(sample_name, sample, datatype, end_spaces=0, top_new
         N_reads = sum([x for x in sample if x>=1])
         text += '\n(%.1fM reads)'%(N_reads/1000000.0)
         if end_spaces:  text+=' '*end_spaces + '.'
-    text += '\n(%s mutants)'%len([x for x in sample if x>=1])
+    text += '\n(%s mutants)'%len([x for x in sample if x>min_value])
     if end_spaces:  text+=' '*end_spaces + '.'
     text += '\n'*end_newlines
     # TODO is this #mutants meaningful for growth rates, and does it work sensibly?
@@ -137,14 +141,19 @@ def plot_all_correlations(all_data, plot_scale, figname, print_correlation=False
     all_data will be an (sample_data, sample_headers, mutant_data) tuple.
     """
     # TODO docstring
-    datatype = ('growth rates' if figname.lower().count('growthrate') 
-                else 'read counts' if figname.lower().count('count') else 'unknown')
+    if figname.lower().count('growthrate'):     datatype = 'growth rates'
+    elif figname.lower().count('td'):           datatype = 'doubling times'
+    elif figname.lower().count('doubling'):     datatype = 'doubling times'
+    elif figname.lower().count('count'):        datatype = 'read counts'
+    else: datatype = 'unknown'
+    # TODO what about TD changes or growth rate changes, do those need their own datatypes?
     sample_data, sample_names, mutant_data = all_data
     N_samples = len(sample_names)
     if mutants_to_color:    colors = [mutants_to_color[tuple(mutant_line[:3])] for mutant_line in mutant_data]
     else:                   colors = ['k' for mutant_line in mutant_data]
     # TODO might want plotsize to be an option, along with default dotsize
     plotsize = 4
+    # TODO make all the subplots square dammit!!
     fig = mplt.figure(figsize=(plotsize*(N_samples+1), plotsize*N_samples), dpi=200)
     if print_correlation=='none':        correlation_info = ''
     elif print_correlation=='spearman':  correlation_info = '\n\'corr\' = Spearman rank correlation.'
@@ -160,46 +169,74 @@ def plot_all_correlations(all_data, plot_scale, figname, print_correlation=False
     # TODO what to do if it's a logscale plot of growth rates?  What kinds of growth rate values do we normally see, what's a good minimum?
     # TODO remember to change the scale from 0.1 to 0 too!
     min_value = min_value if plot_scale=='log' else None
-    #print "min_value: %s"%min_value
+    min_val_to_plot = None
+    print "min_value: %s; min_val_to_plot: %s"%(min_value, min_val_to_plot)
+    # TODO minimize_tick_labels and same_scale_both_plots should be command-line options
+    minimize_tick_labels = False
+    same_scale_both_plots = True
+    # TODO min_value and min_val_to_plot should probably be merged?  Just one min_value and one True/False variable specifying whether values under min_value should be set to min_value or removed.
     need_title = True
     for i in range(N_samples):
-        sample_i = _get_single_clean_sample(sample_data, i, min_value=min_value)
+        base_sample_i = _get_single_clean_sample(sample_data, i, min_value=min_value)
         for j in range(i+1,N_samples):
-            sample_j = _get_single_clean_sample(sample_data, j, min_value=min_value)
+            base_sample_j = _get_single_clean_sample(sample_data, j, min_value=min_value)
             # get rid of any points with 'nan' values in either of the two samples 
             # TODO if the data is growthrates, which may contain nan/inf/neginf, clean that up somehow!
-            #sample_i, sample_j = remove_nan_inf_from_two_samples(sample_i, sample_j)
+            if verbose:
+                print "Plotting sample %s (length %s) vs sample %s (length %s) (out of %s samples)"%(i,len(base_sample_i), 
+                                                                                     j,len(base_sample_j), N_samples)
+            sample_i, sample_j = remove_nan_inf_from_two_samples(base_sample_i, base_sample_j, min_val=min_val_to_plot)
+            if not (sample_i and sample_j):
+                print "Error: no datapoints left in samples %s and %s after removing nan/inf values!"%(i,j)
+                continue
+            if verbose:
+                print "After removing nan/inf values and values below %s, %s datapoints left."%(min_val_to_plot, 
+                                                                                                len(sample_i))
             mplt.subplot(N_samples, N_samples, N_samples*(i)+(j+1))
             # note: i is on the y axis, j on the x axis, to make it fit the label below
-            #print "i %s, j %s (out of %s samples)"%(i,j,N_samples)
-            #print "start/end of sample_i: %s"%(sample_i[:10]+sample_i[-2:])
-            #print "start/end of sample_j: %s"%(sample_j[:10]+sample_j[-2:])
-            #print "start/end of colors: %s"%(colors[:10]+colors[-2:])
             mplt.scatter(sample_j, sample_i, s=2, c=colors, edgecolors='none')
-            # setting up the axis scale, ticks and tick labels - cosmetic stuff
-            max_i = max(sample_i); max_j = max(sample_j)
+            ### setting up the axis scale, ticks and tick labels - cosmetic stuff
+            max_i = max(sample_i);  min_i = min(sample_i)
+            max_j = max(sample_j);  min_j = min(sample_j)
             if plot_scale=='log': 
                 mplt.loglog()
                 #mplt.xscale(plot_scale); mplt.yscale(plot_scale)   # this is an alternative version to mplt.loglog()
                 # I changed all values under 0.1 (including 0.1) to 0.1's, thus the limits and labels
-                mplt.ylim(min_value/3, max_i*3)
-                mplt.xlim(min_value/3, max_j*3)
+                ymin,ymax = min_i/3, max_i*3
+                xmin,xmax = min_j/3, max_j*3
+                #text_pos_x, text_pos_y = min_value/5, min_i*3/5
+                text_pos_x, text_pos_y = max_j*2, min_i*3/5
                 # makes it so the ticks stay as they were but the only labels are <0.1, 1 and 100
                 # TODO actually the .1 here should depend on min_value... 
-                locs,labels = mplt.xticks();    mplt.xticks(locs,['','0','1','','100'])
-                locs,labels = mplt.yticks();    mplt.yticks(locs,['','0','1','','100'])
-                #text_pos_x, text_pos_y = min_value/5, min_value*3/5
-                text_pos_x, text_pos_y = max_j*2, min_value*3/5
+                if minimize_tick_labels:
+                    locs,labels = mplt.xticks();    mplt.xticks(locs,['','0','1','','100'])
+                    locs,labels = mplt.yticks();    mplt.yticks(locs,['','0','1','','100'])
             else:
-                # makes it so the ticks stay as they were but only the first (0) and third are labeled, for simplicity
-                locs,labels = mplt.xticks();    mplt.xticks(locs, ['',str(int(locs[1])),'',str(int(locs[3]))])
-                locs,labels = mplt.yticks();    mplt.yticks(locs, ['',str(int(locs[1])),'',str(int(locs[3]))])
-                mplt.ylim(-max_i/5, max_i*1.1); mplt.xlim(-max_j/5, max_j*1.1)
+                #mplt.ylim(-max_i/5, max_i*1.1)
+                #mplt.xlim(-max_j/5, max_j*1.1)
+                range_i = max_i - min_i
+                range_j = max_j - min_j
+                ymin,ymax = min_i-range_i*0.1, max_i+range_i*0.1
+                xmin,xmax = min_j-range_j*0.1, max_j+range_j*0.1
                 #text_pos_x, text_pos_y = -max_j/6, -max_i/12
-                text_pos_x, text_pos_y = max_j, -max_i/12
+                text_pos_x, text_pos_y = max_j, min_i
+                # makes it so the ticks stay as they were but only the first (0) and third are labeled, for simplicity
+                if minimize_tick_labels:
+                    locs,labels = mplt.xticks();    mplt.xticks(locs, ['',str(int(locs[1])),'',str(int(locs[3]))])
+                    locs,labels = mplt.yticks();    mplt.yticks(locs, ['',str(int(locs[1])),'',str(int(locs[3]))])
+            if same_scale_both_plots:
+                xymin = min(xmin,ymin)
+                xymax = max(xmax,ymax)
+                mplt.ylim(xymin,xymax)
+                mplt.xlim(xymin,xymax)
+            else:
+                mplt.ylim(ymin,ymax)
+                mplt.xlim(xmin,xmax)
             # axis labels on the leftmost plot of each row only; sample name and #reads, and #mutants for counts
             if i==j-1: 
-                sample_label = _make_sample_label_text(sample_names[i], sample_i, datatype, end_spaces=5, end_newlines=4)
+                sample_label = _make_sample_label_text(sample_names[i], sample_i, datatype, 
+                                                       min_value=(0 if plot_scale!='lin' else min_value), 
+                                                       end_spaces=5, end_newlines=4)
                 mplt.ylabel(sample_label, rotation=0, fontweight='bold', fontsize='x-large')
             # putting the title on the first subplot instead of the whole figure is a cheat, but I don't know how else.
             if need_title:
@@ -208,7 +245,7 @@ def plot_all_correlations(all_data, plot_scale, figname, print_correlation=False
             # print Spearman or Pearson correlation coefficient on each graph (remove all nan/inf value positions first)
             if not print_correlation=='none':
                 if print_correlation=='spearman':   corr_coeff = spearmanr(sample_i,sample_j)[0]
-                elif print_correlation=='pearson':  corr_coeff = numpy.corrcoef(sample_i,sample_j)[0][1]
+                elif print_correlation=='pearson':  corr_coeff = corrcoef(sample_i,sample_j)[0][1]
                 # the corr_coeff text color is based on value: <.25 black, .25-.50 blue, .50-.75 magenta, .75-1 red.
                 corr_coeff_colors = ['k','b','m','r','r']
                 color = corr_coeff_colors[int(abs(corr_coeff)*16)/ 4]
@@ -216,7 +253,9 @@ def plot_all_correlations(all_data, plot_scale, figname, print_correlation=False
                           horizontalalignment='right',verticalalignment='top')
     # need a label for the last column, below the last plot
     # TODO if there are just two samples (i.e. one plot), change the top_newlines/end_spaces/end_newlines values to 0 in both this xlabel and the ylabel above to make things look better (may want to abstract all this into a subfunction)
-    sample_label = _make_sample_label_text(sample_names[-1], sample_j, datatype, end_spaces=0, top_newlines=2)
+    sample_label = _make_sample_label_text(sample_names[-1], sample_j, datatype, 
+                                           min_value=(0 if plot_scale!='lin' else min_value), 
+                                           end_spaces=0, top_newlines=2)
     mplt.xlabel(sample_label, rotation=0, fontweight='bold', fontsize='x-large', multialignment='right')
     return fig
 
@@ -235,7 +274,8 @@ def read_joint_mutant_file(infile):
         if line[0]=='#':    continue
         all_data.append(line.strip('\n').split('\t'))
     # count the number of samples based on header line
-    N_samples = len([x for x in all_data[0] if x.startswith('reads_in_')])
+    valid_sample_header_prefixes = ['reads_in_', 'readcount_in_', 'growthrate_in_', 'TD_in_', 'TD_change_in_']
+    N_samples = len([x for x in all_data[0] if any([x.startswith(s) for s in valid_sample_header_prefixes])])
     if not N_samples:
         sys.exit("No samples found in the data! Wrong input file format?")
     # mutant_data is the general data (position/gene); sample_data is the sample readcounts/growthrates after that 
@@ -246,7 +286,7 @@ def read_joint_mutant_file(infile):
     # separate header line from data in each
     mutant_data_headers = mutant_data[0]
     mutant_data = mutant_data[1:]
-    sample_headers = [x[9:] if x.startswith('reads_in_') else x for x in sample_data[0]]
+    sample_headers = [x.split('_in_',1)[-1] for x in sample_data[0]]
     sample_data = sample_data[1:]
     annotation_data_headers = annotation_data[0]
     annotation_data = annotation_data[1:]
@@ -278,7 +318,7 @@ def remove_mutants(all_data, file_with_mutants_to_remove, min_readcount_for_remo
     new_sample_names = sample_names
     # making this a reverse range because otherwise removing earlier columns would mess up later ones
     for i in range(len(new_sample_names)-1,-1,-1):
-        total_reads = sum([int(data_line[i]) for data_line in new_sample_data])
+        total_reads = sum([float(data_line[i]) for data_line in new_sample_data])
         if total_reads==0:
             print "Removing sample %s from data due to 0 total reads!"%new_sample_names[i]
             del new_sample_names[i]
