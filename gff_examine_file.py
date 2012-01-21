@@ -90,16 +90,29 @@ def find_min_gene_distance(sequence_record, starting_values=None):
 
 def check_gene_coverage(sequence_records, check_for_overlap=True):
     """ Given a list of GFF sequence records (from BCBio.GFF parser), return the fraction of their length covered by genes.
+    Also returns a feature_coverage_fractions dictionary (feature_name: fraction_of_gene_size), 
+      but note that if the records were parsed with a gene-only limit, genes have no features and the dict will be empty.
     (Caution: length may be approximate! If gff parsing was done based on a fasta file, length is accurate; 
       otherwise it's an underestimate based on last feature position).
     """
     length_total = 0
     gene_length_total = 0
+    total_length_by_feature = defaultdict(lambda: 0)
     for sequence_record in sequence_records:
         length_total += len(sequence_record.seq)
         for gene in sequence_record.features:
             gene_length_total += gene.location.end.position - gene.location.start.position
+            # this section tries to keep track of subfeature types
+            for feature in gene.sub_features:
+                total_length_by_feature[feature.type] += len(feature)
+                for subfeature in feature.sub_features:
+                    total_length_by_feature[subfeature.type] += len(subfeature)
     gene_coverage_fraction = float(gene_length_total)/length_total
+    feature_coverage_fractions = [(feature,float(length)/gene_length_total) for feature,length 
+                                                                                  in total_length_by_feature.items()]
+
+    # TODO the by-feature coverage doesn't work because I'm only parsing the file for genes, not features!!!  If I want to parse for features, I need to split things up into multiple passes etc again...
+    #print total_length_by_feature
 
     # Check for overlapping genes and print a warning, since overlapping genes will make the measurement inaccurate
     if check_for_overlap:
@@ -107,7 +120,7 @@ def check_gene_coverage(sequence_records, check_for_overlap=True):
             print "WARNING: There are overlapping genes! %% of length covered by genes may not be accurate."
     # MAYBE-TODO actually adjust the measurement for overlapping genes?  Nah, too much work, not enough need for now.
 
-    return gene_coverage_fraction 
+    return gene_coverage_fraction, feature_coverage_fractions
 
 
 ######### Test code #########
@@ -271,8 +284,11 @@ def run_main_function(infile, options):
                 if options.gene_counts or options.print_seq_details:
                     print " * sequence %s: %s genes"%(record.id, len(record.features))
                 if options.gene_counts:
-                    gene_coverage_percent = "%.0f%%"%(100*check_gene_coverage([record],False))
+                    gene_coverage_fraction, feature_coverage_fractions = check_gene_coverage([record],False)
+                    gene_coverage_percent = "%.0f%%"%(100*gene_coverage_fraction)
                     print "length %s bp, with %s covered by genes"%(len(record.seq), gene_coverage_percent)
+                    for feature,fraction in feature_coverage_fractions:
+                        print " * %.1f%% of genes covered by %s"%(fraction*100, feature)
                 if options.print_seq_details:               
                     print "GFF parser details:"
                     print record
@@ -290,9 +306,12 @@ def run_main_function(infile, options):
         print "\n *** Gene overlaps ***"
         with open(infile) as INFILE:
             all_records = GFF.parse(INFILE, limit_info={'gff_type': ['gene']}, base_dict=fasta_seq_dict)
-            total_gene_coverage_percent = "%.0f%%"%(100*check_gene_coverage(all_records, False))
+            gene_coverage_fraction, feature_coverage_fractions = check_gene_coverage(all_records,False)
+            total_gene_coverage_percent = "%.0f%%"%(100*gene_coverage_fraction)
         print "Total %s genes on %s chromosomes."%(total_genes, total_chromosomes)
         print "Total genome length %sbp, with %s covered by genes."%(total_length, total_gene_coverage_percent)
+        for feature,fraction in feature_coverage_fractions:
+            print " * %.1f%% of genes covered by %s"%(fraction*100, feature)
 
         # TODO calculate the number of ambiguous bases, inside and outside genes
 

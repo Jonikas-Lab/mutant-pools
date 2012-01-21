@@ -1,1 +1,1 @@
-../../../../reference_data/chlamy_annotation/gff_examination_results.txt
+Creinhardtii_169_gene_analysis.txt
