@@ -74,6 +74,7 @@ def find_color(oligo_name):
 
 ### Do a standard coverage plot for all the deepseq samples in input
 # INPUT: all_data is a list of deepseq_dataset objects (either counts or ratios)
+# TODO this currently doesn't work at all!!
 def plot_all_distributions_sorted(all_data,plot_scale,figname,value_type):
     library_oligos = all_data[0].data.keys()
     all_samples = {}
@@ -205,7 +206,7 @@ def plot_all_correlations(all_data, plot_scale, figname, print_correlation=False
                 ymin,ymax = min_i/3, max_i*3
                 xmin,xmax = min_j/3, max_j*3
                 #text_pos_x, text_pos_y = min_value/5, min_i*3/5
-                text_pos_x, text_pos_y = max_j*2, min_i*3/5
+                text_pos_x, text_pos_y = max_j*2, min_i*4/5
                 # makes it so the ticks stay as they were but the only labels are <0.1, 1 and 100
                 # TODO actually the .1 here should depend on min_value... 
                 if minimize_tick_labels:
@@ -235,7 +236,7 @@ def plot_all_correlations(all_data, plot_scale, figname, print_correlation=False
             # axis labels on the leftmost plot of each row only; sample name and #reads, and #mutants for counts
             if i==j-1: 
                 sample_label = _make_sample_label_text(sample_names[i], sample_i, datatype, 
-                                                       min_value=(0 if plot_scale!='lin' else min_value), 
+                                                       min_value=(0 if plot_scale=='lin' else min_value), 
                                                        end_spaces=5, end_newlines=4)
                 mplt.ylabel(sample_label, rotation=0, fontweight='bold', fontsize='x-large')
             # putting the title on the first subplot instead of the whole figure is a cheat, but I don't know how else.
@@ -244,6 +245,7 @@ def plot_all_correlations(all_data, plot_scale, figname, print_correlation=False
                 need_title = False
             # print Spearman or Pearson correlation coefficient on each graph (remove all nan/inf value positions first)
             if not print_correlation=='none':
+                # TODO don't take the (min_value,min_value) mutants into account for correlations!  Or probably the mutants that are below the cutoff to print, either...
                 if print_correlation=='spearman':   corr_coeff = spearmanr(sample_i,sample_j)[0]
                 elif print_correlation=='pearson':  corr_coeff = corrcoef(sample_i,sample_j)[0][1]
                 # the corr_coeff text color is based on value: <.25 black, .25-.50 blue, .50-.75 magenta, .75-1 red.
@@ -254,11 +256,12 @@ def plot_all_correlations(all_data, plot_scale, figname, print_correlation=False
     # need a label for the last column, below the last plot
     # TODO if there are just two samples (i.e. one plot), change the top_newlines/end_spaces/end_newlines values to 0 in both this xlabel and the ylabel above to make things look better (may want to abstract all this into a subfunction)
     sample_label = _make_sample_label_text(sample_names[-1], sample_j, datatype, 
-                                           min_value=(0 if plot_scale!='lin' else min_value), 
+                                           min_value=(0 if plot_scale=='lin' else min_value), 
                                            end_spaces=0, top_newlines=2)
     mplt.xlabel(sample_label, rotation=0, fontweight='bold', fontsize='x-large', multialignment='right')
     return fig
 
+# TODO another kind of correlation plot, single for all samples - make the x axis be mutants (ordered by various things - median abundance, abundance in a particular dataset, even location) and the y axis be abundance, with a color for each dataset, so each mutant would have N dots, one per dataset, and we could see how well the datasets cluster/deviate/etc.
 
 def savefig(fig,figname,figtype='png'):
     mplt.figure(fig.number) # activate fig to save and close it
@@ -388,7 +391,8 @@ def main(all_data, growthrate_infiles=False, outfile_prefix='', outfile_director
         if not graph_type=='corr':
             figname = outfile_prefix + ('growthrate_distributions' if growthrate_infiles else 'readcount_distributions')
             value_type = 'growth rate' if growthrate_infiles else 'read count'
-            fig = plot_all_distributions_sorted(all_data, figscale, figname, value_type, mutant_to_color)
+            fig = plot_all_distributions_sorted(all_data, figscale, figname, value_type)
+            # TODO do I want mutant_to_color to apply for the distribution plot too?
             savefig(fig, figname+suffix, graph_format)
     # the return value is only for interactive use
     return all_data
@@ -413,7 +417,7 @@ if __name__ == '__main__':
     parser.add_option('-X', '--remove_mutants_from_file', metavar='FILE',
                       help='Remove all mutants present in FILE from the datasets (see -Y for read count cutoff).')
     parser.add_option('-Y', '--remove_mutants_readcount_min', type='int', default=1, metavar='N',
-                      help='When applying -X, only remove mutants with at least N reads (default %default).')
+                      help='When applying -X, only remove mutants with at least N reads in FILE (default %default).')
     # TODO also add options to remove cassette mutants?  Or not, that can be done at the mutant_count_alignments.py stage
 
     parser.add_option('-v', '--verbose', action='store_true', default=False)
@@ -460,3 +464,4 @@ if __name__ == '__main__':
          options.graph_type, options.graph_scale, options.graph_format, options.print_correlations, 
          options.perfect_only, options.color_cassette_mutants, color_mutants_from_files)
 
+# TODO for correlation plots, also have a variant where instead of passing one infile list A,B,C,D and getting an all-by-all plot, you pass two lists A,B C,D and just get a 2x2 (or 2x3, etc) correlation plot of first list vs second list?  Sometimes that's all you want, especially if you want the correlation of just one sample against several.
