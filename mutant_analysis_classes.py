@@ -146,7 +146,7 @@ def find_gene_by_pos(insertion_pos, chromosome_GFF_record, detailed_features=Fal
             # prepend whatever gene-level features (edge etc, or []) were found at the start to the full value
             full_feature = '/'.join(features_gene+[inner_feature])
             return gene_ID, orientation, full_feature
-    # MAYBE-TODO do I want to consider the case of an insertion on the edge between two genes?  Or even in two genes and not on the edge, if there are overlapping genes, but hopefully there aren't!
+    # MAYBE-TODO do I want to consider the case of an insertion on the edge between two genes?  Or even in two genes and not on the edge, if there are overlapping genes, but hopefully there aren't!  (No overlapping or immediately adjacent genes found in our current file - lowest between-gene distance is 1)
     # if no gene matching insertion_pos was found, return special value
     return SPECIAL_GENE_CODES.not_found, '-', '-'
     # MAYBE-TODO add unit test?
@@ -226,7 +226,7 @@ class Insertion_position():
         self.all_position_values = (self.chromosome_name, self.chromosome_number, 
                                     self.min_position, self.max_position, self.strand)
 
-    # LATER-TODO add some kind of merge function to merge two positions into one!  For when I'm merging two position-based read groups together because they're actually probably the same mutant with some sequencing errors.
+    # MAYBE-TODO add some kind of merge function to merge two positions into one?  Do I actually need that?  When I'm merging two position-based read groups together because they're actually probably the same mutant with some sequencing indels, I actually just keep the more common position, since that's presumably the correct one. So are there any cases where I'd need to merge positions?
 
     def __cmp__(self,other):
         return cmp(self.all_position_values, other.all_position_values)
@@ -311,7 +311,7 @@ class Insertional_mutant_data():
         """ Set self.position based on argument; initialize read/sequence counts to 0 and gene-info to unknown. 
         insertion_position argument should be a Insertion_position instance. """
         self.position = insertion_position
-        # MAYBE-TODO should I have a class for the gene data? Especially if I add more of it
+        # MAYBE-TODO should I have a class for the gene data? Especially if I add more of it (annotation info etc)
         self.gene = SPECIAL_GENE_CODES.not_determined
         self.orientation = '?'
         self.gene_feature = '?'
@@ -441,6 +441,7 @@ class Insertional_mutant_library_dataset():
     
     def add_discarded_reads(self, N, reset_count=False):
         """ Add N to self.discarded_read_count (or set self.discarded_read_count to N if reset_count is True). """
+        # LATER-TODO if preprocessing is changed to include more than one step at which reads can be discarded, make sure to keep track of that here and save each count separately! 
         if reset_count or self.discarded_read_count=='unknown':
             self.discarded_read_count = int(N)
         else:
@@ -504,8 +505,7 @@ class Insertional_mutant_library_dataset():
         If dont_change_positions is True, also change the full position data of the remaining mutant to reflect the merge.
         """
 
-        # LATER-TODO implement the dont_change_positions=False option, maybe with a separate ratio cutoff?
-        # MAYBE-TODO After this merging, a dictionary by position would no longer really make sense, would it?  Well, I guess it sort of would, really.  Should be fine for now.  But I could change it to just a list - the dictionary by positoin isn't used that often, except in mutant_join_datasets.py.
+        # MAYBE-TODO After this merging, a dictionary by position would no longer really make sense, would it?  Well, I guess it sort of would, really.  Should be fine for now.  But I could change it to just a list - the dictionary by positon isn't used that often, except in mutant_join_datasets.py, which needs rewriting anyway.
 
         if verbosity_level>1:
             print "Merging adjacent mutants: max distance %s, min count ratio %s..."%(merge_max_distance,merge_count_ratio)
@@ -619,8 +619,6 @@ class Insertional_mutant_library_dataset():
                 mutant.gene,mutant.orientation,mutant.gene_feature = SPECIAL_GENE_CODES.chromosome_not_in_reference,'-','-'
                 self.mutants_undetermined += 1
 
-        # LATER-TODO add a run-test case for this!
-
     def make_by_gene_mutant_dict(self):
         """ Fill the self.mutants_by_gene dictionary (gene_name:mutant_list) based on self.mutants_by_position; 
         real gene IDs only (ignore SPECIAL_GENE_CODES).
@@ -628,7 +626,7 @@ class Insertional_mutant_library_dataset():
         for mutant in self.mutants_by_position.itervalues():
             if mutant.gene not in SPECIAL_GENE_CODES.all_codes:
                 self.mutants_by_gene[mutant.gene].append(mutant)
-        # TODO add unit-test
+        # LATER-TODO add unit-test
 
     def gene_dict_by_mutant_number(self):
         """ Return a mutant_count:gene_ID_set dictionary of genes with 1/2/etc mutants. """
@@ -640,12 +638,12 @@ class Insertional_mutant_library_dataset():
         all_genes = set([m.gene for m in self.mutants_by_position.itervalues()]) - set(SPECIAL_GENE_CODES.all_codes)
         assert sum([len(geneset) for geneset in gene_by_mutantN.itervalues()]) == len(all_genes)
         return gene_by_mutantN
-        # TODO add unit-test
+        #LATER-TODO add unit-test
 
     def add_detailed_gene_info(self, gene_info_file):
         """ _____ """
         print "    *** WARNING: getting detailed gene info (-G option) NOT IMPLEMENTED! Skipping. ***"
-        # LATER-TODO implement!  get gene name/description/stuff from gene_info_file and add to mutants (how, exactly?  Do we want to add those fields to each mutant separately, or make a new dictionary of genes that can be looked up by geneID to get the detailed info, or just make gene objects that contain all this stuff and use those as mutant.gene instead of just geneID strings?
+        # TODO implement!  Already done in mutant_join_datasets.py...  Get gene name/description/stuff from gene_info_file and add to mutants (how, exactly?  Do we want to add those fields to each mutant separately, or make a new dictionary of genes that can be looked up by geneID to get the detailed info, or just make gene objects that contain all this stuff and use those as mutant.gene instead of just geneID strings?
         # Once it's implemented, make sure it gets printed somewhere - probably only in the line-per-gene output
         # LATER-TODO add this to the gene-info run-test case!
 
@@ -661,6 +659,7 @@ class Insertional_mutant_library_dataset():
 
     def print_summary(self, OUTPUT=sys.stdout, N_genes_to_print=5, line_prefix='    ', header_prefix=' * '):
         """ Print basic read and mutant counts (prints to stdout by default, can also pass an open file object)."""
+        # TODO should probably rewrite this to start with a real total read number (discarded+total)
         OUTPUT.write(line_prefix+"Reads discarded in preprocessing: %s\n"%(self.discarded_read_count))
         OUTPUT.write(header_prefix+"Total reads processed: %s\n"%(self.total_read_count))
         OUTPUT.write(line_prefix+"Unaligned reads: %s\n"%(self.unaligned_read_count))
@@ -672,7 +671,7 @@ class Insertional_mutant_library_dataset():
             OUTPUT.write(line_prefix+"Reads with insertion direction matching chromosome %s strand: %s\n"%(strand, count))
         for (region,count) in sorted(self.specific_region_read_counts.iteritems()):
             OUTPUT.write(line_prefix+"Reads aligned to %s: %s\n"%(region, count))
-        # MAYBE-TODO add percentages of total (or aligned) reads to all of these numbers in addition to raw counts!
+        # TODO add percentages of total (or aligned) reads to all of these numbers in addition to raw counts!
         # MAYBE-TODO keep track of the count of separate mutants in each category, as well as total read counts?
         OUTPUT.write(header_prefix+"Distinct mutants (read groups) by cassette insertion position: %s\n"%\
                                                                                      (len(self.mutants_by_position)))
@@ -705,7 +704,7 @@ class Insertional_mutant_library_dataset():
                     else:                               genelist_string = ' (%s, ...)'%genelist_to_print
                 else:                                   genelist_string = ''
                 OUTPUT.write(line_prefix+"Genes with %s mutants: %s%s\n"%(mutantN, len(geneset), genelist_string))
-            # MAYBE-TODO Add some measure of mutations? Like how many mutants have <50% perfect reads (or something - the number should probably be a command-line option).  Maybe how many mutants have <20%, 20-80%, and >80% perfect reads (or 10 and 90, or make that a variable...)
+            # TODO Add some measure of mutations, like how many mutants have <50% perfect reads (or something - the number should probably be a command-line option).  Maybe how many mutants have <20%, 20-80%, and >80% perfect reads (or 10 and 90, or make that a variable...)
 
 
     def print_data(self, OUTPUT=None, sort_data_by=None, N_sequences=2, header_line=True, header_prefix="# "):
@@ -798,11 +797,8 @@ class Insertional_mutant_library_dataset():
             if orientation not in ['?','-']:              self.mutant_counts_by_orientation[orientation] += 1
             if gene_feature not in ['?','-']:             self.mutant_counts_by_feature[gene_feature] += 1
     
-# MAYBE-TODO I think later I'll want another way of organizing Insertional_mutant_data objects - by gene, or by chromosome instead of chromosome+position, or such... don't get too stuck on Insertional_mutant_library_dataset!  Or I could just add other mutant-organization dictionaries/views to the same class, that might be better really...
 
 # LATER-TODO at some point I'll probably want to generalize both of those classes to not necessarily be grouped by position...
-# LATER-TODO Hmmm, do I REALLY need my main data type to be a dictionary by position, or could it just be a set? Do I ever look anything up in this dictionary??  Oh, yeah, I do, when adding new reads that were aligned to the same position as some other reads.  But if I did clustering earlier, that would stop being an issue... And if I want to take adjacent mutants and merge them together, the position-based key will stop being very meaningful anyway... Hmmmm. May need a more complicated method. For now, could have the dict key be precise alignment chrom/pos/strand, but have a full position object in the mutant object. 
-# Okay, so how SHOULD I do the clustering?  Two basic options here: either cluster all the reads FIRST and THEN organize them into Insertional_mutant_data objects, or just keep a set of Insertional_mutant_data objects and whenever a new read is added, run a function on the new read and the existing set to find which one to add it to.  THIS IS COMPLICATED, I DON'T KNOW IF I SHOULD BE DOING IT RIGHT NOW... Try to implement something very simple that I can expand later?
 
 
 
