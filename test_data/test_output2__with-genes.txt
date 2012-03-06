@@ -42,6 +42,11 @@
 #  Mutant cassettes in gene feature three_prime_UTR/intron: 2
 #  Mutant cassettes in gene feature three_prime_UTR/mRNA_after_exons: 1
 ## Genes containing a mutant: 16
+#  Genes with 1 mutants: 7 (test.geneB1_only_mRNA, test.geneC0_exon_outside_UTR, test.geneC1_exon_outside_UTR, test.geneC3_two_3prime_UTRs, test.geneD2_bad_touching_exons, ...)
+#  Genes with 2 mutants: 6 (test.geneA1_proper_minus, test.geneB0_no_mRNA, test.geneC4_UTRs_separated_from_exons, test.geneC5_gap_in_mRNA_before_UTR_start, test.geneC6_gap_in_mRNA_after_UTR_end, ...)
+#  Genes with 3 mutants: 1 (test.geneD4_bad_overlapping_exon_UTR)
+#  Genes with 4 mutants: 1 (test.geneB2_only_mRNA_smaller_than_gene)
+#  Genes with 13 mutants: 1 (test.geneA0_proper_plus)
 ### DATA:
 chromosome	strand	min_position	full_position	gene	orientation	feature	total_reads	perfect_reads	N_sequence_variants
 chromosome_A	+	20	20-?	no_gene_found	-	-	1	1	1

@@ -427,6 +427,7 @@ class Insertional_mutant_library_dataset():
         # MAYBE-TODO should cassette_end and reads_are_reverse be specified for the whole dataset, or just for each set of data added, in add_alignment_reader_to_data? The only real issue with this would be that then I wouldn't be able to print this information in the summary - or I'd have to keep track of what the value was for each alignment reader added and print that in the summary if it's a single value, or 'varied' if it's different values. Might also want to keep track of how many alignment readers were involved, and print THAT in the summary!  Or even print each (infile_name, cassette_end, reads_are_reverse) tuple as a separate line in the header.
         # mutants_by_position is the main data structure here
         self.mutants_by_position = {}
+        self.mutants_by_gene = defaultdict(lambda: [])
         # various total read/mutant counts to keep track of
         self.discarded_read_count = 'unknown'
         self.ignored_region_read_counts = defaultdict(lambda: 0)
@@ -584,7 +585,7 @@ class Insertional_mutant_library_dataset():
         # First get the list of all chromosomes in the file, WITHOUT reading it all into memory
         with open(genefile) as GENEFILE:
             GFF_limit_data = GFF.GFFExaminer().available_limits(GENEFILE)
-            chromosomes_and_counts = dict([(c,n) for ((c,),n) in GFF_limit_data['gff_id'].items()])
+            chromosomes_and_counts = dict([(c,n) for ((c,),n) in GFF_limit_data['gff_id'].iteritems()])
             all_reference_chromosomes = set(chromosomes_and_counts.keys())
 
         # Now lump the chromosomes into N_run_groups sets with the feature counts balanced between sets, 
@@ -620,6 +621,27 @@ class Insertional_mutant_library_dataset():
 
         # LATER-TODO add a run-test case for this!
 
+    def make_by_gene_mutant_dict(self):
+        """ Fill the self.mutants_by_gene dictionary (gene_name:mutant_list) based on self.mutants_by_position; 
+        real gene IDs only (ignore SPECIAL_GENE_CODES).
+        """
+        for mutant in self.mutants_by_position.itervalues():
+            if mutant.gene not in SPECIAL_GENE_CODES.all_codes:
+                self.mutants_by_gene[mutant.gene].append(mutant)
+        # TODO add unit-test
+
+    def gene_dict_by_mutant_number(self):
+        """ Return a mutant_count:gene_ID_set dictionary of genes with 1/2/etc mutants. """
+        self.make_by_gene_mutant_dict()
+        gene_by_mutantN = defaultdict(lambda: set())
+        for (gene,mutants) in self.mutants_by_gene.iteritems():
+            gene_by_mutantN[len(mutants)].add(gene)
+        # check that the numbers add up to the total number of genes
+        all_genes = set([m.gene for m in self.mutants_by_position.itervalues()]) - set(SPECIAL_GENE_CODES.all_codes)
+        assert sum([len(geneset) for geneset in gene_by_mutantN.itervalues()]) == len(all_genes)
+        return gene_by_mutantN
+        # TODO add unit-test
+
     def add_detailed_gene_info(self, gene_info_file):
         """ _____ """
         print "    *** WARNING: getting detailed gene info (-G option) NOT IMPLEMENTED! Skipping. ***"
@@ -637,7 +659,7 @@ class Insertional_mutant_library_dataset():
                 current_mutant = mutant
         return current_mutant
 
-    def print_summary(self, OUTPUT=sys.stdout, line_prefix='    ', header_prefix=' * '):
+    def print_summary(self, OUTPUT=sys.stdout, N_genes_to_print=5, line_prefix='    ', header_prefix=' * '):
         """ Print basic read and mutant counts (prints to stdout by default, can also pass an open file object)."""
         OUTPUT.write(line_prefix+"Reads discarded in preprocessing: %s\n"%(self.discarded_read_count))
         OUTPUT.write(header_prefix+"Total reads processed: %s\n"%(self.total_read_count))
@@ -648,7 +670,7 @@ class Insertional_mutant_library_dataset():
         OUTPUT.write(line_prefix+"Perfectly aligned reads (no mismatches): %s\n"%(self.perfect_read_count))
         for (strand,count) in self.strand_read_counts.iteritems():
             OUTPUT.write(line_prefix+"Reads with insertion direction matching chromosome %s strand: %s\n"%(strand, count))
-        for (region,count) in sorted(self.specific_region_read_counts.items()):
+        for (region,count) in sorted(self.specific_region_read_counts.iteritems()):
             OUTPUT.write(line_prefix+"Reads aligned to %s: %s\n"%(region, count))
         # MAYBE-TODO add percentages of total (or aligned) reads to all of these numbers in addition to raw counts!
         # MAYBE-TODO keep track of the count of separate mutants in each category, as well as total read counts?
@@ -673,9 +695,18 @@ class Insertional_mutant_library_dataset():
                 OUTPUT.write(line_prefix+"Mutant cassettes in %s orientation to gene: %s\n"%(orientation,count))
             for (feature,count) in sorted(self.mutant_counts_by_feature.items()):
                 OUTPUT.write(line_prefix+"Mutant cassettes in gene feature %s: %s\n"%(feature,count))
-            all_genes = set([m.gene for m in self.mutants_by_position.values()]) - set(SPECIAL_GENE_CODES.all_codes)
+            all_genes = set([m.gene for m in self.mutants_by_position.itervalues()]) - set(SPECIAL_GENE_CODES.all_codes)
             OUTPUT.write(header_prefix+"Genes containing a mutant: %s\n"%(len(all_genes)))
-            # LATER-TODO Add count of genes containing two or more mutants! Once I have a per-gene view of the data.
+            genes_by_mutantN = self.gene_dict_by_mutant_number()
+            for (mutantN, geneset) in genes_by_mutantN.iteritems():
+                if N_genes_to_print>0:
+                    genelist_to_print = ', '.join(sorted(list(geneset))[:N_genes_to_print])
+                    if len(geneset)<=N_genes_to_print:  genelist_string = ' (%s)'%genelist_to_print
+                    else:                               genelist_string = ' (%s, ...)'%genelist_to_print
+                else:                                   genelist_string = ''
+                OUTPUT.write(line_prefix+"Genes with %s mutants: %s%s\n"%(mutantN, len(geneset), genelist_string))
+            # MAYBE-TODO Add some measure of mutations? Like how many mutants have <50% perfect reads (or something - the number should probably be a command-line option).  Maybe how many mutants have <20%, 20-80%, and >80% perfect reads (or 10 and 90, or make that a variable...)
+
 
     def print_data(self, OUTPUT=None, sort_data_by=None, N_sequences=2, header_line=True, header_prefix="# "):
         """ Print full data, one line per mutant: position data, gene info, read counts, optionally sequences.

@@ -276,7 +276,7 @@ def run_main_function(infiles, outfile, options):
             write_header_data(OUTFILE,options)
         if options.add_summary_to_file:
             OUTFILE.write("### SUMMARY:\n")
-            all_alignment_data.print_summary(OUTFILE, "#  ", "## ")
+            all_alignment_data.print_summary(OUTFILE, line_prefix="#  ", header_prefix="## ")
         if options.header_level==2:
             OUTFILE.write("### HEADER AND DATA:\n")
         elif options.add_summary_to_file:
