@@ -102,9 +102,7 @@ def define_option_parser():
                       help="When counting perfect reads, treat undefined alignment regions as matches (default %default)")
     parser.add_option('-U', '--dont_treat_unknown_as_match', action="store_false", dest='treat_unknown_as_match',
                       help="Turn -u off.")
-    # LATER-TODO add a check to print a warning if any mutants are closer than X bases to each other - this seems to happen a lot with what looks like mutations, with the alignment locations just 1bp apart!  Should catch those and merge them somenow, or at least mark them as iffy in the output file?
-    # MAYBE-TODO add a check to print a warning if any mutant has fewer than X% perfect reads; optionally mark/omit those mutants in the output file?
-    # MAYBE-TODO add user-provided mutation cutoffs like in old deepseq_count_alignments.py, instead of just all reads and perfet reads?   parser.add_option('-m', '--mutation_cutoffs', default="1,3,10", metavar="<comma-separated-int-list>")
+    # MAYBE-TODO add user-provided mutation-count cutoffs like in old deepseq_count_alignments.py, instead of just all reads and perfet reads?   Currently useless, since we're only allowing one mutation in bowtie.  parser.add_option('-m', '--mutation_cutoffs', default="1,3,10", metavar="<comma-separated-int-list>")
 
     ### input options
     parser.add_option('-c','--input_collapsed_to_unique', action='store_true', default=False, 
@@ -152,7 +150,6 @@ def define_option_parser():
     parser.add_option('-B', '--bad_chromosomes_count_and_ignore', default='', metavar='comma-separated-list', 
                       help="Count reads aligning to these chromosomes and print the count in the header; "
                           +"otherwise ignore them and don't add to normal output. (default %default) (also see -b)")
-    # LATER-TODO once I have a line-per-gene output format as well as a line-per-mutant one (separate dictionary/view in Insertional_mutant_library_dataset in mutant_analysis_classes.py, and separate output file):  Add extra options for that: count only mutants that are sense/antisense, only mutants in the exons/introns/UTRs, don't count mutants in the first/last X%/Xbp of the gene, do count mutants flanking the gene...
 
     parser.add_option('-V', '--verbosity_level', action="store_true", default=1, 
                       help="How much information to print to STDOUT: 0 - nothing, 1 - summary only, "
