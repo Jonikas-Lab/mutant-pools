@@ -791,7 +791,10 @@ class Insertional_mutant_library_dataset():
             OUTPUT.write(header_prefix+"Mutant cassettes inside genes: %s\n"%(self.mutants_in_genes))
             for (orientation,count) in sorted(self.mutant_counts_by_orientation.items(),reverse=True):
                 OUTPUT.write(line_prefix+"Mutant cassettes in %s orientation to gene: %s\n"%(orientation,count))
-            for (feature,count) in sorted(self.mutant_counts_by_feature.items()):
+            # custom order for features to make it easier to read: CDS, intron, UTRs, everything else alphabetically after
+            proper_feature_order = defaultdict(lambda: 3, {'CDS':0, 'intron':1, 'five_prime_UTR':2, 'three_prime_UTR':2})
+            for (feature,count) in sorted(self.mutant_counts_by_feature.items(), 
+                                          key=lambda (f,n): (proper_feature_order[f],f)):
                 OUTPUT.write(line_prefix+"Mutant cassettes in gene feature %s: %s\n"%(feature,count))
             all_genes = set([m.gene for m in self.mutants_by_position.itervalues()]) - set(SPECIAL_GENE_CODES.all_codes)
             OUTPUT.write(header_prefix+"Genes containing a mutant: %s\n"%(len(all_genes)))

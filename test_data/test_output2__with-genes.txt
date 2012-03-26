@@ -14,14 +14,16 @@
 ## Mutant cassettes inside genes: 39
 #  Mutant cassettes in sense orientation to gene: 37
 #  Mutant cassettes in antisense orientation to gene: 2
-#  Mutant cassettes in gene feature ??: 2
 #  Mutant cassettes in gene feature CDS: 6
+#  Mutant cassettes in gene feature intron: 2
+#  Mutant cassettes in gene feature five_prime_UTR: 1
+#  Mutant cassettes in gene feature three_prime_UTR: 1
+#  Mutant cassettes in gene feature ??: 2
 #  Mutant cassettes in gene feature CDS/CDS: 1
 #  Mutant cassettes in gene feature CDS/CDS??: 2
 #  Mutant cassettes in gene feature CDS/five_prime_UTR??: 1
 #  Mutant cassettes in gene feature CDS/intron: 2
 #  Mutant cassettes in gene feature CDS/three_prime_UTR: 1
-#  Mutant cassettes in gene feature five_prime_UTR: 1
 #  Mutant cassettes in gene feature five_prime_UTR/CDS: 1
 #  Mutant cassettes in gene feature five_prime_UTR/CDS??: 2
 #  Mutant cassettes in gene feature five_prime_UTR/intron: 2
@@ -31,14 +33,12 @@
 #  Mutant cassettes in gene feature gene_edge/mRNA_edge/three_prime_UTR: 1
 #  Mutant cassettes in gene feature gene_edge/no_mRNA: 1
 #  Mutant cassettes in gene feature gene_edge/outside_mRNA: 1
-#  Mutant cassettes in gene feature intron: 2
 #  Mutant cassettes in gene feature mRNA_after_exons: 1
 #  Mutant cassettes in gene feature mRNA_before_exons: 1
 #  Mutant cassettes in gene feature mRNA_edge: 1
 #  Mutant cassettes in gene feature mRNA_no_exons: 1
 #  Mutant cassettes in gene feature no_mRNA: 1
 #  Mutant cassettes in gene feature outside_mRNA: 1
-#  Mutant cassettes in gene feature three_prime_UTR: 1
 #  Mutant cassettes in gene feature three_prime_UTR/intron: 2
 #  Mutant cassettes in gene feature three_prime_UTR/mRNA_after_exons: 1
 ## Genes containing a mutant: 16
