@@ -1,0 +1,49 @@
+
+Interactive python commands to make my plot:
+
+    >>> import collections
+    >>> import general_utilities
+    >>> mutant_data = general_utilities.read_tab_separated_file('old_data_insertion_mutants.txt')
+    >>> set(mutant_data[0]) == set(['insertion_cassette'])
+    True
+    >>> strand = mutant_data[1]
+    >>> position = [int(x) for x in mutant_data[2]]
+    >>> readcount = [int(x) for x in mutant_data[7]]
+
+    >>> plus_strand_data = [(pos,rc) for (s,pos,rc) in zip(strand,position,readcount) if s=='+']
+    >>> minus_strand_data = [(pos,rc) for (s,pos,rc) in zip(strand,position,readcount) if s=='-']
+
+    >>> import matplotlib.pyplot as mplt
+    >>> mplt.figure()
+    >>> for pos,rc in plus_strand_data:
+    ...  mplt.plot([pos, pos], [0, rc], 'b')
+    ... 
+    >>> for pos,rc in minus_strand_data:
+    ...  mplt.plot([pos, pos], [0, -rc], 'r')
+    ... 
+
+    >>> mplt.title('cassette-aligned mutant distribution over cassette length, in all of Ru\'s GAIIx data')
+    >>> mplt.ylabel('reads per mutant (blue on + strand, red on - strand)')
+    >>> mplt.xlim(-30, max(position)+30)
+    >>> mplt.xlabel('cassette length (bp)')
+MAYBE-TODO could put actual markers for where different regions are here... 
+
+    >>> low, next_low = sorted([-r for p,r in minus_strand_data])[:2]
+    >>> next_high, high = sorted([r for p,r in plus_strand_data])[-2:]
+    >>> low, next_low, next_high, high
+    (-4847047, -702698, 758637, 8793005)
+
+    >>> mplt.ylim(1.1*low, 1.1*high)
+    (-5331751.7000000002, 9672305.5)
+    >>> mplt.yticks([-4000000, -2000000, 0, 2000000, 4000000, 6000000, 8000000], ['4M','2M','0','2M','4M','6M','8M'])
+    >>> mplt.savefig('cassette_mutants_GAIIx_full.png')
+
+    >>> mplt.ylim(1.5*next_low, 1.5*next_high)
+    (-1054047.0, 1137955.5)
+    >>> mplt.yticks([-800000, -600000, -400000, -200000, 0, 200000, 400000, 600000, 800000], ['0.8M','0.6M','0.4M','0.2M','0','0.2M','0.4M','0.6M','0.8M'])
+    >>> mplt.savefig('cassette_mutants_GAIIx_zoomed-in.png')
+
+Resulting plots are in experiments/generating_library/1203_new_cassette_TOPOcloning_Ru folder.
+
+TODO I should write this as a program, really.  Preferably one that can take multiple chromosomes, too.
+

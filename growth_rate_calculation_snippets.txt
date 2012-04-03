@@ -1,0 +1,207 @@
+# Doubling time equation
+(Ru's equation - I already checked that it's the same as mine - see Livescribe notebook entry WPh46)
+
+" TDx = 7*TD/(log2(x1/x0)+7) "
+    x1 and x0 are the readcount of mutant x divided by the total sample readcount at timepoints T1 and T0.
+    7 is the number of doubling times the culture was grown for, and TD is the overall doubling time of the culture.
+    
+Really we want to ONLY REPORT/PLOT/USE GROWTH RATES, NOT DOUBLING TIMES 
+
+# how to get a sensible list of genes with high TDs between replicates
+
+For each mutant, I want three values
+ * N of datasets that had that mutant
+ * mean (or median, or geometric mean, or something) of TD between datasets
+ * some measure of error of TD between datasets - what should I use here? I guess standard deviation... According to the Handbook of Biological Statistics I should be using ddof=1 to get the right value.
+How is this distributed, anyway?
+First I should divide the TD values by the overall TD of each PBR to get a TD_change, since each PBR has a different one.
+
+This is the *_TDs_by_mean*.txt files.
+
+# note on unusual TD values
+
+Why am I getting negative raw TDs??  Because the basic TD equation doesn't account for cell death.  If log2(x1/x0) is a negative number with an absolute value higher than the number of generations that passed, we get a negative TD value from the equation.  That's because if cells don't die, this shouldn't be possible: in G generations, if all the other mutants doubled G times but our mutant didn't, our mutant would be relatively depleted by 2^G, so x1 = x0 / 2^G, so x1/x0 = 2^G and log2(x1/x0) = G, and we get division by 0 and an infinite TD value.  But we're actually getting x1 values LOWER than the expected X0/2^G (in particular, of course, x1 values of 0), which screws up the calculation. How to deal?  Well, any negative TDs should become infinity instead, clearly, but what to do with those?  I guess just set a TD_maximum (make it higher than any existing valid TD values), and then change any TD values of infinity or negative ones to TD_maximum...  (TODO and should probably color these dots differently or give them a different shape or something!) I don't think there's anything better to do, unless we want to add death rate into the equation somehow...  For now fixed by changing all negative and 0 values to inf, which is reasonable, and optionally applying a maximum to the dataset (for the *_doubling_time*_with-max.txt files only) to make it plottable.  This probably screws up the correlation values, though, so it'd be better to apply the maximum in the plotting program and calculate the correlations with the original values... Or not... How does the correlation equation deal with infinities?
+
+
+# Plotting
+
+all the plotting was done with an unintended use of the mutant_make_plots.py program - TODO it should be possible to adjust it to work properly for growth rates.
+
+
+
+#########  Basic program  #########
+(to cut-and-paste into interactive python shell)
+
+TODO all this should be more automated!!!  Write a proper program instead of this cut-and-paste interactive python shell silliness.
+
+Do the first block (just once per python instance), then customize the second block options as desired, pick a line from the third block, and run the last three blocks (need to do that in three pieces because pasting too much seems to mess with python interactive shell).
+
+>>> from mutant_make_plots import read_joint_mutant_file
+>>> from numpy import log2, mean, median, std, isnan, isinf
+>>> from collections import defaultdict
+>>> from mutant_join_datasets import parse_gene_annotation_file
+>>> all_data_by_file = {}
+>>> infiles_overallTDs_generations = {'joint_mutants_RZ-1-3.txt': (8.9, 7), 'joint_mutants_RZ-2-4.txt': (8.9, 7), 'joint_mutants_RZ-12-34.txt': (8.9, 7), 'joint_mutants_RZ-5-6.txt': (8.44, 7), 'joint_mutants_RZ-7-8.txt': (9.49, 7)}
+>>> header_mutant_data = ['chromosome','strand','min_position','full_position','gene','orientation','feature','main_sequence']
+
+>>> readcount_min_T0, readcount_min_T1 = 100, 100
+>>> replace_missing_TDs_with = 'nan'
+>>> TD_max = 40
+(set TD_max to None to not apply a maximum, or to 'variable' to have it be 1.5x the max not counting infinite values. Also note that TD_change_max will be set to None/'variable' if TD_max is, otherwise to round(TD_max/8))
+(replacement only currently happens in the joint *_doubling_times.txt and *_doubling_time_changes.txt outfiles, not the single doubling_times_*.txt or the *_TDs_by_mean*.txt ones.  Two joint files are generated, one with the replacement and one without.)
+
+>>> outfile_basename, infiles_in_order = 'all_datasets', ['joint_mutants_RZ-1-3.txt', 'joint_mutants_RZ-2-4.txt', 'joint_mutants_RZ-12-34.txt', 'joint_mutants_RZ-5-6.txt', 'joint_mutants_RZ-7-8.txt']
+>>> outfile_basename, infiles_in_order = 'bio-replicates', ['joint_mutants_RZ-12-34.txt', 'joint_mutants_RZ-5-6.txt', 'joint_mutants_RZ-7-8.txt']
+>>> outfile_basename, infiles_in_order = 'tech-replicates', ['joint_mutants_RZ-1-3.txt', 'joint_mutants_RZ-2-4.txt']
+
+Basic TD calculations per sample and joining all the samples together:
+
+>>> for infile in infiles_in_order:
+...  sample_data, sample_headers, mutant_data = read_joint_mutant_file(infile)
+...  overall_TD, generations = infiles_overallTDs_generations[infile]
+...  total_reads_0 = sum([int(line[0]) for line in sample_data])
+...  total_reads_1 = sum([int(line[1]) for line in sample_data])
+...  normalized_reads = [[float(int(line[0]))/total_reads_0, float(int(line[1]))/total_reads_1] for line in sample_data]
+...  good_mutant_filter = [i for i in range(len(sample_data)) if (int(sample_data[i][0])>=readcount_min_T0 and int(sample_data[i][1])>=readcount_min_T1)]
+...  normalized_reads_subset = [normalized_reads[i] for i in range(len(normalized_reads)) if i in good_mutant_filter]
+...  TDs_subset = [generations*overall_TD / (log2(data[1]/data[0]) + generations) for data in normalized_reads_subset]
+...  TDs_subset = [float('inf') if x<=0 else x for x in TDs_subset]
+...  TDs_change_subset = [TD/overall_TD for TD in TDs_subset]
+...  mutant_data_subset = [mutant_data[i] for i in range(len(mutant_data)) if i in good_mutant_filter]
+...  sample_data_int = [[int(x) for x in line] for line in sample_data]
+...  read_counts_subset = [sample_data_int[i] for i in range(len(sample_data_int)) if i in good_mutant_filter]
+...  all_data = [[TDs_subset[i], TDs_change_subset[i]] + read_counts_subset[i] + mutant_data_subset[i] for i in range(len(TDs_subset))]
+...  all_data.sort(reverse=True)
+...  all_data_by_file[infile] = all_data
+... 
+>>> def print_line(fields):
+...  return "%.2f\t%.2f\t%s\t%s\t%s"%(fields[0],fields[1],fields[2],fields[3],'\t'.join(fields[4:]))
+... 
+>>> for infile,all_data in all_data_by_file.items():
+...  outfile_name = infile.replace('joint_mutants','doubling_times')
+...  all_data.sort(reverse=True)
+...  with open(outfile_name,'w') as OUTFILE:
+...   OUTFILE.write('# %s - %s mutants with T0 readcount over %s and T1 readcount over %s\n'%(infile,len(all_data), readcount_min_T0, readcount_min_T1))
+...   OUTFILE.write('# (made by hand - see notes_growth_rate_calculations.txt file for code).\n')
+...   OUTFILE.write('\t'.join(['TD','TD_change','T0_reads','T1_reads'] + header_mutant_data) + '\n')
+...   OUTFILE.write('\n'.join( [print_line(line) for line in all_data] ))
+... 
+>>> mutant_info_by_pos = {}
+>>> for infile,all_data in all_data_by_file.items():
+...  curr_mutant_info = dict([(tuple(line[4:7]),line[4:]) for line in all_data])
+...  mutant_info_by_pos.update(curr_mutant_info)
+... 
+>>> TD_data_by_mutant_pos_by_file = {}
+>>> for infile,all_data in all_data_by_file.items():
+...  TD_data_by_mutant_pos_by_file[infile] = dict([(tuple(line[4:7]),line[:2]) for line in all_data])
+... 
+>>> samples = [filename.replace('joint_mutants_','').replace('.txt','') for filename in infiles_in_order]
+>>> header_sample_data_TDs = ['TD_in_'+s for s in samples]
+>>> header_sample_data_TD_changes = ['TD_change_in_'+s for s in samples]
+>>> all_TDs_header = header_mutant_data + header_sample_data_TDs
+>>> all_TD_changes_header = header_mutant_data + header_sample_data_TD_changes
+>>> all_TDs_table = []
+>>> all_TD_changes_table = []
+>>> if TD_max=='variable':
+...  TD_max = 1.5 * max([x for x in TDs_subset if not isinf(x)])
+...  TD_change_max = 1.5 * max([x for x in TDs_change_subset if not isinf(x)])
+... 
+>>> elif TD_max is None:
+...  TD_change_max = None
+... 
+>>> else:
+...  TD_change_max = round(TD_max/8)
+... 
+>>> if TD_max:
+...  all_TDs_table_withmax = []
+...  all_TD_changes_table_withmax = []
+... 
+>>> for mutant_pos in mutant_info_by_pos.keys():
+...  sample_data_TD, sample_data_TD_withmax = [], []
+...  sample_data_TD_change, sample_data_TD_change_withmax = [], []
+...  for infile in infiles_in_order:
+...   try:
+...    TD, TD_change = TD_data_by_mutant_pos_by_file[infile][mutant_pos]
+...   except KeyError:
+...    TD, TD_change = replace_missing_TDs_with, replace_missing_TDs_with
+...   sample_data_TD.append(str(TD))
+...   sample_data_TD_change.append(str(TD_change))
+...   if TD_max:
+...    if TD_max and TD>TD_max and not isnan(TD):
+...     sample_data_TD_withmax.append(str(TD_max))
+...    else:
+...     sample_data_TD_withmax.append(str(TD))
+...    if TD_change_max and TD_change>TD_change_max and not isnan(TD_change):
+...     sample_data_TD_change_withmax.append(str(TD_change_max))
+...    else:
+...     sample_data_TD_change_withmax.append(str(TD_change))
+...  if any([not isnan(float(x)) for x in sample_data_TD]):
+...   all_TDs_table.append(mutant_info_by_pos[mutant_pos] + sample_data_TD)
+...   all_TD_changes_table.append(mutant_info_by_pos[mutant_pos] + sample_data_TD_change)
+...   if TD_max:
+...    all_TDs_table_withmax.append(mutant_info_by_pos[mutant_pos] + sample_data_TD_withmax)
+...    all_TD_changes_table_withmax.append(mutant_info_by_pos[mutant_pos] + sample_data_TD_change_withmax)
+... 
+>>> all_outfiles_headers_datasets_notes = []
+>>> all_outfiles_headers_datasets_notes.append((outfile_basename+'_doubling_times.txt', all_TDs_header, all_TDs_table,''))
+>>> all_outfiles_headers_datasets_notes.append((outfile_basename+'_doubling_time_changes.txt', all_TD_changes_header, all_TD_changes_table,''))
+>>> if TD_max:
+...  all_outfiles_headers_datasets_notes.append((outfile_basename+'_doubling_times_with-max.txt', all_TDs_header, all_TDs_table_withmax,'Artificially imposed doubling time maximum of %s for sensible plotting'%TD_max))
+...  all_outfiles_headers_datasets_notes.append((outfile_basename+'_doubling_time_changes_with-max.txt', all_TD_changes_header, all_TD_changes_table_withmax,'Artificially imposed doubling time change maximum of %s for sensible plotting'%TD_change_max))
+... 
+>>> for (outfile,header,data,note) in all_outfiles_headers_datasets_notes:
+...  with open(outfile,'w') as OUTFILE:
+...   if note:
+...    OUTFILE.write('# %s\n'%note)
+...   OUTFILE.write('\t'.join(header) + '\n')
+...   for data_line in data:
+...    OUTFILE.write('\t'.join(data_line) + '\n')
+... 
+
+Make plots from the command-line (plotting raw TDs and TD changes, for all_datasets, bio-replicates and tech-replicates):
+
+1112_Ru_all_new_data/4_growth_rates >> mutant_make_plots.py -o all_TD -t corr -s lin -c pearson all_datasets_doubling_times_with-max.txt -X ../2_mutants/RZ-9_mutants.txt 
+1112_Ru_all_new_data/4_growth_rates >> mutant_make_plots.py -o all_TD_change -t corr -s lin -c pearson all_datasets_doubling_time_changes_with-max.txt -X ../2_mutants/RZ-9_mutants.txt 
+1112_Ru_all_new_data/4_growth_rates >> mutant_make_plots.py -o bio-repl_TD -t corr -s lin -c pearson bio-replicates_doubling_times_with-max.txt -X ../2_mutants/RZ-9_mutants.txt 
+1112_Ru_all_new_data/4_growth_rates >> mutant_make_plots.py -o bio-repl_TD_change -t corr -s lin -c pearson bio-replicates_doubling_time_changes_with-max.txt -X ../2_mutants/RZ-9_mutants.txt 
+1112_Ru_all_new_data/4_growth_rates >> mutant_make_plots.py -o tech-repl_TD -t corr -s lin -c pearson tech-replicates_doubling_times_with-max.txt -X ../2_mutants/RZ-9_mutants.txt 
+1112_Ru_all_new_data/4_growth_rates >> mutant_make_plots.py -o tech-repl_TD_change -t corr -s lin -c pearson tech-replicates_doubling_time_changes_with-max.txt -X ../2_mutants/RZ-9_mutants.txt 
+
+Getting a single overall TD value from replicates, without/with gene annotation (this section doesn't make sense for all_datasets_, only for replicates):
+
+>>> TD_data_with_mean_header = header_mutant_data + ['TD_change_mean','N_values','stdev'] + ['TD_change_'+x for x in samples] + ['raw_TD_'+x for x in samples]
+>>> TD_data_with_mean = []
+>>> for TD_data,TD_change_data in zip(all_TDs_table,all_TD_changes_table):
+...  mutant_data = TD_data[:8]
+...  TDs = [float(x) for x in TD_data[8:]]
+...  TD_changes = [float(x) for x in TD_change_data[8:]]
+...  TD_changes_valid = [x for x in TD_changes if not isnan(x)]
+...  N_values = len(TD_changes_valid)
+...  TD_change_mean = mean(TD_changes_valid)
+...  TD_change_stdev = std(TD_changes_valid,ddof=1)
+...  TD_data_with_mean.append(mutant_data + [TD_change_mean,N_values,TD_change_stdev] + TD_changes + TDs)
+... 
+>>> TD_data_with_mean.sort(key=lambda x: x[8], reverse=True)
+>>> with open(outfile_basename+'_TDs_by_mean.txt','w') as OUTFILE:
+...  OUTFILE.write('\t'.join(TD_data_with_mean_header) + '\n')
+...  for data_line in TD_data_with_mean:
+...   OUTFILE.write('\t'.join([str(x) for x in data_line]) + '\n')
+... 
+>>> annfile_header = ['Phytozome transcript name', 'PFAM', 'Panther', 'KOG', 'KEGG ec', 'KEGG Orthology', 'best arabidopsis TAIR10 hit name', 'best arabidopsis TAIR10 hit symbol', 'best arabidopsis TAIR10 hit defline', 'best rice hit name', 'best rice hit symbol', 'best rice hit defline']
+>>> gene_annotation_dict, gene_annotation_header = parse_gene_annotation_file('../reference_data/Creinhardtii_169_annotation_info.txt', header_list=annfile_header, add_empty_fields_to_length=True, strip_last_fields=2, verbosity_level=0)
+>>> gene_annotation_header = [s.replace(' ','_') for s in gene_annotation_header]
+>>> missing_gene_annotation_data = ['NO GENE DATA'] + ['' for x in range(len(gene_annotation_dict.values()[0])-1)]
+>>> TD_data_with_annotation_header = TD_data_with_mean_header + gene_annotation_header
+>>> TD_data_with_annotation = []
+>>> for mutant_data_line in TD_data_with_mean:
+...   try:                annotation_data = gene_annotation_dict[mutant_data_line[4]]
+...   except KeyError:    annotation_data = missing_gene_annotation_data
+...   TD_data_with_annotation.append(mutant_data_line + annotation_data)
+... 
+>>> with open(outfile_basename+'_TDs_by_mean_annotated.txt','w') as OUTFILE:
+...  OUTFILE.write('\t'.join(TD_data_with_annotation_header) + '\n')
+...  for data_line in TD_data_with_annotation:
+...   OUTFILE.write('\t'.join([str(x) for x in data_line]) + '\n')
+... 
+
+
