@@ -38,30 +38,46 @@ def define_option_parser():
     ### functionality options
     parser.add_option('-G', '--gene_annotation_file', metavar='FILE',
                       help="Tab-separated gene annotated file (must have Cre gene IDs in first column) (default %default)")
-    parser.add_option('-p', '--perfect_reads_only', action="store_true", default=False,
-                      help="Take perfect read counts (default %default)")
-    parser.add_option('-a', '--all_reads', action="store_false", dest='perfect_reads_only',
-                      help="Take total read counts (turns -p off).")
-    parser.add_option('-m', '--output_only_shared_mutants', action="store_true", default=False,
+
+    parser.set_defaults(which_reads='all')
+    parser.add_option('-p', '--perfect_reads_only',   action='store_const', dest='which_reads', const='perfect', 
+                      help="Take only perfectly aligned read counts (default %default)")
+    parser.add_option('-i', '--imperfect_reads_only', action='store_const', dest='which_reads', const='imperfect',
+                      help="Take only imperfectly aligned read counts (default %default)")
+    parser.add_option('-a', '--all_reads',            action='store_const', dest='which_reads', const='all',
+                      help="Take total read counts (turns -p/-i off).")
+    parser.add_option('-P', '--mutants_perfect_percent', type='int', default=0, metavar='K',
+                      help="Include only mutants with K% or more perfectly aligned reads in all files (default %default)")
+    parser.add_option('-I', '--mutants_imperfect_percent', type='int', default=0, metavar='L',
+                      help="Include only mutants with L% or more imperfectly aligned reads"
+                          +"(calculated out of readcount sum over all infiles) (default %default)")
+    # TODO implement options.mutants_perfect_percent and options.mutants_imperfect_percent!  Similar to options.which_reads
+    #   TODO this isn't as simple as it looks! 
+    #   1) I'm not sure how to implement it - check the K% or L% for all files, any file, sum over all files?  Make sure it's consistent somehow, and that one mutant will always be in exactly one set between -P and -I (so either both use the sum over all files, or one requires its condition for all files and one for any file)  
+    # OR just do it per file here, allowing some mutants to be present in one file but 0 in another, and let them get plotted like that? MIGHT BE THE BEST WAY.  
+    # ANYWAY, in the final version, I think the joint-mutant file should just contain both total and perfect reads (possibly with options to do otherwise), and the plotting program should get all these -a/-p/-i/-P/-I options.
+    #   2) As this is set up right now, I can't do that anyway, because for each infile there's only one value saved, either total or perfect or imperfect readcount - no way of getting a ratio. I'd have to rewrite a fair amount to fix that, and if I'm rewriting already, I should just do a full rewrite to use the new multi-dataset Insertional_mutant_data option from mutant_analysis_classes.py!
+
+    parser.add_option('-m', '--output_only_shared_mutants', action='store_true', default=False,
                       help="Only output the mutants that have non-zero counts in ALL input files (default %default)")
-    parser.add_option('-M', '--output_all_mutants', action="store_false", dest='output_only_shared_mutants',
+    parser.add_option('-M', '--output_all_mutants', action='store_false', dest='output_only_shared_mutants',
                       help="Output all mutants, including ones that only appear in one input file (turns -o off).")
 
     ### output format options
     parser.add_option('-H', '--header_level', choices=['0','1','2'], default='2', metavar='0|1|2', 
                       help="Outfile header type:  0 - no header at all, 1 - a single line giving column headers, "
                           + "2 - full header with command, options, date, user etc (default %default) (also see -s)")
-    parser.add_option('-s', '--add_summary_to_file', action="store_true", default=True, 
+    parser.add_option('-s', '--add_summary_to_file', action='store_true', default=True, 
                       help="Print summary at the end of the file (default %default) (also see -H)")
-    parser.add_option('-S', '--dont_add_summary_to_file', action="store_false", dest='add_summary_to_file', 
+    parser.add_option('-S', '--dont_add_summary_to_file', action='store_false', dest='add_summary_to_file', 
                       help="Turn -s off.")
 
     ### command-line verbosity options
-    parser.add_option('-V', '--verbosity_level', action="store_true", default=1, 
+    parser.add_option('-V', '--verbosity_level', action='store_true', default=1, 
                       help="How much information to print to STDOUT: 0 - nothing, 1 - summary only, "
                           +"2 - summary and progress reports. (Default %default).")
-    parser.add_option('-q', '--quiet', action="store_const", const=0, dest='verbosity_level', help="Equivalent to -V 0.")
-    parser.add_option('-v', '--verbose', action="store_const", const=2, dest='verbosity_level', help="Equivalent to -V 2.")
+    parser.add_option('-q', '--quiet', action='store_const', const=0, dest='verbosity_level', help="Equivalent to -V 0.")
+    parser.add_option('-v', '--verbose', action='store_const', const=2, dest='verbosity_level', help="Equivalent to -V 2.")
 
     ### test options
     parser.add_option('-t','--test_functionality', action='store_true', default=False, 
@@ -241,8 +257,10 @@ def run_main_function(infiles, outfile, options):
         if len(feature_set)>1:      raise Exception("Multiple gene features found for a mutant in different datasets!")
         current_mutant = Mutant_multi_counts(position_set.pop(), gene_set.pop(), orientation_set.pop(), feature_set.pop())
         # add the counts from each dataset to an infile:count dictionary to the Mutant_multi_counts object
-        if options.perfect_reads_only:  count_getter_function = lambda mutant: mutant.perfect_read_count
-        else:                           count_getter_function = lambda mutant: mutant.total_read_count
+        if options.which_reads=='all':          count_getter_function = lambda mutant: mutant.total_read_count
+        elif options.which_reads=='perfect':    count_getter_function = lambda mutant: mutant.perfect_read_count
+        elif options.which_reads=='imperfect':  count_getter_function = lambda mutant: (mutant.total_read_count 
+                                                                                        - mutant.perfect_read_count)
         for infile,mutant in current_mutant_data.items():
             current_mutant.dataset_counts[infile] = count_getter_function(mutant)
         # figure out the overall main sequence - if it's always the same, take that, else take the one with most counts
@@ -263,11 +281,11 @@ def run_main_function(infiles, outfile, options):
         if options.output_only_shared_mutants:
             if all(current_mutant.dataset_counts.values()):     all_mutants.append(current_mutant)
         else:
-            if sum(current_mutant.dataset_counts.values())>0:   all_mutants.append(current_mutant)
-    if options.perfect_reads_only:  assert len(all_mutants) <= len(all_mutant_positions)
-    else:                           assert len(all_mutants) == len(all_mutant_positions)
-    summary_lines.append("total %s mutants with a non-zero %s count in %s"%(len(all_mutants), 
-                                       ('perfect' if options.perfect_reads_only else 'total'), dataset_combination_info))
+            if any(current_mutant.dataset_counts.values()):     all_mutants.append(current_mutant)
+    if options.which_reads=='all':  assert len(all_mutants) == len(all_mutant_positions)
+    else:                           assert len(all_mutants) <= len(all_mutant_positions)
+    summary_lines.append("total %s mutants with a non-zero %s read count in %s"%(len(all_mutants), options.which_reads, 
+                                                                                 dataset_combination_info))
     if options.verbosity_level>0:   print summary_lines[-1]
 
     # if requested, add gene annotation info from separate file
