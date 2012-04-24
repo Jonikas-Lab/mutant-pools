@@ -222,8 +222,8 @@ def run_main_function(infiles, outfile, options):
     bad_chromosomes_to_count = set(options.bad_chromosomes_count_only.split(',')) - set([''])
 
     ### generate empty alignment set object with basic read position/orientation properties defined by options
-    all_alignment_data = mutant_analysis_classes.Insertional_mutant_library_dataset(options.read_cassette_end, 
-                                                                                    options.read_direction=='reverse')
+    all_alignment_data = mutant_analysis_classes.Insertional_mutant_pool_dataset(options.read_cassette_end, 
+                                                                                 options.read_direction=='reverse')
 
     ### parse preprocessing/alignment metadata file to get discarded read count, pass it to all_alignment_data
     #   (all_alignment_data initializes it to 'unkown', so if file is not given or can't be found, no need to do anything)

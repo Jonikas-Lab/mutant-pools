@@ -309,7 +309,7 @@ def remove_mutants(all_data, file_with_mutants_to_remove, min_readcount_for_remo
     # TODO write somewhere on the plot that mutants were removed?
     sample_data, sample_names, mutant_data = all_data
     # get a list of (chrom,strand,min_pos) tuples for the mutants to remove from the dataset
-    dataset_to_remove = Insertional_mutant_library_dataset()
+    dataset_to_remove = Insertional_mutant_pool_dataset()
     dataset_to_remove.read_from_file(file_with_mutants_to_remove)
     mutants_to_remove = set([(chrom,strand,str(min_pos)) for chrom,strand,min_pos 
                              in dataset_to_remove.mutants_by_position.keys()])
@@ -352,7 +352,7 @@ def get_mutant_colors(color_cassette_mutants=False, color_mutants_from_files={},
     for (color,mutant_file) in color_mutants_from_files.items():
         if verbose:
             print "mutants with %s+ reads in file %s will be colored %s"%(read_count_cutoff, mutant_file, color)
-        dataset = Insertional_mutant_library_dataset()
+        dataset = Insertional_mutant_pool_dataset()
         dataset.read_from_file(mutant_file)
         for (chrom,strand,min_pos),mutant in dataset.mutants_by_position.iteritems():
             # if we're coloring cassette mutants grey, exclude them from this

@@ -56,7 +56,7 @@ def define_option_parser():
     #   1) I'm not sure how to implement it - check the K% or L% for all files, any file, sum over all files?  Make sure it's consistent somehow, and that one mutant will always be in exactly one set between -P and -I (so either both use the sum over all files, or one requires its condition for all files and one for any file)  
     # OR just do it per file here, allowing some mutants to be present in one file but 0 in another, and let them get plotted like that? MIGHT BE THE BEST WAY.  
     # ANYWAY, in the final version, I think the joint-mutant file should just contain both total and perfect reads (possibly with options to do otherwise), and the plotting program should get all these -a/-p/-i/-P/-I options.
-    #   2) As this is set up right now, I can't do that anyway, because for each infile there's only one value saved, either total or perfect or imperfect readcount - no way of getting a ratio. I'd have to rewrite a fair amount to fix that, and if I'm rewriting already, I should just do a full rewrite to use the new multi-dataset Insertional_mutant_data option from mutant_analysis_classes.py!
+    #   2) As this is set up right now, I can't do that anyway, because for each infile there's only one value saved, either total or perfect or imperfect readcount - no way of getting a ratio. I'd have to rewrite a fair amount to fix that, and if I'm rewriting already, I should just do a full rewrite to use the new multi-dataset Insertional_mutant option from mutant_analysis_classes.py!
 
     parser.add_option('-m', '--output_only_shared_mutants', action='store_true', default=False,
                       help="Only output the mutants that have non-zero counts in ALL input files (default %default)")
@@ -193,7 +193,7 @@ class Mutant_multi_counts():
           contains a position (mutant_analysis_classes.Insertion_position instance), 
           gene data, a main sequence, and a filename:count dictionary (defaultdict with default value 0).
     """
-    # TODO I'm not sure if I like this - might want it to be based on the Insertional_mutant_data class in mutant_analysis_classes.py instead of separate like this!  Just use mutant-merging to merge multiple Insertional_mutant_data instances into one, and give the result an extra self.dataset_counts attribute... 
+    # TODO I'm not sure if I like this - might want it to be based on the Insertional_mutant class in mutant_analysis_classes.py instead of separate like this!  Just use mutant-merging to merge multiple Insertional_mutant instances into one, and give the result an extra self.dataset_counts attribute... 
 
     def __init__(self, position, gene, orientation, gene_feature):
         self.position = position
@@ -219,7 +219,7 @@ def run_main_function(infiles, outfile, options):
     all_datasets = []
     for infile in infiles:
         if options.verbosity_level>1:   print "parsing input file %s - time %s."%(infile, time.ctime())
-        current_dataset = mutant_analysis_classes.Insertional_mutant_library_dataset()
+        current_dataset = mutant_analysis_classes.Insertional_mutant_pool_dataset()
         current_dataset.read_from_file(infile)
         all_datasets.append((infile,current_dataset))
         summary_lines.append("%s mutants in dataset from input file %s"%(len(current_dataset.mutants_by_position), infile))
