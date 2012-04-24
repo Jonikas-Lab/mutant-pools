@@ -246,8 +246,10 @@ def run_main_function(infiles, outfile, options):
             except KeyError:    pass
         assert len(current_mutant_data)>0
         # merge the position/gene data from each mutant object into a single Mutant_multi_counts object
+        # I'm hashing positions here, so make them immutable/hashable first
+        # TODO _make_immutable is not fully implemented! Using it temporarily here - rewrite this or implement it fully.
+        for mutant in current_mutant_data.values():     mutant.position._make_immutable()
         position_set    = set([mutant.position     for mutant in current_mutant_data.values()])
-        # MAYBE-TODO I shouldn't be hashing Insertion_position instances, they're mutable! But I'm not changing them here.
         gene_set        = set([mutant.gene         for mutant in current_mutant_data.values()])
         orientation_set = set([mutant.orientation  for mutant in current_mutant_data.values()])
         feature_set     = set([mutant.gene_feature for mutant in current_mutant_data.values()])
@@ -256,6 +258,9 @@ def run_main_function(infiles, outfile, options):
         if len(orientation_set)>1:  raise Exception("Multiple orientations found for a mutant in different datasets!")
         if len(feature_set)>1:      raise Exception("Multiple gene features found for a mutant in different datasets!")
         current_mutant = Mutant_multi_counts(position_set.pop(), gene_set.pop(), orientation_set.pop(), feature_set.pop())
+        # done with hashing positions - make them mutable/non-hashable again
+        del position_set
+        for mutant in current_mutant_data.values():     mutant.position._make_mutable()
         # add the counts from each dataset to an infile:count dictionary to the Mutant_multi_counts object
         if options.which_reads=='all':          count_getter_function = lambda mutant: mutant.total_read_count
         elif options.which_reads=='perfect':    count_getter_function = lambda mutant: mutant.perfect_read_count

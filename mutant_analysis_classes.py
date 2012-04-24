@@ -30,7 +30,204 @@ class SPECIAL_GENE_CODES(object):
 SPECIAL_GENE_CODES.all_codes = [value for (name,value) in SPECIAL_GENE_CODES.__dict__.items() if not name.startswith('__')]
 
 
-### Various functions
+### Functions/classes for dealing with alignment/insertion positions
+
+# has to be a new-style object-based class due to the immutability/hashability thing
+class Insertion_position(object):
+    """ A descriptor of the position of a genomic insertion, with handling of before/after sides and ambiguity.
+
+    Attributes: 
+     - chromosome and strand - the chromosome the insertion is on, and the strand it's in sense orientation to.
+     - position_before and position_after - positions before and after the insertion site (1-based): 
+         integers, or None if unknown;
+     - min_position and max_position - lowest/highest possible position values as plain numbers, no ambiguity
+     - full_position - a string describing the full position: 3-4 for exact positions, 3-? or 4-? if one side is unknown. 
+
+    Methods: 
+     - comparison/sorting: __cmp__ is based on chromosome name/number, min_/max_position, strand, position_before/_after, 
+                            in that order - see __cmp__ docstring for more details/explanations
+     - copy method returns an identical but separate copy of the object (not just another reference to the same object)
+     - printing: __str__ returns "chromosome,strand,full_position"; 
+                __repr__ returns "Insertion_position(chromosome,strand,full_position)"
+     - there are also _make_immutable and _make_mutable methods half-defined right now, for rudimentary and UNSAFE
+                            hashability - those may be removed in the future (or implemented fully if there is need)
+    """
+
+    # NOTE: originally I used biopython SeqFeature objects for position_before and position_after (specifically SeqFeature.ExactPosition(min_val) for exactly positions and SeqFeature.WithinPosition(min_val, min_val-max_val) for ambiguous ones), but then I realized I'm not using that and it's over-complicated and hard to make immutable and may not be what I need anyway even if I do need immutable positions, so I switched to just integers. The function to generate those was called make_position_range, and I removed it on 2012-04-23, if I ever want to look it up again later.
+
+    def __init__(self, chromosome, strand, full_position=None, position_before=None, position_after=None):
+        """ Initialize all values - chromosome/strand are just copied from arguments; positions are more complicated. 
+        
+        You must provide either full_position, OR one or both of position_before/position_after. 
+        The two position_* arguments must be castable to ints, or None.
+        The full_position argument must be a string of the form '100-200', '?-200' or '100-?', such as would be generated 
+         by self.full_position() - self.position_before and _after are set based on the two parts of the string.
+        Self.min_/max_position are calculated based on self.position_before/_after - both, or whichever one isn't None.
+        """
+        self.chromosome = chromosome
+        self.strand = strand
+        # parse full_position if provided
+        if full_position is not None:
+            if (position_before is not None) or (position_after is not None):
+                raise ValueError("If providing full_position, cannot also provide position_before/position_after!")
+            self.position_before, self.position_after = self._parse_full_position(full_position)
+        # otherwise use position_before and/or position_after
+        else:
+            if position_before is None and position_after is None:
+                raise ValueError("Can't create an Insertion_position object with no known position values!")
+            try:
+                self.position_before = None if position_before is None else int(position_before)
+                self.position_after = None if position_after is None else int(position_after)
+            except TypeError:  
+                raise ValueError("position_before/position_after must be int-castable or None!")
+
+    @property   # this is a builtin decorator to make an attribute out of a method
+    def min_position(self):
+        if self.position_after is None:     return self.position_before
+        elif self.position_before is None:  return self.position_after-1
+        else:                               return min(self.position_before, self.position_after-1)
+
+    @property   # this is a builtin decorator to make an attribute out of a method
+    def max_position(self):
+        if self.position_after is None:     return self.position_before+1
+        elif self.position_before is None:  return self.position_after
+        else:                               return min(self.position_before+1, self.position_after)
+
+    @property   # this is a builtin decorator to make an attribute out of a method
+    def full_position(self):
+        info_before = str(self.position_before) if self.position_before is not None else '?'
+        info_after = str(self.position_after) if self.position_after is not None else '?'
+        return info_before + '-' + info_after
+
+    @classmethod
+    def _parse_full_position(cls, full_position_string):
+        """ Parse a full_position string to proper (position_before, position_after) value. """
+        try:
+            before,after = [cls._parse_single_position(s) for s in full_position_string.split('-')]
+        except (ValueError,AttributeError):
+            raise ValueError("The full_position argument must be a string of the form '100-200', '?-200' or '100-?'!")
+        if before is None and after is None:
+            raise ValueError("At least one section of the full_position argument must be a number!")
+        return before,after
+
+    @staticmethod
+    def _parse_single_position(pos_string):
+        """ Make a proper position value: cast to int, or return None if '?' or ''. """
+        if pos_string in ['?','']:  return None
+        else:                       return int(pos_string)
+
+    def __str__(self): 
+        return ','.join([self.chromosome, self.strand, self.full_position])
+
+    def __repr__(self):
+        return "Insertion_position('%s','%s','%s')"%(self.chromosome, self.strand, self.full_position)
+
+    def copy(self):
+        """ Return a deep-copy of self - NOT just a reference to the same object. """
+        return Insertion_position(self.chromosome, self.strand, position_before=self.position_before, 
+                                  position_after=self.position_after)
+
+    def _make_key(self):
+        """ Make key for sorting/comparison - based on chromosome/position/strand, with improved chromosome-number sorting.
+
+        First two fields are chromosome data - splits chromosome into name/number (both optional), 
+         so that "chr2" sorts before "chr12" (but 'chr' before 'chr1', and 'other_chr1' after 'chr4').
+        Next two fields are min_/max_position - these are always numerically defined, so ?-101 and 100? will sort together
+         (as opposed to if we used position_before/_after, which can be None).
+        Next field is strand - we want the sorting on position BEFORE strand, it's more readable/sensible that way.
+        Final two fields are position_before/after, to ensure ?-101 isn't considered equal to 100-101.
+        """
+        chromosome_data = re.search('^(?P<name>.*[^\d])?(?P<number>\d*)', self.chromosome)
+        chromosome_name = chromosome_data.group('name')         # if there were no non-digit characters, this is None
+        chromosome_number = int(chromosome_data.group('number')) if chromosome_data.group('number') else 0
+        all_position_values = (chromosome_name, chromosome_number, self.min_position, self.max_position, 
+                               self.strand, self.position_before, self.position_after)
+        return all_position_values
+
+    def __cmp__(self,other):
+        """ Based on tuple-comparison of (chr_name, chr_number, min_pos, max_pos, strand) - in that order for sane sort."""
+        return cmp(self._make_key(), other._make_key())
+
+    # MAYBE-TODO do I also want a rough_comparison method, which would return True for ?-101 and 100-101 etc?  How about 100-101 and 100-102, then?
+
+    # MAYBE-TODO add some kind of merge function to merge two positions into one?  Do I actually need that?  When I'm merging two position-based read groups together because they're actually probably the same mutant with some sequencing indels, I actually just keep the more common position, since that's presumably the correct one. So are there any cases where I'd need to merge positions?
+
+    ### MUTABILITY AND HASHABILITY SWITCHES
+    # Sometimes I want to use positions as dictionary keys or put them in sets - so they need to be hashable, 
+    #  and since I also need a sane comparison operator, I can't use the default object id-based hashing, 
+    #  so I have to make the objects immutable for them to be hashable. 
+    # More info on how/why that is: http://docs.python.org/reference/datamodel.html#object.__hash__ 
+    # Some links on implementation: http://stackoverflow.com/questions/9997176/immutable-dictionary-only-use-as-a-key-for-another-dictionary, http://stackoverflow.com/questions/1151658/python-hashable-dicts, http://stackoverflow.com/questions/4996815/ways-to-make-a-class-immutable-in-python, http://stackoverflow.com/questions/4828080/how-to-make-an-immutable-object-in-python
+    # This implementation is not perfect, but it should do.
+
+    # MAYBE-TODO implement!  DO I actually need hashability at all?  Right now the only time I put positions in sets is in mutant_join_datasets.py, which will be removed anyway... Will I want to do it again somewhere else? WAIT AND SEE.
+    # MAYBE-TODO if I implement this properly, add to class docstring, and update method docstrings!
+    # MAYBE-TODO if I implement this properly, remove the leading _ from the two _make* method names, since in that case they won't really be private any more - right now it's there just to remind me I shouldn't be using them.
+    # MAYBE-TODO if I implement this properly, add to unit-tests!
+    # MAYBE-TODO if I implement this properly, could add a hashable switch to __init__? And include it in __repr__.
+
+    def _hash(self):
+        """ Private hash-method based on _make_key - __hash__ will use it if you run self._make_immutable()."""
+        return hash(self._make_key())
+
+    def __hash__(self):
+        """ If self.hashable is True, use private _hash method, otherwise use id-based object.__hash__. """
+        if hasattr(self,'hashable') and self.hashable:  return self._hash()
+        else:                                           return object.__hash__(self)
+
+    def _make_immutable(self):
+        """ Reversibly make object immutable and hashable. NOT FULLY IMPLEMENTED."""
+        # MAYBE-TODO implement removing mutability methods!
+        # set object to hashable - it's immutable, so that's all right
+        self.hashable = True
+
+    def _make_mutable(self):
+        """ Reversibly make object mutable and non-hashable. NOT FULLY IMPLEMENTED."""
+        # MAYBE-TODO implement re-adding mutability methods!
+        # set object to unhashable, since it's mutable
+        self.hashable = False
+
+
+def get_insertion_pos_from_HTSeq_read_pos(HTSeq_pos, cassette_end, reads_are_reverse=False):
+    """ Return a Insertion_position instance giving the cassette insertion position based on HTSeq read position. 
+
+    HTSeq_pos should be a HTSeq.GenomicPosition instance; cassette_end gives the side of the insertion that read is on; 
+     reads_are_reverse is True if the read is in reverse orientation to the cassette, False otherwise. 
+
+    The cassette chromosome will be the same as read chromosome; the cassette strand will be the same as read strand, 
+     or opposite of the read strand if reads_are_reverse is True.
+
+    The cassette position depends on read position, cassette strand (not read strand) and cassette_end in a complex way:
+     Data I have:  which end of the insertion cassette the read is on, and which orientation the cassette is in. 
+     Data I want:  the position of the base before and after the insertion, regardless of cassette orientation.
+                       (the read orientation in regard to cassette doesn't matter at all here)
+     If read is 5' of cassette and cassette is +, or read is 3' of cassette and cassette is -, read is BEFORE cassette
+     If read is 3' of cassette and cassette is +, or read is 5' of cassette and cassette is -, read is AFTER cassette
+      If read is before cassette, I care about the end of the read; if it's after, I care about the start)
+      SAM alignment position is leftmost/rightmost, i.e. end is always the "later" position in the genome, 
+       regardless of the read orientation, which gives me what I want, i.e. the insertion position.
+
+    Insertion_position uses a 1-based position system (as opposed to HTSeq, which is 0-based).
+    """
+    ### chromosome is always the same as read (also checking that the HTSeq_pos has a chrom attribute at all here)
+    try:
+        chrom = HTSeq_pos.chrom
+    except AttributeError:
+        raise ValueError("Invalid position %s! Need an HTSeq iv object. (If empty, maybe read wasn't aligned?)"%HTSeq_pos)
+    ### cassette strand is the same as read strand, OR the opposite if reads_are_reverse is True
+    strand = HTSeq_pos.strand
+    if reads_are_reverse:     strand = '+' if strand=='-' else '-'
+    ### cassette position depends on the read position and cassette_end in a somewhat complex way 
+    #   (see description in docstring, and ../notes.txt for even more detail)
+    # HTSeq is 0-based and I want 1-based, thus the +1; end has no +1 because in HTSeq end is the base AFTER the alignment.
+    if (cassette_end=='5prime' and strand=='+') or (cassette_end=='3prime' and strand=='-'):      
+        pos_before, pos_after = HTSeq_pos.end, None
+    elif (cassette_end=='3prime' and strand=='+') or (cassette_end=='5prime' and strand=='-'):    
+        pos_before, pos_after = None, HTSeq_pos.start+1
+    else:                           
+        raise ValueError("cassette_end argument must be one of %s."%SEQ_ENDS)
+    return Insertion_position(chrom, strand, position_before=pos_before, position_after=pos_after)
+
 
 def find_gene_by_pos(insertion_pos, chromosome_GFF_record, detailed_features=False, quiet=False):
     """ Look up insertion_pos in chromosome_GFF_record; return (gene_ID,orientation,subfeature) of insertion in gene.
@@ -150,148 +347,6 @@ def find_gene_by_pos(insertion_pos, chromosome_GFF_record, detailed_features=Fal
     # if no gene matching insertion_pos was found, return special value
     return SPECIAL_GENE_CODES.not_found, '-', '-'
     # MAYBE-TODO add unit tests?  But this is included in a pretty thorough run-test, so may not be necessary.
-
-
-### Functions/classes for dealing with alignment/insertion positions
-
-def make_joint_position(val_or_list):
-    """ Takes a number or an iterator of numbers; returns biopython ExactPosition(val) or WithinPosition(min,max-min). """
-    # Do I even need this SeqFeature.ExactPosition/SeqFeature.WithinPosition thing from biopython here?  
-    #   I might as well use them, I guess, but I could write something of my own too.
-    if val_or_list is None:         
-        return None
-    if (val_or_list is True) or (val_or_list is False): 
-        raise ValueError("Argument to make_joint_position can't be True/False!")
-    try:
-        min_val = int(min(val_or_list))
-        max_val = int(max(val_or_list))
-        if min_val==max_val:    return SeqFeature.ExactPosition(min_val)
-        else:                   return SeqFeature.WithinPosition(min_val, min_val-max_val)
-    except TypeError:           return SeqFeature.ExactPosition(int(val_or_list))
-
-
-class Insertion_position():
-    """ A descriptor of the position of a genomic insertion, with handling of before/after sides and ambiguity.
-
-    Attributes: 
-     - chromosome and strand - the chromosome the insertion is on, and the strand it's in sense orientation to.
-     - position_before and position_after - positions before and after the insertion site (1-based), or None if unknown;
-        use biopython SeqFeature objects (ExactPosition for a single base, or WithinPosition when there's ambiguity).
-     - min_position and max_position - lowest/highest possible position values as plain numbers, no ambiguity
-     - full_position - a string describing the full position: 3-4 for exact positions, 3-? or 4-? if one side is unknown, 
-        (2.3)-4 or 3-(4.6) for ambiguous positions that could be anywhere within a range.
-     - chromosome_name, chromosome_number - two parts of chromosome string: 'chr1'->('chr','1'), 'abc'->('abc','')
-     - all_position_values - all sorting-relevant information: chrome name, number, min_position, max_position, strand
-
-    Methods: 
-     - printing: __str__ returns full_position
-     - comparison: __cmp__ is based on all_position_values 
-    """
-
-    def __init__(self, chromosome, strand, full_position=None, position_before=None, position_after=None):
-        """ Initialize all the values - most are straightforward; dealing with positions is a bit complicated. 
-        
-        The two position_* arguments can be numbers, or iterators of numbers interpreted as a range of positions, 
-         from which a min and max value is taken to form a biopython WithinPosition.  The full_position argument is 
-          a string, such as would be generated by self.__str__() - if it's provided, the two other arguments are ignored. 
-        At least one of the three position arguments must be provided; if one isn't provided, the value is left as None.
-        Min_position and max_position are calculated based on both of the arguments, or whichever one isn't None.
-        Chromosome, strand, chromosome_name/number, full_position and all_position values are simple - see class docstring.
-        """
-        self.chromosome = chromosome
-        self.strand = strand
-        if full_position is not None:
-            self.position_before, self.position_after = self.parse_full_position(full_position)
-        else:
-            if (position_before is None) and (position_after is None):
-                raise ValueError("can't create an Insertion_position object with no known position values!")
-            self.position_before = make_joint_position(position_before)
-            self.position_after = make_joint_position(position_after)
-        ### non-obvious position descriptors
-        if self.position_after is None:
-            self.min_position = self.position_before.position
-            self.max_position = self.position_before.position+1
-        elif self.position_before is None:
-            self.min_position = self.position_after.position-1
-            self.max_position = self.position_after.position
-        else:
-            self.min_position = min(self.position_before.position, self.position_after.position-1)
-            self.max_position = max(self.position_before.position+1, self.position_after.position)
-        self.full_position = str(self)
-        # split chromosome into name (if it has any non-digit characters) and number (if it has a number), 
-        #   to make chromosome_11 sort after chromosome_2 instead of before it, which is what happens with string-sort
-        chromosome_data = re.search('^(?P<name>.*[^\d])?(?P<number>\d*)', self.chromosome)
-        self.chromosome_name = chromosome_data.group('name')    # if there were no non-digit characters, this is None
-        self.chromosome_number = int(chromosome_data.group('number')) if chromosome_data.group('number') else 0
-        self.all_position_values = (self.chromosome_name, self.chromosome_number, 
-                                    self.min_position, self.max_position, self.strand)
-
-    # MAYBE-TODO add some kind of merge function to merge two positions into one?  Do I actually need that?  When I'm merging two position-based read groups together because they're actually probably the same mutant with some sequencing indels, I actually just keep the more common position, since that's presumably the correct one. So are there any cases where I'd need to merge positions?
-
-    def __cmp__(self,other):
-        return cmp(self.all_position_values, other.all_position_values)
-
-    def __hash__(self):
-        return hash(self.all_position_values)
-        # MAYBE-TODO note that I shouldn't really be hashing Insertion_position instances, since they're mutable!  Maybe I should give it a make_immutable() or such function, that would at the same time freeze all attributes (see FrozenClass in general_utilities.py) and add a __hash___ function?
-
-    def __str__(self): 
-        info_before = str(self.position_before) if self.position_before is not None else '?'
-        info_after = str(self.position_after) if self.position_after is not None else '?'
-        return info_before + '-' + info_after
-
-    def parse_single_position(self, pos_string):
-        """ Make a proper biopython position value from a string, or return None if '?' or ''. """
-        if pos_string in ['?','']:  return None
-        if pos_string.isdigit():    return make_joint_position(int(pos_string))
-        else:                       return make_joint_position([int(x) for x in pos_string.strip('()').split('.')])
-
-    def parse_full_position(self, full_position_string):
-        """ Parse a full_position string to proper position_before and position_after values. """
-        return [self.parse_single_position(s) for s in full_position_string.split('-')]
-
-    # LATER-TODO add unit tests for this whole class!
-
-
-def get_insertion_pos_from_HTSeq_read_pos(HTSeq_pos, cassette_end, reads_are_reverse=False):
-    """ Return a Insertion_position instance giving the cassette insertion position based on HTSeq read position. 
-
-    HTSeq_pos should be a HTSeq.GenomicPosition instance; cassette_end gives the side of the insertion that read is on; 
-     reads_are_reverse is True if the read is in reverse orientation to the cassette, False otherwise. 
-
-    The cassette chromosome will be the same as read chromosome; the cassette strand will be the same as read strand, 
-     or opposite of the read strand if reads_are_reverse is True.
-
-    The cassette position depends on read position, cassette strand (not read strand) and cassette_end in a complex way:
-     Data I have:  which end of the insertion cassette the read is on, and which orientation the cassette is in. 
-     Data I want:  the position of the base before and after the insertion, regardless of cassette orientation.
-                       (the read orientation in regard to cassette doesn't matter at all here)
-     If read is 5' of cassette and cassette is +, or read is 3' of cassette and cassette is -, read is BEFORE cassette
-     If read is 3' of cassette and cassette is +, or read is 5' of cassette and cassette is -, read is AFTER cassette
-      If read is before cassette, I care about the end of the read; if it's after, I care about the start)
-      SAM alignment position is leftmost/rightmost, i.e. end is always the "later" position in the genome, 
-       regardless of the read orientation, which gives me what I want, i.e. the insertion position.
-
-    Insertion_position uses a 1-based position system (as opposed to HTSeq, which is 0-based).
-    """
-    ### chromosome is always the same as read (also checking that the HTSeq_pos has a chrom attribute at all here)
-    try:
-        chrom = HTSeq_pos.chrom
-    except AttributeError:
-        raise ValueError("Invalid position %s! Need an HTSeq iv object. (If empty, maybe read wasn't aligned?)"%HTSeq_pos)
-    ### cassette strand is the same as read strand, OR the opposite if reads_are_reverse is True
-    strand = HTSeq_pos.strand
-    if reads_are_reverse:     strand = '+' if strand=='-' else '-'
-    ### cassette position depends on the read position and cassette_end in a somewhat complex way 
-    #   (see description in docstring, and ../notes.txt for even more detail)
-    # HTSeq is 0-based and I want 1-based, thus the +1; end has no +1 because in HTSeq end is the base AFTER the alignment.
-    if (cassette_end=='5prime' and strand=='+') or (cassette_end=='3prime' and strand=='-'):      
-        pos_before, pos_after = HTSeq_pos.end, None
-    elif (cassette_end=='3prime' and strand=='+') or (cassette_end=='5prime' and strand=='-'):    
-        pos_before, pos_after = None, HTSeq_pos.start+1
-    else:                           
-        raise ValueError("cassette_end argument must be one of %s."%SEQ_ENDS)
-    return Insertion_position(chrom, strand, position_before=pos_before, position_after=pos_after)
 
 
 ### Main classes describing the mutants and mutant sets
@@ -494,14 +549,16 @@ class Insertional_mutant():
 
     def _copy_non_readcount_data(self, source_mutant):
         """ Copy non-readcount-related data from source_mutant to self."""
-        # TODO should COPY the position, not just make another name for the same value!  How?
-        self.position     = source_mutant.position
+        # COPY the position, not just make another name for the same value - I wrote a copy() function for positions
+        self.position     = source_mutant.position.copy() 
+        # strings are immutable and thus safe to "copy" by adding another name to the same value
         self.gene         = source_mutant.gene
         self.orientation  = source_mutant.orientation
         self.gene_feature = source_mutant.gene_feature
 
     def _copy_readcount_related_data(self, source_mutant):
         """ Copy readcount-related data from source_mutant to self."""
+        # integers are immutable and thus safe to "copy" by adding another name to the same value
         self.total_read_count      = source_mutant.total_read_count
         self.perfect_read_count    = source_mutant.perfect_read_count
         self.unique_sequence_count = source_mutant.unique_sequence_count
@@ -552,6 +609,7 @@ class Insertional_mutant():
         #  (probably should be using ifs rather than asserts, but I think since they're wrapped in a try/except it's fine)
         if check_constant_data:
             try:
+                # MAYBE-TODO should this be an inexact comparison? Right now 100-101 is NOT equal to ?-101 or to 100-102.
                 assert self.position == other_mutant.position
                 assert len(set([self.gene, other_mutant.gene]) - set([SPECIAL_GENE_CODES.not_determined])) == 1
                 assert len(set([self.orientation, other_mutant.orientation]) - set(['?'])) == 1
@@ -1011,20 +1069,84 @@ class Insertional_mutant_pool_dataset():
 
 ######### Test code #########
 
-class Testing_single_functions(unittest.TestCase):
-    """ Unit-tests for most of the top-level functions in this module. """
+class Testing_position_functionality(unittest.TestCase):
+    """ Unit-tests for position-related classes and functions. """
 
     from deepseq_utilities import Fake_deepseq_objects
     Fake_HTSeq_genomic_pos = Fake_deepseq_objects.Fake_HTSeq_genomic_pos
 
-    def test__make_joint_position(self):
-        assert make_joint_position(None) == None
-        for arg in ['', [], {}, 'aaa', True, False]:
-            self.assertRaises(ValueError, make_joint_position, arg)
-        assert make_joint_position(100) == SeqFeature.ExactPosition(100)
-        assert make_joint_position([100,100]) == SeqFeature.ExactPosition(100)
-        assert make_joint_position([100,103]) == SeqFeature.WithinPosition(100,3)
-        assert make_joint_position([100,103,102,102,101]) == SeqFeature.WithinPosition(100,3)
+    def test__Insertion_position(self):
+        # different ways of making the same position or approximately same position, 
+        #  by defining position_after, position_before, or both
+        a_pos1 = Insertion_position('chr','+', '?-101')
+        a_pos2 = Insertion_position('chr','+', full_position='?-101')
+        a_pos3 = Insertion_position('chr','+', position_after=101)
+        a_pos4 = Insertion_position('chr','+', position_after='101')
+        a_pos5 = Insertion_position('chr','+', '-101')
+        all_after_positions = [a_pos1, a_pos2, a_pos3, a_pos4, a_pos5]
+        b_pos1 = Insertion_position('chr','+', '100-?')
+        b_pos2 = Insertion_position('chr','+', full_position='100-?')
+        b_pos3 = Insertion_position('chr','+', position_before=100)
+        b_pos4 = Insertion_position('chr','+', position_before='100')
+        b_pos5 = Insertion_position('chr','+', '100-')
+        all_before_positions = [b_pos1, b_pos2, b_pos3, b_pos4, b_pos5]
+        c_pos1 = Insertion_position('chr','+', '100-101')
+        c_pos2 = Insertion_position('chr','+', full_position='100-101')
+        c_pos3 = Insertion_position('chr','+', position_before=100, position_after=101)
+        c_pos4 = Insertion_position('chr','+', position_before='100', position_after=101)
+        c_pos5 = Insertion_position('chr','+', '100-101')
+        all_both_positions = [c_pos1, c_pos2, c_pos3, c_pos4, c_pos5]
+        all_positions = all_after_positions + all_before_positions + all_both_positions
+        # most things are exactly the same for all these positions
+        assert all([pos.chromosome == 'chr' for pos in all_positions])
+        assert all([pos.strand == '+' for pos in all_positions])
+        assert all([pos.min_position == 100 for pos in all_positions])
+        assert all([pos.max_position == 101 for pos in all_positions])
+        # position_before and position_after is defined for some and not others
+        assert all([pos.full_position == '?-101' for pos in all_after_positions])
+        assert all([pos.full_position == '100-?' for pos in all_before_positions])
+        assert all([pos.full_position == '100-101' for pos in all_both_positions])
+        assert all([pos.position_before is None for pos in all_after_positions])
+        assert all([pos.position_before == 100 for pos in all_before_positions+all_both_positions])
+        assert all([pos.position_after is None for pos in all_before_positions])
+        assert all([pos.position_after == 101 for pos in all_after_positions+all_both_positions])
+        # printing - str gives just the basic info, repr gives the function to generate the object
+        assert all([str(pos) == 'chr,+,100-?' for pos in all_before_positions])
+        assert all([repr(pos) == "Insertion_position('chr','+','100-?')" for pos in all_before_positions])
+        # comparison - positions are only equal if they're exactly identical, so ?-101 and 100-101 aren't equal
+        assert a_pos1 == a_pos2 == a_pos3 == a_pos4 == a_pos5
+        assert b_pos1 == b_pos2 == b_pos3 == b_pos4 == b_pos5
+        assert c_pos1 == c_pos2 == c_pos3 == c_pos4 == c_pos5
+        assert a_pos1 != b_pos1 != c_pos1 != a_pos1     # need a_pos1 twice to get it compared to both of the others
+        # sorting - based on chromosome names/numbers, then min_pos, then strand
+        pos1 = Insertion_position('chr','+', '10-201')
+        pos2 = Insertion_position('chr','+', '?-101')
+        pos3 = Insertion_position('chr','+', '200-?')
+        pos4 = Insertion_position('chr','-', '200-?')
+        pos5 = Insertion_position('chr2','+', '?-101')
+        pos6 = Insertion_position('chr12','+', '?-101')
+        pos7 = Insertion_position('other_chr','+', '?-101')
+        pos8 = Insertion_position('other_chr_4','+', '?-101')
+        pos9 = Insertion_position('other_chr_13','+', '?-101')
+        assert pos1 < pos2 < pos3 < pos4 < pos5 < pos6 < pos7 < pos8 < pos9
+        ### copying position - same contents, different ID
+        pos5 = pos1.copy()
+        assert pos5 == pos1
+        assert pos5 is not pos1
+        ### invalid creation options
+        # at least one position arg is required, and there must be at least one meaningful number overall
+        self.assertRaises(ValueError, Insertion_position, 'chr','+')
+        self.assertRaises(ValueError, Insertion_position, 'chr','+', full_position=None, position_before=None)
+        self.assertRaises(ValueError, Insertion_position, 'chr','+', position_before=None, position_after=None)
+        self.assertRaises(ValueError, Insertion_position, 'chr','+', full_position='?-?')
+        self.assertRaises(ValueError, Insertion_position, 'chr','+', full_position='-')
+        # if providing full_position, can't provide another position arg
+        self.assertRaises(ValueError, Insertion_position, 'chr','+','100-?',position_before=100)
+        self.assertRaises(ValueError, Insertion_position, 'chr','+','100-?',position_after=100)
+        self.assertRaises(ValueError, Insertion_position, 'chr','+','100-?',position_before=100,position_after=100)
+        # full_position arg must be proper format
+        for bad_fullpos in ['100', '100?', 100, (100,200), [100,200], True, False, '1-2-3', 'adaf', 'as-1']:
+            self.assertRaises(ValueError, Insertion_position, 'chr','+', bad_fullpos)
 
     def test__get_insertion_pos_from_HTSeq_position(self):
         # should raise exception for invalid HTSeq_pos argument
