@@ -354,26 +354,47 @@ def find_gene_by_pos(insertion_pos, chromosome_GFF_record, detailed_features=Fal
 class Insertional_mutant():
     """ Data regarding a particular insertional mutant: insertion position, gene, read numbers/sequences, etc.
 
-    General attributes:
-     - position - an Insertion_position instance giving the insertion chromosome/strand/position, with ambiguity etc
-     - gene, orientation, gene feature - what gene the insertion is in (or one of the SPECIAL_GENE_CODES if unknown), 
+    Mutants have the following attributes (data):
+     1) Position/gene attributes (except readcount-related-only mutants, which don't have those):
+        - position - an Insertion_position instance giving the insertion chromosome/strand/position
+        - gene, orientation, gene feature - what gene the insertion is in (or one of the SPECIAL_GENE_CODES if unknown), 
                 whether it's in the sense or antisense orientation vs the gene, what feature (exon/intron/UTR) it's in.
-    Readcount-related attributes:
-     - total_read_count, perfect_read_count - number of all and perfectly aligned deepseq reads
-     - unique_sequence_count, sequences_and_counts - number of unique read sequences, and a seq:count dictionary
-     These may exist either in forms as below, or in *_by_dataset dictionary forms (dataset_name:value), 
-      if convert_to_multi_dataset() has been run or multi_dataset was passed as True to __init__.
+     2) Readcount-related attributes (multi-dataset mutants don't have those on the top-level):
+        - total_read_count, perfect_read_count - number of all and perfectly aligned deepseq reads
+        - unique_sequence_count, sequences_and_counts - number of unique read sequences, and a seq:count dictionary
+     3) Attributes related to multi-dataset mutants:
+        - multi_dataset - a True/False flag specifying whether a mutant is multi-dataset or not
+        - by_dataset - a dataset_name:readcount_data_object dictionary which multi-dataset mutants contain 
+            instead of top-level readcount-related attributes. See "Types of mutants" section for more info/examples.
 
-    ________ snippets for single-dataset vs multi-dataset info: _________
-    Go from a model where each mutant has a single value for each readcount-related attribute, to 
-    total_read_count, perfect_read_count, unique_sequence_count etc, 
-     all of which refer to some implied but unnamed dataset, to a model where each of these is in fact 
-     a dataset_name:value dictionary, holding different values for different datasets. 
+    Types of mutants (with corresponding flags to the __init__ function):
+        - normal or readcount-related-only - readcount-related-only mutants have no position/gene attributes, 
+            only readcount-related attributes. Used as parts of a multi-dataset mutants to store per-dataset data.
+        - single-dataset or multi-dataset - the multi_dataset attribute is True if multi-dataset, false otherwise.
+            Both versions have one copy of position/gene attributes. A single-dataset mutant also has just one copy of 
+             all readcount-related attributes (and doesn't store the dataset name for them); a multi-dataset mutant has 
+             a by_dataset dataset_name:readcount_only_mutant dictionary instead of top-level readcount-related attributes; 
+              the dictionary contains a separate readcount-related-only mutant for each dataset, 
+               which stores all the readcount-related attributes for that dataset.
+             For example to get total_read_count from a single-dataset mutant, you use mutant.total_read_count; 
+              to get it for dataset d1 from a multi-dataset mutant, you use mutant.by_dataset['d1'].total_read_count.
+            A single-dataset mutant can be converted to a multi-dataset one in place using ____; 
+            a new single-dataset mutant can be extracted from a multi-dataset one using _____. 
+
+    Methods (functions) of mutant objects:
+        For detailed information on mutant methods, see method docstrings.
+        Methods with names starting with _ are private and shouldn't be used from outside the object itself.
+        Readcount-related methods take a dataset_name argument - when calling those methods on a single-dataset mutant, 
+         don't give a dataset_name value, but when calling them on multi-dataset mutant, give the name of the dataset you 
+          want to apply the method to.  Doing this wrong will raise an Exception.  
+         Some methods (like get_main_sequence) have a well-defined behavior when called on a multi-dataset mutant without 
+          specifying a dataset - they'll give the result for all datasets added together.
+         Some methods may not have multi-dataset functionality implemented, if I didn't think it would be useful.
     """
-    # TODO add info about single-dataset vs multi-dataset mutants to docstring!  Can use some from last git commit...  Explain that most of the functions that take a dataset_name argument can work on single- or multi-dataset mutants, and how, so I don't have to repeat it in each function docstring (except when one acts differently)
 
     def __init__(self, insertion_position=None, multi_dataset=False, readcount_related_only=False):
         """ Set self.position based on argument; initialize read/sequence counts to 0 and gene-info to unknown. 
+
         insertion_position argument should be a Insertion_position instance. If multi_dataset is True, all 
          readcount-related attributes will be initialized as dataset_name:value defaultdicts instead of single values.
         If readcount_related_only is True, non-readcount-related attributes won't be initialized at all.
@@ -396,18 +417,21 @@ class Insertional_mutant():
     # MAYBE-TODO give each mutant some kind of unique ID at some point in the process?  Or is genomic location sufficient?  If we end up using per-mutant barcodes (in addition to the flanking sequences), we could use that, probably, or that plus genomic location.
 
     def _set_readcount_related_data_to_zero(self):
-        """ Set all readcount-related data to 0/empty/etc."""
+        """ Set all readcount-related data to 0/empty."""
         self.total_read_count      = 0
         self.perfect_read_count    = 0
         self.unique_sequence_count = 0
         self.sequences_and_counts  = defaultdict(lambda: 0)
 
     def _check_consistent_multi_dataset_args(self, dataset_name, function_name='<some_func>', multi_noname_allowed=False):
-        """ Check that dataset_name makes sense given self.multi_dataset; raise Exception if not.
+        """ Make sure dataset_name is consistent with single-/multi-dataset status of mutant; raise Exception if not.
 
-        Raise Exception if dataset_name is None for multi-dataset mutant (unless multi_noname_allowed is True), 
-          or if dataset_name is not None for single-dataset mutant.
-        The exception text will include function_name if given.
+        Raise Exception if dataset_name is None for multi-dataset mutant (i.e. the caller is trying to do some operation 
+          on a multi-dataset mutant without specifying which dataset to do it on (there are a few cases in which this
+           does make sense - in that case multi_noname_allowed=True should be passed), 
+          or if dataset_name is not None for single-dataset mutant (i.e. the caller is trying to do some operation 
+           on a specific dataset when the mutant is single-dataset and has no named datasets at all).
+        The exception text will use function_name as the name of the calling function, if given.
         """
         # MAYBE-TODO probably possible to do this as a decorator and without passing function_name explicitly, but I'm not sure how...  See http://stackoverflow.com/questions/5063607/is-there-a-self-flag-can-reference-python-function-inside-itself for how to get the function name, but I don't actually know how to do the rest with a decorator (specifically how to get the dataset_name value from the decorated function so I can do things with it!)
         if self.multi_dataset and (dataset_name is None) and not multi_noname_allowed: 
@@ -422,8 +446,9 @@ class Insertional_mutant():
 
         Specifically: increment total_read_count, increment perfect_read_count if read is a perfect 
          alignment, increment the appropriate field of sequences_and_counts based on read sequence.
-        If self.multi_dataset is True, dataset_name is required and the appropriate by-dataset values will be changed.
         Note: this does NOT check the read position to make sure it matches that of the object.
+
+        If self.multi_dataset is True, dataset_name is required and the appropriate by-dataset values will be changed.
         """
         ### standard stuff for multi-dataset mutants
         # make sure the caller isn't confused about single/multi-dataset input
@@ -457,7 +482,7 @@ class Insertional_mutant():
 
         if self.multi_dataset:  
             raise Exception("Merging multi-dataset mutants not implemented!")
-            # MAYBE-TODO implement merging for multi-dataset mutants?  No, that seems like unnecessary complication.
+            # MAYBE-TODO implement merging for multi-dataset mutants?  Seems like unnecessary complication for now.
 
         # make sure the two mutants don't have conflicting gene data, if required (note: NOT checking position)
         #  (this needs to be done first, BEFORE we make changes to the mutants!)
@@ -478,20 +503,22 @@ class Insertional_mutant():
             self.sequences_and_counts[seq] += count
         self.unique_sequence_count = len(self.sequences_and_counts)
         other._set_readcount_related_data_to_zero()
-        # merge positions
+        # merge positions - MAYBE-TODO implement position merging?  Are we ever going to need it, really?
         if not dont_merge_positions:  
             raise Exception("Mutant merging with merging positions NOT IMPLEMENTED!")
-            # LATER-TODO implement position merging?  Are we ever going to need it, really?
 
-    # TODO should there also be an add_mutant function that adds mutant readcounts together and optionally makes sure the positions are the same, or should that be the same as merge_mutant?  There are two separate use cases: one where we're merging two adjacent mutants from one dataset, one where we're adding the counts for two mutants from two different datasets. But the mechanics are similar...
+    # MAYBE-TODO should there also be an add_mutant function that adds mutant readcounts together and optionally makes sure the positions are the same, or should that be the same as merge_mutant?  There are two separate use cases: one where we're merging two adjacent mutants from one dataset, one where we're adding the counts for two mutants from two different datasets. But the mechanics are similar...
 
     def add_counts(self, total_count, perfect_count, sequence_variant_count, assume_new_sequences=False, 
                    dataset_name=None):
         """ Increment self.total_read_count, self.perfect_read_count and self.unique_sequence_count based on inputs.
-        Note that ifself.unique_sequence_count>0, it's impossible to determine the correct new value: 
+
+        Note that if self.unique_sequence_count>0, it's impossible to determine the correct new value: 
          if we had old data with one unique sequence and now we have new data with another one, how do we know
           if that's the same or different sequence?  The correct total could be 1 or 2, so it's an option:
          If assume_new_sequences is True, the total is old+new; if it's False, the total is max(old,new).
+
+        If self.multi_dataset is True, dataset_name is required and the appropriate by-dataset values will be changed.
         """
         self._check_consistent_multi_dataset_args(dataset_name, 'add_counts')
         if not self.multi_dataset:  readcount_data_container = self
@@ -507,9 +534,12 @@ class Insertional_mutant():
 
     def add_sequence_and_counts(self, seq, seq_count, add_to_uniqseqcount=True, dataset_name=None):
         """ Add seq_count to self.sequences_and_counts[seq] (it's created with count 0 if seq wasn't a key before).
+
         Note: if add_to_uniqseqcount is False, this will never increment self.unique_sequence_count;
          otherwise it only does so if seq was not already present in the self.sequences_and_counts data
           and if the total number of sequences in self.sequences_and_counts is higher than self.unique_sequence_count. 
+
+        If self.multi_dataset is True, dataset_name is required and the appropriate by-dataset values will be changed.
         """
         self._check_consistent_multi_dataset_args(dataset_name, 'add_sequence_and_counts')
         if not self.multi_dataset:  readcount_data_container = self
@@ -525,8 +555,9 @@ class Insertional_mutant():
     def get_main_sequence(self, N=1, dataset_name=None):
         """ Return the most common sequence in this mutant and its count (or Nth most common sequence if N is provided).
 
-        If mutant is multi-dataset and dataset_name is given, return the most common sequence for just that dataset, 
-         if dataset_name is None, return most common sequence by total count over all the datasets."""
+        If mutant is multi-dataset and dataset_name is given, return the most common sequence for just that dataset; 
+         or if dataset_name is None, return most common sequence by total count over all the datasets.
+        """
         # Exception if dataset_name given for single-dataset mutant, but not giving it for multi-dataset is allowed
         self._check_consistent_multi_dataset_args(dataset_name, 'get_main_sequence', multi_noname_allowed=True)
         ### pick the seq:count dictionary to use:
@@ -548,7 +579,7 @@ class Insertional_mutant():
         except IndexError:  return ('',0)
 
     def _copy_non_readcount_data(self, source_mutant):
-        """ Copy non-readcount-related data from source_mutant to self."""
+        """ Copy non-readcount-related data from source_mutant to self (making new copies of all objects). """
         # COPY the position, not just make another name for the same value - I wrote a copy() function for positions
         self.position     = source_mutant.position.copy() 
         # strings are immutable and thus safe to "copy" by adding another name to the same value
@@ -557,7 +588,7 @@ class Insertional_mutant():
         self.gene_feature = source_mutant.gene_feature
 
     def _copy_readcount_related_data(self, source_mutant):
-        """ Copy readcount-related data from source_mutant to self."""
+        """ Copy readcount-related data from source_mutant to self (making new copies of all objects). """
         # integers are immutable and thus safe to "copy" by adding another name to the same value
         self.total_read_count      = source_mutant.total_read_count
         self.perfect_read_count    = source_mutant.perfect_read_count
@@ -566,7 +597,7 @@ class Insertional_mutant():
         self.sequences_and_counts  = dict(source_mutant.sequences_and_counts)
 
     def convert_to_multi_dataset(self, current_dataset_name=None, ignore_if_already_multi=False):
-        """ Convert self from single-dataset to multi-dataset mutant; assign readcount-data to current_dataset_name.
+        """ Convert mutant from single-dataset to multi-dataset mutant; assign readcount-data to current_dataset_name.
         
         Set self.multi_dataset to True, set up the by_dataset dictionary; remove all current readcount-related data
          (move it to self.by_dataset dictionary[current_dataset_name] first if current_dataset_name is not None).
@@ -625,8 +656,9 @@ class Insertional_mutant():
 
     def give_single_dataset_mutant(self, single_dataset_name, force=False):
         """ Return a single-dataset mutant based on single_dataset_name; don't modify current mutant.
-        If there is no single_dataset_name in current mutant, raise exception, 
-         unless force is True, then return mutant with no read-counts.
+
+        If there is no single_dataset_name in current mutant's by_dataset dictionary, raise exception, 
+         unless force is True, then return new mutant with zero read-count.
         """
         if not self.multi_dataset:
             raise Exception("This mutant is not multi-dataset, can't run give_single_dataset_mutant!")
@@ -641,7 +673,8 @@ class Insertional_mutant():
         return new_mutant
 
     def give_all_single_dataset_mutants(self):
-        """ Split multi-dataset mutant into a dataset_name:single-dataset_mutant dictionary; don't modify current mutant.
+        """ Split multi-dataset mutant into a dataset_name:single-dataset_mutant dictionary and return it; 
+        don't modify original mutant.
         """
         if not self.multi_dataset:
             raise Exception("This mutant is not multi-dataset, can't run give_all_single_dataset_mutants!")
@@ -650,16 +683,7 @@ class Insertional_mutant():
             mutant_dictionary[dataset_name] = self.give_single_dataset_mutant(dataset_name)
         return mutant_dictionary
 
-# TODO add all the Insertional_mutant multi-dataset functionality to Insertional_mutant_pool_dataset!!
-# TODO multi-dataset functionality we want for datasets:
-# - joining multiple datasets and printing the output like in mutant_join_datasets
-# - adding and subtracting datasets (by readcount)
-# - subtracting datasets by presence (for contamination reasons - remove ALL mutants from D1 that are present in D2, 
-#       or that have at least X reads in D2, or some such)
-# - splitting joint datasets into separate ones?
-# - calculating growth rates!
-
-# TODO once the multi-dataset version of Insertional_mutant_pool_dataset is finished and tested and works, implement dataset-joining using that instead of mutant_join_datasets.py...
+    # MAYBE-TODO should there be a copy_mutant function to make a deepcopy?
 
 
 class Insertional_mutant_pool_dataset():
@@ -676,6 +700,16 @@ class Insertional_mutant_pool_dataset():
      - mutants_in_genes, mutants_not_in_genes, mutants_undetermined - counts of mutants in genes, not in genes, unknown
      - mutant_counts_by_orientation, mutant_count_by_feature - name:count dictionaries for mutant gene location properties
     """
+
+    # Implement new functionality for datasets:
+    # - TODO joining multiple datasets and printing the output like in mutant_join_datasets.py (which I will rewrite)
+    # - TODO subtracting datasets by presence (for contamination - remove ALL mutants from D1 that are present in D2, 
+    #       or that have at least X reads in D2, or some such)
+    # - MAYBE-TODO splitting joint datasets into separate ones?
+    # - MAYBE-TODO adding and subtracting datasets (by readcount) - do we currently need that?
+    # - TODO calculating growth rates!
+    #
+    # TODO once the multi-dataset version of Insertional_mutant_pool_dataset is finished and tested and works, implement dataset-joining using that instead of mutant_join_datasets.py!
 
     def __init__(self, cassette_end='?', reads_are_reverse='?'):
         """ Saves the arguments as properties of the dataset; initializes an empty mutant dict; sets all counts to 0. """
