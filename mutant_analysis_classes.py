@@ -34,28 +34,33 @@ SPECIAL_GENE_CODES.all_codes = [value for (name,value) in SPECIAL_GENE_CODES.__d
 
 # has to be a new-style object-based class due to the immutability/hashability thing
 class Insertion_position(object):
-    """ A descriptor of the position of a genomic insertion, with handling of before/after sides and ambiguity.
+    """ A descriptor of the position of a genomic insertion, with separate before/after sides; optionally immutable.
 
     Attributes: 
-     - chromosome and strand - the chromosome the insertion is on, and the strand it's in sense orientation to.
-     - position_before and position_after - positions before and after the insertion site (1-based): 
-         integers, or None if unknown;
-     - min_position and max_position - lowest/highest possible position values as plain numbers, no ambiguity
-     - full_position - a string describing the full position: 3-4 for exact positions, 3-? or 4-? if one side is unknown. 
+        - chromosome, strand - the chromosome the insertion is on, and the strand it's in sense orientation to.
+        - position_before, position_after - positions before and after the insertion site (1-based): 
+                                            integers, or None if unknown.
+        - min_position and max_position - lowest/highest possible position values as plain numbers, no ambiguity
+        - full_position - string describing the full position: 3-4 for exact positions, 3-? or 4-? if one side is unknown. 
+        Note that the three *_position attributes are really property-decorated methods, and cannot be assigned to.
 
     Methods: 
-     - comparison/sorting: __cmp__ is based on chromosome name/number, min_/max_position, strand, position_before/_after, 
-                            in that order - see __cmp__ docstring for more details/explanations
-     - copy method returns an identical but separate copy of the object (not just another reference to the same object)
-     - printing: __str__ returns "chromosome,strand,full_position"; 
-                __repr__ returns "Insertion_position(chromosome,strand,full_position)"
-     - there are also _make_immutable and _make_mutable methods half-defined right now, for rudimentary and UNSAFE
-                            hashability - those may be removed in the future (or implemented fully if there is need)
+        - comparison/sorting: __cmp__ is based on chromosome name/number, min_/max_position, strand,
+                                   and position_before/_after, in that order - see __cmp__ docstring for more detail
+        - copy method returns an identical but separate copy of the object (not just another reference to the same object)
+        - printing: __str__ returns a string of the chromosome,strand,full_position values
+                    __repr__ returns a string of the Insertion_position() call to create a new identical object.
+        Mutability and hashability: by default instances are mutable, and thus unhashable, since they implement __cmp__. 
+         There are make_immutable and make_mutable_REMEMBER_CLEANUP_FIRST methods to reversibly toggle the state 
+          to immutable/hashable and back. 
+         This works by defining __hash__ to use the _make_key() value if immutable and raise an exception otherwise, 
+          and decorating __setattr__ and __delattr__ to raise an exception if immutable and work normally otherwise.
+         It's not perfect immutability, it can be gotten around by using object.__setitem__ etc, but it's good enough.
     """
 
     # NOTE: originally I used biopython SeqFeature objects for position_before and position_after (specifically SeqFeature.ExactPosition(min_val) for exactly positions and SeqFeature.WithinPosition(min_val, min_val-max_val) for ambiguous ones), but then I realized I'm not using that and it's over-complicated and hard to make immutable and may not be what I need anyway even if I do need immutable positions, so I switched to just integers. The function to generate those was called make_position_range, and I removed it on 2012-04-23, if I ever want to look it up again later.
 
-    def __init__(self, chromosome, strand, full_position=None, position_before=None, position_after=None):
+    def __init__(self, chromosome, strand, full_position=None, position_before=None, position_after=None, immutable=False):
         """ Initialize all values - chromosome/strand are just copied from arguments; positions are more complicated. 
         
         You must provide either full_position, OR one or both of position_before/position_after. 
@@ -63,7 +68,11 @@ class Insertion_position(object):
         The full_position argument must be a string of the form '100-200', '?-200' or '100-?', such as would be generated 
          by self.full_position() - self.position_before and _after are set based on the two parts of the string.
         Self.min_/max_position are calculated based on self.position_before/_after - both, or whichever one isn't None.
+        If immutable is True, the object is made immutable (by calling self.make_immutable() right after initiation.
         """
+        # need to make instance mutable to be able to set anything, due to how __setattr__ is decorated
+        self.make_mutable_REMEMBER_CLEANUP_FIRST()  
+        # now start setting attributes
         self.chromosome = chromosome
         self.strand = strand
         # parse full_position if provided
@@ -80,6 +89,7 @@ class Insertion_position(object):
                 self.position_after = None if position_after is None else int(position_after)
             except TypeError:  
                 raise ValueError("position_before/position_after must be int-castable or None!")
+        if immutable:   self.make_immutable()
 
     @property   # this is a builtin decorator to make an attribute out of a method
     def min_position(self):
@@ -116,11 +126,14 @@ class Insertion_position(object):
         if pos_string in ['?','']:  return None
         else:                       return int(pos_string)
 
-    def __str__(self): 
+    def __str__(self):
+        """ Return short summary of important info. """
         return ','.join([self.chromosome, self.strand, self.full_position])
 
     def __repr__(self):
-        return "Insertion_position('%s','%s','%s')"%(self.chromosome, self.strand, self.full_position)
+        """ Return full object-construction call (not very complicated) as a string. """
+        return "Insertion_position('%s', '%s', full_position='%s', immutable=%s)"%(self.chromosome, self.strand, 
+                                                                                   self.full_position, self.immutable)
 
     def copy(self):
         """ Return a deep-copy of self - NOT just a reference to the same object. """
@@ -154,38 +167,46 @@ class Insertion_position(object):
 
     ### MUTABILITY AND HASHABILITY SWITCHES
     # Sometimes I want to use positions as dictionary keys or put them in sets - so they need to be hashable, 
-    #  and since I also need a sane comparison operator, I can't use the default object id-based hashing, 
-    #  so I have to make the objects immutable for them to be hashable. 
+    #   and since I also need a sane comparison operator, I can't use the default object id-based hashing, 
+    #   so I have to make the objects immutable for them to be hashable. 
     # More info on how/why that is: http://docs.python.org/reference/datamodel.html#object.__hash__ 
+    # This implementation is not perfectly immutable: you can get around the "immutability" by tricks like in 
+    #   make_mutable_REMEMBER_CLEANUP_FIRST, but it's enough to make it clear to the user that it shouldn't be changed.
     # Some links on implementation: http://stackoverflow.com/questions/9997176/immutable-dictionary-only-use-as-a-key-for-another-dictionary, http://stackoverflow.com/questions/1151658/python-hashable-dicts, http://stackoverflow.com/questions/4996815/ways-to-make-a-class-immutable-in-python, http://stackoverflow.com/questions/4828080/how-to-make-an-immutable-object-in-python
-    # This implementation is not perfect, but it should do.
 
-    # MAYBE-TODO implement!  DO I actually need hashability at all?  Right now the only time I put positions in sets is in mutant_join_datasets.py, which will be removed anyway... Will I want to do it again somewhere else? WAIT AND SEE.
-    # MAYBE-TODO if I implement this properly, add to class docstring, and update method docstrings!
-    # MAYBE-TODO if I implement this properly, remove the leading _ from the two _make* method names, since in that case they won't really be private any more - right now it's there just to remind me I shouldn't be using them.
-    # MAYBE-TODO if I implement this properly, add to unit-tests!
-    # MAYBE-TODO if I implement this properly, could add a hashable switch to __init__? And include it in __repr__.
+    def make_immutable(self):
+        """ Reversibly make object immutable (reasonably) and hashable. """
+        # just set the flag to make object immutable and hashable
+        self.immutable = True
 
-    def _hash(self):
-        """ Private hash-method based on _make_key - __hash__ will use it if you run self._make_immutable()."""
-        return hash(self._make_key())
+    def make_mutable_REMEMBER_CLEANUP_FIRST(self):
+        """ Reversibly make object mutable and non-hashable. REMEMBER TO REMOVE SELF FROM SETS/DICTS BEFORE CALLING! """
+        # UNSET the flag to make object immutable and hashable - need to do it in a roundabout way,
+        #  because the immutability prevents simply "self.immutable = False" from working!
+        self.__dict__['immutable'] = False
 
     def __hash__(self):
-        """ If self.hashable is True, use private _hash method, otherwise use id-based object.__hash__. """
-        if hasattr(self,'hashable') and self.hashable:  return self._hash()
-        else:                                           return object.__hash__(self)
+        """ If self.hashable is True, use private _hash method, otherwise raise exception. """
+        if  self.immutable:
+            return hash(self._make_key())
+        else:
+            raise Exception("This %s is currently mutable, and therefore unhashable! "%repr(self)
+                            +"Run self.make_immutable() to change this.")
 
-    def _make_immutable(self):
-        """ Reversibly make object immutable and hashable. NOT FULLY IMPLEMENTED."""
-        # MAYBE-TODO implement removing mutability methods!
-        # set object to hashable - it's immutable, so that's all right
-        self.hashable = True
+    def exception_if_immutable(function_to_wrap):
+        """ Decorator: raise Exception if self.immutable, else call function as normal. """
+        def wrapped_function(self, *args, **kwargs):
+            if self.immutable:
+                raise Exception("This %s is currently immutable, cannot change values! "%repr(self)
+                                +"You can run self.make_mutable_REMEMBER_CLEANUP_FIRST() to change this - first make SURE "
+                                +"to remove it from any sets or dictionary keys that are relying on it being hashable!")
+            else:
+                return function_to_wrap(self, *args, **kwargs)
+        return wrapped_function
 
-    def _make_mutable(self):
-        """ Reversibly make object mutable and non-hashable. NOT FULLY IMPLEMENTED."""
-        # MAYBE-TODO implement re-adding mutability methods!
-        # set object to unhashable, since it's mutable
-        self.hashable = False
+    # apply the exception_if_immutable decorator to all methods incompatible with immutability
+    __setattr__ = exception_if_immutable(object.__setattr__)
+    __delattr__ = exception_if_immutable(object.__delattr__)
 
 
 def get_insertion_pos_from_HTSeq_read_pos(HTSeq_pos, cassette_end, reads_are_reverse=False):
@@ -1146,7 +1167,8 @@ class Testing_position_functionality(unittest.TestCase):
         assert all([pos.position_after == 101 for pos in all_after_positions+all_both_positions])
         # printing - str gives just the basic info, repr gives the function to generate the object
         assert all([str(pos) == 'chr,+,100-?' for pos in all_before_positions])
-        assert all([repr(pos) == "Insertion_position('chr','+','100-?')" for pos in all_before_positions])
+        assert all([repr(pos) == "Insertion_position('chr', '+', full_position='100-?', immutable=False)" 
+                    for pos in all_before_positions])
         # comparison - positions are only equal if they're exactly identical, so ?-101 and 100-101 aren't equal
         assert a_pos1 == a_pos2 == a_pos3 == a_pos4 == a_pos5
         assert b_pos1 == b_pos2 == b_pos3 == b_pos4 == b_pos5
@@ -1181,6 +1203,42 @@ class Testing_position_functionality(unittest.TestCase):
         # full_position arg must be proper format
         for bad_fullpos in ['100', '100?', 100, (100,200), [100,200], True, False, '1-2-3', 'adaf', 'as-1']:
             self.assertRaises(ValueError, Insertion_position, 'chr','+', bad_fullpos)
+        ### testing immutability/mutability and hashability
+        # object is mutable and unhashable to start with unless specified otherwise
+        pos1 = Insertion_position('chr','+', '0-?')
+        assert str(pos1) == 'chr,+,0-?'
+        pos1.position_after = 5
+        assert str(pos1) == 'chr,+,0-5'
+        pos1.new_attribute = 'test'
+        assert pos1.new_attribute == 'test'
+        self.assertRaises(Exception, set, [pos1])
+        self.assertRaises(Exception, dict, [(pos1, 1)])
+        # if we make it immutable, or initialize it as immutable from the start, it's immutable and hashable
+        pos1.make_immutable()
+        pos2 = Insertion_position('chr','+', '0-?', immutable=True)
+        for pos in pos1,pos2:
+            # have to use execute workaround here to use self.assertRaises on statements instead of expressions;
+            #  if this was python 2.7 I could just do "with self.assertRaises(Exception): <bunch of statements>"
+            def execute(S):  exec S
+            self.assertRaises(Exception, execute, "pos.chromosome = 'chr3'")
+            self.assertRaises(Exception, execute, "pos.strand = '-'")
+            self.assertRaises(Exception, execute, "pos.position_after = '5'")
+            self.assertRaises(Exception, execute, "pos.position_before = '4'")
+            self.assertRaises(Exception, execute, "pos.new_attribute = '4'")
+            set([pos1])
+            dict([(pos1, 1)])
+        # if we make it mutable, it's mutable and unhashable again
+        pos1.make_mutable_REMEMBER_CLEANUP_FIRST()
+        pos2.make_mutable_REMEMBER_CLEANUP_FIRST()
+        for pos in pos1,pos2:
+            pos.position_before = None
+            pos.position_after = 500
+            assert str(pos) == 'chr,+,?-500'
+            pos.new_attribute = 'test'
+            assert pos.new_attribute == 'test'
+            self.assertRaises(Exception, set, [pos])
+            self.assertRaises(Exception, dict, [(pos, 1)])
+
 
     def test__get_insertion_pos_from_HTSeq_position(self):
         # should raise exception for invalid HTSeq_pos argument
