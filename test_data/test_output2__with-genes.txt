@@ -8,7 +8,7 @@
 #  Reads with insertion direction matching chromosome - strand: 2
 ## Distinct mutants (read groups) by cassette insertion position: 40
 #  (read is at 5prime end of cassette, in forward direction to cassette)
-#  Most common mutant: chromosome_C, position 3650-?, + strand: 1 reads (2% of aligned)
+#  Found 40 most common mutants, each with 1 reads (2% of aligned)
 #  Mutant cassettes in unknown chromosomes: 0
 #  Mutant cassettes not inside genes: 1
 ## Mutant cassettes inside genes: 39
