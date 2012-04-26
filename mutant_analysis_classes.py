@@ -649,19 +649,19 @@ class Insertional_mutant():
         del self.sequences_and_counts
 
     def add_other_mutant_as_dataset(self, other_mutant, other_mutant_dataset_name, 
-                                    force=False, check_constant_data=False):
+                                    overwrite=False, check_constant_data=False):
         """ Copy all readcount-related data from other_mutant to self.by_dataset dictionary[other_mutant_dataset_name].
 
         If self isn't a multi-dataset mutant, raise an exception.
         If check_constant_data is True, check that the position/gene data of self and other_mutant matches.
-        If self already has a other_mutant_dataset_name dataset, raise MutantError, unless force=True, then overwrite it.
+        If self already has a other_mutant_dataset_name dataset, raise MutantError, unless overwrite=True, then overwrite.
         """
         if not self.multi_dataset:
             raise MutantError("This mutant hasn't been converted to multi-dataset form, "
                               +"can't run add_other_mutant_as_dataset! Run convert_to_multi_dataset first.")
-        if other_mutant_dataset_name in self.by_dataset and not force:
+        if other_mutant_dataset_name in self.by_dataset and not overwrite:
             raise MutantError("This mutant already has a %s dataset! Can't overwrite it with. "%other_mutant_dataset_name
-                              +"new one.  Choose a different name for new dataset, or use force=True argument.")
+                              +"new one.  Choose a different name for new dataset, or use overwrite=True argument.")
 
         # if desired, check that the position/gene data matches 
         #  (probably should be using ifs rather than asserts, but I think since they're wrapped in a try/except it's fine)
@@ -756,9 +756,6 @@ class Insertional_mutant_pool_dataset():
     # - ____
 
     # Implement new functionality for datasets:
-    # - TODO joining multiple datasets and printing the output like in mutant_join_datasets.py (which I will rewrite)
-    # - TODO subtracting datasets by presence (for contamination - remove ALL mutants from D1 that are present in D2, 
-    #       or that have at least X reads in D2, or some such)
     # - MAYBE-TODO splitting joint datasets into separate ones?
     # - MAYBE-TODO adding and subtracting datasets (by readcount) - do we currently need that?
     # - TODO calculating growth rates!
@@ -795,11 +792,11 @@ class Insertional_mutant_pool_dataset():
     def size(self):         return len(self)
 
     # instead of __setitem__
-    def add_mutant(self, mutant, replace=True):
+    def add_mutant(self, mutant, overwrite=False):
         """ Add mutant to dataset. """
-        if mutant.position in self._mutants_by_position.keys() and not replace:
+        if mutant.position in self._mutants_by_position.keys() and not overwrite:
             raise MutantError("Can't add mutant that would overwrite previous mutant at same position! "
-                              +"Pass replace=True if you want to overwrite.")
+                              +"Pass overwrite=True argument if you want to overwrite.")
         self._mutants_by_position[mutant.position] = mutant
 
     # instead of __delitem__
@@ -813,7 +810,8 @@ class Insertional_mutant_pool_dataset():
 
     # instead of __getitem__
     def get_mutant(self, *args, **kwargs):
-        """ Return the mutant with given position (given an Insertion_position instance, or arguments to create one)."""
+        """ Return the mutant with given position (given an Insertion_position instance, or arguments to create one).
+        If mutant doesn't exist, create a new one with no reads/sequences. """
         return self._mutants_by_position[self._make_position_object_if_needed(*args,**kwargs)]
 
     # MAYBE-TODO implement get_Nth_mutant_by_position and get_Nth_mutant_by_readcount or some such?
@@ -946,6 +944,49 @@ class Insertional_mutant_pool_dataset():
         # LATER-TODO if preprocessing is changed to include more than one step at which reads can be discarded, make sure to keep track of that here and save each count separately! 
         if reset_count or self.summary.discarded_read_count=='unknown': self.summary.discarded_read_count = int(N)
         else:                                                           self.summary.discarded_read_count += int(N)
+
+    def remove_mutants_based_on_other_dataset(self, other_dataset, readcount_min=1, perfect_reads=False):
+        """ Remove any mutants with at least readcount_min reads in other_dataset (or perfect reads, if perfect_reads=True)
+
+        This is based on EXACT position equality: a ?-101 mutant won't be removed due to a 100-? or 100-101 or 100-102 one.
+        """
+        if perfect_reads:   get_readcount = lambda m: m.perfect_read_count
+        else:               get_readcount = lambda m: m.total_read_count
+        # go over all mutants in self; need to convert the iterator to a list to make a separate copy, 
+        #  otherwise we'd be modifying the iterator while iterating through it, which isn't allowed.
+        for mutant in list(iter(self)):
+            if get_readcount(other_dataset.get_mutant(mutant.position)) >= readcount_min:
+                self.remove_mutant(mutant.position)
+        # TODO add unit-test and/or functional-test!
+
+    def populate_multi_dataset(self, source_dataset_dict, overwrite=False, check_gene_data=False):
+        """ Given a dataset_name:single_dataset_object dictionary, populate current multi-dataset with the data. 
+
+        If dataset already has a dataset with the same name, raise MutantError unless overwrite=True is passed.
+        When merging mutants, don't double-check that their positions/genes match, unless check_gene_data=True is passed.
+        Separate copies of mutant data are made, but the summary data object is added by reference.
+        """
+        if not self.multi_dataset:  raise MutantError("populate_multi_dataset only implemented for multi-datasets!")
+
+        for dataset_name,dataset_object in source_dataset_dict.iteritems():
+
+            if any([s in dataset_name for s in ' \t\n']):
+                raise MutantError("Dataset name '%s' contains spaces/tabs/newlines - not allowed!"%dataset_name)
+            if dataset_name in self.summary and not overwrite:
+                raise MutantError("Dataset %s is already present in this multi-dataset! "%dataset_name
+                                  +"Pass overwrite=True argument if you want to overwrite the previous data.")
+
+            # copy source dataset summaries to own summary dict (by reference) 
+            self.summary[dataset_name] = dataset_object.summary
+            # MAYBE-TODO should I deepcopy the summaries rather than just adding a reference to the same object?
+
+            # Merge source dataset mutant data into own multi-dataset mutants
+            #  (get_mutant will create new empty mutant if one doesn't exist)
+            for mutant in dataset_object:
+                curr_mutant = self.get_mutant(mutant.position)
+                curr_mutant.add_other_mutant_as_dataset(mutant, dataset_name, overwrite=overwrite, 
+                                                        check_constant_data=check_gene_data)
+        # TODO add unit-test and/or functional-test!
 
 
     ######### PROCESSING/MODIFYING DATASET
@@ -1664,9 +1705,9 @@ class Testing_Insertional_mutant(unittest.TestCase):
         assert mutant1.by_dataset['d2'].perfect_read_count == 0
         assert mutant1.by_dataset['d2'].unique_sequence_count == 1
         assert mutant1.by_dataset['d2'].sequences_and_counts == {'GGG':1}
-        # can't add overwrite an existing dataset name, unless force==True
+        # can't add overwrite an existing dataset name, unless overwrite==True
         self.assertRaises(MutantError, mutant1.add_other_mutant_as_dataset, mutant2, 'd2')
-        mutant1.add_other_mutant_as_dataset(mutant2, 'd2', force=True)
+        mutant1.add_other_mutant_as_dataset(mutant2, 'd2', overwrite=True)
         # if the two mutants have different positions, it should fail, unless check_constant_data=False
         mutant3 = Insertional_mutant(Insertion_position('chr','+',position_before=5))
         mutant4 = Insertional_mutant(Insertion_position('chr2','+',position_before=3))
