@@ -504,6 +504,22 @@ class Insertional_mutant():
         else:
             return False
 
+    def update_gene_info(self, gene, orientation, gene_feature):
+        """ Update gene/orientation/feature: if both are the same or one is unknown, keep known; if different, raise error.
+        """
+        # grab the set of non-special values from own and new data
+        gene_both = set([self.gene, gene]) - set([SPECIAL_GENE_CODES.not_determined])
+        orientation_both = set([self.orientation, orientation]) - set(['?'])
+        feature_both = set([self.gene_feature, gene_feature]) - set(['?'])
+        # if there are two different non-special values for any of the three attributes, raise MutantError
+        if not all([len(data_both)<=1 for data_both in [gene_both, orientation_both, feature_both]]):
+            raise MutantError("Can't merge the two mutants: the gene/orientation/feature data differs!")
+        # otherwise set own data to the better one of own/new data (unless neither are present)
+        if gene_both:           self.gene = gene_both.pop()
+        if orientation_both:    self.orientation = orientation_both.pop()
+        if feature_both:        self.gene_feature = feature_both.pop()
+
+
     def merge_mutant(self, other, dont_merge_positions=False, check_gene_data=True):
         """ Merge other mutant into this mutant: merge counts, sequences, optionally position; set other's counts to 0."""
 
@@ -511,14 +527,12 @@ class Insertional_mutant():
             raise MutantError("Merging multi-dataset mutants not implemented!")
             # MAYBE-TODO implement merging for multi-dataset mutants?  Seems like unnecessary complication for now.
 
-        # make sure the two mutants don't have conflicting gene data, if required (note: NOT checking position)
-        #  (this needs to be done first, BEFORE we make changes to the mutants!)
+        # make sure the two mutants don't have conflicting gene data, if required  (and update if own gene data is unknown)
+        # (note: NOT checking position) (this needs to be done first, BEFORE we make changes to the mutants!)
         if check_gene_data:
             try:
-                assert len(set([self.gene, other.gene]) - set([SPECIAL_GENE_CODES.not_determined])) <= 1
-                assert len(set([self.orientation, other.orientation]) - set(['?'])) <= 1
-                assert len(set([self.gene_feature, other.gene_feature]) - set(['?'])) <= 1
-            except AssertionError:
+                self.update_gene_info(other.gene, other.orientation, other.gene_feature)
+            except MutantError:
                 raise MutantError("Can't merge the two mutants: the gene/orientation/feature data differs!")
         
         # merge read counts
@@ -663,16 +677,14 @@ class Insertional_mutant():
             raise MutantError("This mutant already has a %s dataset! Can't overwrite it with. "%other_mutant_dataset_name
                               +"new one.  Choose a different name for new dataset, or use overwrite=True argument.")
 
-        # if desired, check that the position/gene data matches 
+        # if desired, check that the position/gene data matches (and update if own gene data is unknown)
         #  (probably should be using ifs rather than asserts, but I think since they're wrapped in a try/except it's fine)
         if check_constant_data:
             try:
                 # MAYBE-TODO should this be an inexact comparison? Right now 100-101 is NOT equal to ?-101 or to 100-102.
                 assert self.position == other_mutant.position
-                assert len(set([self.gene, other_mutant.gene]) - set([SPECIAL_GENE_CODES.not_determined])) == 1
-                assert len(set([self.orientation, other_mutant.orientation]) - set(['?'])) == 1
-                assert len(set([self.gene_feature, other_mutant.gene_feature]) - set(['?'])) == 1
-            except AssertionError:
+                self.update_gene_info(self, other_mutant.gene, other_mutant.orientation, other_mutant.gene_feature)
+            except (AssertionError,MutantError):
                 raise MutantError("Can't add mutant2 as dataset to mutant1: the mutant position/gene data differs!")
 
         # make a new empty Insertional_mutant object to hold the readcount-related data from other_mutant, 
@@ -916,8 +928,7 @@ class Insertional_mutant_pool_dataset():
             position = Insertion_position(chromosome, strand, full_position=full_pos, immutable=True)
             curr_mutant = self.get_mutant(position)
             curr_mutant.add_counts(total_reads,perfect_reads,sequence_variants,assume_new_sequences)
-            # TODO overwriting old gene data here, even if the new data is empty!  Write better gene data update function.
-            curr_mutant.gene, curr_mutant.orientation, curr_mutant.gene_feature = gene, orientation, gene_feature
+            curr_mutant.update_gene_info(gene, orientation, gene_feature)
             # get however many specific sequences/counts are listed (this is variable)
             sequence_fields = fields[10::2]
             count_fields = fields[11::2]
@@ -1507,6 +1518,35 @@ class Testing_Insertional_mutant(unittest.TestCase):
         assert mutant.by_dataset['d2'].sequences_and_counts == {'GGG':1}
         # it should be impossible to add a read to a multi-dataset mutant without giving a dataset_name
         self.assertRaises(MutantError, mutant.add_read, perfect_aln, read_count=3)
+
+    def test__update_gene_info(self):
+        mutant = Insertional_mutant(Insertion_position('chr','+',position_before=3))
+        assert mutant.gene == SPECIAL_GENE_CODES.not_determined
+        assert mutant.orientation == mutant.gene_feature == '?'
+        # updating no-info mutant with no info - no change
+        mutant.update_gene_info(SPECIAL_GENE_CODES.not_determined, '?', '?')
+        assert mutant.gene == SPECIAL_GENE_CODES.not_determined
+        assert mutant.orientation == mutant.gene_feature == '?'
+        # updating no-info mutant with useful info - update goes through
+        mutant.update_gene_info('gene1', '+', 'f')
+        assert mutant.gene == 'gene1'
+        assert mutant.orientation == '+'
+        assert mutant.gene_feature == 'f'
+        # updating info-containing mutant with no info - no change
+        mutant.update_gene_info(SPECIAL_GENE_CODES.not_determined, '?', '?')
+        assert mutant.gene == 'gene1'
+        assert mutant.orientation == '+'
+        assert mutant.gene_feature == 'f'
+        # updating info-containing mutant with same info - no change
+        mutant.update_gene_info('gene1', '+', 'f')
+        assert mutant.gene == 'gene1'
+        assert mutant.orientation == '+'
+        assert mutant.gene_feature == 'f'
+        # updating info-containig mutant with OTHER info - exception
+        self.assertRaises(MutantError, mutant.update_gene_info, 'gene2', '+', 'f')
+        self.assertRaises(MutantError, mutant.update_gene_info, 'gene1', '-', 'f')
+        self.assertRaises(MutantError, mutant.update_gene_info, 'gene1', '+', 'g')
+
 
     def test__merge_mutant(self):
         mutant1 = Insertional_mutant(Insertion_position('chr','+',position_before=3))
