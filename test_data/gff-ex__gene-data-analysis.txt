@@ -45,7 +45,7 @@
        (Caution: approximate sequence length is calculated to last gene only!)
 
  * sequence chromosome_A: 2 genes
-Approximate length 1800 bp, with 78% covered by genes
+length 1800 bp, with 78% covered by genes
 GFF parser details:
 ID: chromosome_A
 Name: <unknown name>
@@ -55,7 +55,7 @@ Number of features: 2
 UnknownSeq(1800, alphabet = Alphabet(), character = '?')
 
  * sequence chromosome_B: 9 genes
-Approximate length 8800 bp, with 40% covered by genes
+length 8800 bp, with 40% covered by genes
 GFF parser details:
 ID: chromosome_B
 Name: <unknown name>
@@ -65,7 +65,7 @@ Number of features: 9
 UnknownSeq(8800, alphabet = Alphabet(), character = '?')
 
  * sequence chromosome_C: 7 genes
-Approximate length 6800 bp, with 72% covered by genes
+length 6800 bp, with 72% covered by genes
 GFF parser details:
 ID: chromosome_C
 Name: <unknown name>
@@ -75,7 +75,7 @@ Number of features: 7
 UnknownSeq(6800, alphabet = Alphabet(), character = '?')
 
  * sequence chromosome_D: 10 genes
-Approximate length 8800 bp, with 55% covered by genes
+length 8800 bp, with 55% covered by genes
 GFF parser details:
 ID: chromosome_D
 Name: <unknown name>
@@ -87,6 +87,7 @@ UnknownSeq(8800, alphabet = Alphabet(), character = '?')
 
  *** Gene overlaps ***
 Total 28 genes on 4 chromosomes.
+Total genome length 26200bp, with 56% covered by genes.
 Overlapping gene pair!  IDs: test.geneD8a_bad_overlapping_genes, test.geneD8b_bad_overlapping_genes.
 Minimum distance between two genes is -100 (genes test.geneD8a_bad_overlapping_genes, test.geneD8b_bad_overlapping_genes).
 All gene IDs are unique.

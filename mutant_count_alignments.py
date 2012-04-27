@@ -22,43 +22,36 @@ import unittest
 import HTSeq
 # my modules
 from general_utilities import write_header_data
+from testing_utilities import run_functional_tests
 import mutant_analysis_classes
-
 
 def do_test_run():
     """ Test run: run script on test infile, compare output to reference file."""
-    test_infile1 = "test_data/test_input.sam"
-    test_infile2 = "test_data/test_input2__for-genes.sam"
-    test_constant_options = "-H 1 -s -n3 -o position -q"
-    #  (using -s and -H 1 to get all relevant info but not have to deal with changing timestamps/etc)
-    test_runs = [("-e 5prime -r forward -U", [test_infile1], "test_data/test_output__5prime.txt"),
-                 ("-e 3prime -r forward -U", [test_infile1], "test_data/test_output__3prime.txt"),
-                 ("-r reverse -e 5prime -U", [test_infile1], "test_data/test_output__reverse.txt"),
-                 ("-u -e 5prime -r forward", [test_infile1], "test_data/test_output__u.txt"),
-                 ("-b special_chromosome -e 5prime -r forward -U", [test_infile1], "test_data/test_output__b.txt"),
-                 ("-B special_chromosome -e 5prime -r forward -U", [test_infile1], "test_data/test_output__B.txt"),
-                 ("-o read_count -e 5prime -r forward -U", [test_infile1], "test_data/test_output__sorted-by-count.txt"),
-                 ("-n 0 -e 5prime -r forward -U -g test_data/test_reference.gff3 -d", [test_infile2], 
-                                                                      "test_data/test_output2__with-genes.txt"),
-                 ("-n 0 -e 5prime -r forward -U", [test_infile1,test_infile2], "test_data/test_output12__multiple.txt")]
-    #  Most common group: mutation_yes, position 204-?, + strand: 6 reads (20% of aligned)
-    for variable_option_string, test_infiles, reference_file in test_runs:
-        option_string = test_constant_options + ' ' + variable_option_string
-        print(" * New test run, with options: %s (infiles %s; reference outfile %s)"%(option_string,
-                                                                          ', '.join(test_infiles),reference_file))
-        # regenerate options with test argument string
-        parser = define_option_parser()
-        (options, _) = parser.parse_args(option_string.split())
-        outfile = "test_data/test_output.txt"
-        run_main_function(test_infiles, outfile, options)
-        # compare outfile to reference file: remove outfile and keep going if correct, otherwise exit with message.
-        if filecmp.cmp(outfile, reference_file, shallow=False):
-            os.remove(outfile)
-        else:
-            print("TEST FAILED!!  Reference file %s and output file %s differ - PLEASE COMPARE."%(reference_file,outfile))
-            return 1
-    print("*** Test runs finished - EVERYTHING IS FINE. ***")
-    return 0
+    test_folder = "test_data"
+    aln_infile1 = "test_data/INPUT_alignment1.sam"
+    aln_infile2 = "test_data/INPUT_alignment2_for-genes.sam"
+    gff_genefile = "test_data/INPUT_gene-data.gff3"
+
+    test_runs = [("count-aln__cassette-end-5prime", "-e 5prime -r forward -U", [aln_infile1]),
+                 ("count-aln__cassette-end-3prime", "-e 3prime -r forward -U", [aln_infile1]),
+                 ("count-aln__read-direction-reverse", "-r reverse -e 5prime -U", [aln_infile1]),
+                 ("count-aln__u_unknown-not-as-match", "-u -e 5prime -r forward", [aln_infile1]),
+                 ("count-aln__b_special-chromosomes", "-b special_chromosome -e 5prime -r forward -U", [aln_infile1]),
+                 ("count-aln__B_ignore-chromosomes", "-B special_chromosome -e 5prime -r forward -U", [aln_infile1]),
+                 ("count-aln__sorted-by-count", "-o read_count -e 5prime -r forward -U", [aln_infile1]),
+                 ("count-aln__with-gene-info", "-n 0 -e 5prime -r forward -U -g %s -d"%gff_genefile, [aln_infile2]),
+                 ("count-aln__multiple-infiles", "-n 0 -e 5prime -r forward -U", [aln_infile1,aln_infile2])]
+
+    # convert tests into (testname, arg_and_infile_string) format, adding the options that are always used
+    test_constant_options = "-H 1 -s -n3 -q"
+    # TODO get rid of the pointless header/summary options and make them always full, now that I have regex comparison!
+    test_names_and_args = [(testname, test_constant_options+' '+test_args+' '+' '.join(infiles)) 
+                           for testname,test_args,infiles in test_runs]
+
+    parser = define_option_parser()
+    argument_converter = lambda parser,options,args: (args[:-1], args[-1], options)
+    return run_functional_tests(test_names_and_args, parser, run_main_function, test_folder, 
+                                argument_converter=argument_converter, append_to_outfilenames='.txt') 
 
 
 class Testing(unittest.TestCase):
