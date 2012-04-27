@@ -32,20 +32,18 @@ def do_test_run():
     aln_infile2 = "test_data/INPUT_alignment2_for-genes.sam"
     gff_genefile = "test_data/INPUT_gene-data.gff3"
 
-    test_runs = [("count-aln__cassette-end-5prime", "-e 5prime -r forward -U", [aln_infile1]),
-                 ("count-aln__cassette-end-3prime", "-e 3prime -r forward -U", [aln_infile1]),
-                 ("count-aln__read-direction-reverse", "-r reverse -e 5prime -U", [aln_infile1]),
-                 ("count-aln__u_unknown-not-as-match", "-u -e 5prime -r forward", [aln_infile1]),
-                 ("count-aln__b_special-chromosomes", "-b special_chromosome -e 5prime -r forward -U", [aln_infile1]),
-                 ("count-aln__B_ignore-chromosomes", "-B special_chromosome -e 5prime -r forward -U", [aln_infile1]),
-                 ("count-aln__sorted-by-count", "-o read_count -e 5prime -r forward -U", [aln_infile1]),
-                 ("count-aln__with-gene-info", "-n 0 -e 5prime -r forward -U -g %s -d"%gff_genefile, [aln_infile2]),
-                 ("count-aln__multiple-infiles", "-n 0 -e 5prime -r forward -U", [aln_infile1,aln_infile2])]
+    test_runs = [("count-aln__cassette-end-5prime", "-e 5prime -r forward -U -n3", [aln_infile1]),
+                 ("count-aln__cassette-end-3prime", "-e 3prime -r forward -U -n3", [aln_infile1]),
+                 ("count-aln__read-direction-reverse", "-r reverse -e 5prime -U -n3", [aln_infile1]),
+                 ("count-aln__u_unknown-not-as-match", "-u -e 5prime -r forward -n3", [aln_infile1]),
+                 ("count-aln__b_special-chromosomes", "-b special_chromosome -e 5prime -r forward -U -n3", [aln_infile1]),
+                 ("count-aln__B_ignore-chromosomes", "-B special_chromosome -e 5prime -r forward -U -n3", [aln_infile1]),
+                 ("count-aln__sorted-by-count", "-o read_count -e 5prime -r forward -U -n3", [aln_infile1]),
+                 ("count-aln__with-gene-info", "-e 5prime -r forward -U -g %s -d -n0"%gff_genefile, [aln_infile2]),
+                 ("count-aln__multiple-infiles", "-e 5prime -r forward -U -n0", [aln_infile1,aln_infile2])]
 
     # convert tests into (testname, arg_and_infile_string) format, adding the options that are always used
-    test_constant_options = "-H 1 -s -n3 -q"
-    # TODO get rid of the pointless header/summary options and make them always full, now that I have regex comparison!
-    test_names_and_args = [(testname, test_constant_options+' '+test_args+' '+' '.join(infiles)) 
+    test_names_and_args = [(testname, test_args+' -q '+' '.join(infiles)) 
                            for testname,test_args,infiles in test_runs]
 
     parser = define_option_parser()
@@ -68,8 +66,8 @@ def define_option_parser():
     from optparse import OptionParser
     parser = OptionParser(__doc__)
 
-    # taken:     --bBcCdDe---gGhH--------mMn-o---q-r-sStTuUvVwWxX----  
-    # free:      aB-------EfF----iIjJkKlL---N-OpP-Q-R------------yYzZ  
+    # taken:     --bBcCdDe---gGh---------mMn-o---q-r---tTuUvVwWxX----  
+    # free:      aB-------EfF---HiIjJkKlL---N-OpP-Q-RsS----------yYzZ  
 
     ### test options
     parser.add_option('-t','--test_functionality', action='store_true', default=False, 
@@ -125,15 +123,8 @@ def define_option_parser():
     # MAYBE-TODO add a "negative flank" option (with variable size), to ignore mutants that are in the start/end of genes?
 
     ### output format options
-    parser.add_option('-H', '--header_level', choices=['0','1','2'], default='2', metavar='0|1|2', 
-                      help="Outfile header type:  0 - no header at all, 1 - a single line giving column headers, "
-                          + "2 - full header with command, options, date, user etc (default %default) (also see -s)")
     parser.add_option('-n', '--N_sequences_per_group', type='int', default=2, metavar='N', 
                       help="How many most common sequences should be shown per group? (default %default)")
-    parser.add_option('-s', '--add_summary_to_file', action="store_true", default=True, 
-                      help="Print summary at the top of the file (default %default) (also see -H)")
-    parser.add_option('-S', '--dont_add_summary_to_file', action="store_false", dest='add_summary_to_file', 
-                      help="Turn -s off.")
     parser.add_option('-o', '--sort_data_key', choices=['position','read_count','none'], default='position', 
                       metavar='position|read_count|none', help="Sort the output data: by alignment position, read count, "
                              +"or don't sort at all (default %default) - sorting may be slow for large lists!")
@@ -263,22 +254,14 @@ def run_main_function(infiles, outfile, options):
     if options.verbosity_level>0:   all_alignment_data.print_summary()
     # print full data to outfile
     if options.verbosity_level>1:   print "printing output - time %s."%time.ctime()
-    options.header_level = int(options.header_level)
     with open(outfile,'w') as OUTFILE:
-        if options.header_level==2:
-            write_header_data(OUTFILE,options)
-        if options.add_summary_to_file:
-            OUTFILE.write("### SUMMARY:\n")
-            all_alignment_data.print_summary(OUTFILE, line_prefix="#  ", header_prefix="## ")
-        if options.header_level==2:
-            OUTFILE.write("### HEADER AND DATA:\n")
-        elif options.add_summary_to_file:
-            OUTFILE.write("### DATA:\n")
-        header_line = True if options.header_level else False
-        header_prefix = '' if options.header_level==1 else '# '
+        write_header_data(OUTFILE,options)
+        OUTFILE.write("### SUMMARY:\n")
+        all_alignment_data.print_summary(OUTFILE, line_prefix="#  ", header_prefix="## ")
+        OUTFILE.write("### HEADER AND DATA:\n")
         all_alignment_data.print_data(OUTPUT=OUTFILE, sort_data_by=options.sort_data_key, 
                                       N_sequences=options.N_sequences_per_group, 
-                                      header_line=header_line, header_prefix=header_prefix)
+                                      header_line=True, header_prefix='# ')
 
 
 if __name__ == "__main__":

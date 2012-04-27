@@ -1,3 +1,7 @@
+<REGEX># Command line this file was generated with: mutant_count_alignments.py -T
+<REGEX># Path: .*
+<REGEX># Date: .*
+<REGEX># Full options: {.*}
 ### SUMMARY:
 #  Reads discarded in preprocessing: unknown
 ## Total reads processed: 80
@@ -9,8 +13,8 @@
 ## Distinct mutants (read groups) by cassette insertion position: 57
 #  (read is at 5prime end of cassette, in forward direction to cassette)
 #  Most common mutant: position [mutation_yes + 204-?], 6 reads (9% of aligned)
-### DATA:
-chromosome	strand	min_position	full_position	gene	orientation	feature	total_reads	perfect_reads	N_sequence_variants
+### HEADER AND DATA:
+# chromosome	strand	min_position	full_position	gene	orientation	feature	total_reads	perfect_reads	N_sequence_variants
 chromosome_A	+	20	20-?	gene_unknown	?	?	1	1	1
 chromosome_A	+	100	100-?	gene_unknown	?	?	1	1	1
 chromosome_A	+	150	150-?	gene_unknown	?	?	1	1	1

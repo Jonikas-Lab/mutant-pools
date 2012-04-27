@@ -1,3 +1,7 @@
+<REGEX># Command line this file was generated with: mutant_count_alignments.py -T
+<REGEX># Path: .*
+<REGEX># Date: .*
+<REGEX># Full options: {.*}
 ### SUMMARY:
 #  Reads discarded in preprocessing: unknown
 ## Total reads processed: 40
@@ -47,8 +51,8 @@
 #  Genes with 3 mutants: 1 (test.geneD4_bad_overlapping_exon_UTR)
 #  Genes with 4 mutants: 1 (test.geneB2_only_mRNA_smaller_than_gene)
 #  Genes with 13 mutants: 1 (test.geneA0_proper_plus)
-### DATA:
-chromosome	strand	min_position	full_position	gene	orientation	feature	total_reads	perfect_reads	N_sequence_variants
+### HEADER AND DATA:
+# chromosome	strand	min_position	full_position	gene	orientation	feature	total_reads	perfect_reads	N_sequence_variants
 chromosome_A	+	20	20-?	no_gene_found	-	-	1	1	1
 chromosome_A	+	100	100-?	test.geneA0_proper_plus	sense	gene_edge/mRNA_edge/five_prime_UTR	1	1	1
 chromosome_A	+	150	150-?	test.geneA0_proper_plus	sense	five_prime_UTR	1	1	1
