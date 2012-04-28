@@ -1,0 +1,12 @@
+<IGNORE> This file is basically the same as join-datasets__basic.txt, except that in the data header line the dataset names are "dataset1" and "dataset2" instead of the original filename-based "INPUT_mutants*" ones.
+<REGEX># Command line this file was generated with: mutant_join_datasets.py -T
+<REGEX># Path: .*
+<REGEX># Date: .*
+<REGEX># Full options: {.*}
+<IGNORE>### NO SUMMARY SECTION, CURRENTLY NOT IMPLEMENTED FOR MULTI-DATASETS
+### HEADER AND DATA:
+# chromosome	strand	min_position	full_position	gene	orientation	feature	main_sequence	reads_in_dataset1	perfect_in_dataset1	reads_in_dataset2	perfect_in_dataset2
+chromosome_A	+	100	100-?	gene1	sense	CDS/intron	AAAA	7	5	9	7
+chromosome_A	-	200	200-?	gene2	sense	five_prime_UTR	CCCC	4	3	3	3
+chromosome_B	+	300	300-?	gene_unknown	?	?	GGGG	1	1	0	0
+chromosome_B	+	400	400-?	gene3	antisense	CDS	TTTT	0	0	2	1

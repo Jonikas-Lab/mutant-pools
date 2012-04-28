@@ -20,6 +20,7 @@ from Bio import SeqFeature
 from general_utilities import split_into_N_sets_by_counts, add_dicts_of_ints, keybased_defaultdict
 from DNA_basic_utilities import SEQ_ENDS, SEQ_STRANDS, SEQ_DIRECTIONS, SEQ_ORIENTATIONS, position_test_contains, position_test_overlap
 from deepseq_utilities import get_seq_count_from_collapsed_header, check_mutation_count_try_all_methods
+from parse_annotation_file import parse_gene_annotation_file
 
 
 class SPECIAL_GENE_CODES(object):
@@ -519,7 +520,6 @@ class Insertional_mutant():
         if orientation_both:    self.orientation = orientation_both.pop()
         if feature_both:        self.gene_feature = feature_both.pop()
 
-
     def merge_mutant(self, other, dont_merge_positions=False, check_gene_data=True):
         """ Merge other mutant into this mutant: merge counts, sequences, optionally position; set other's counts to 0."""
 
@@ -612,12 +612,16 @@ class Insertional_mutant():
             else:
                 seqs_to_counts = reduce(add_dicts_of_ints, 
                                         [dataset.sequences_and_counts for dataset in self.by_dataset.itervalues()])
+                # MAYBE-TODO print a warning if different dataset mutants have different main sequences?
 
         ### now actually find the Nth main sequence in the chosen seq:count dictionary
         sequences_by_count = sorted([(count,seq) for (seq,count) in seqs_to_counts.iteritems()], reverse=True)
         # try returning the Nth sequence and count; return nothing if there are under N sequences.
-        try:                return (sequences_by_count[N-1][1], sequences_by_count[N-1][0])
+        try:                return tuple(reversed(sequences_by_count[N-1]))
         except IndexError:  return ('',0)
+        # TODO should probably make that '-' or something instead of '', empty strings are hard to see.
+        # MAYBE-TODO should there be a warning/failure/something if it's a multi-dataset mutant and the user wants
+        #  an overall main sequence and only some of the mutants have any sequence data?
 
     def _copy_non_readcount_data(self, source_mutant):
         """ Copy non-readcount-related data from source_mutant to self (making new copies of all objects). """
@@ -683,7 +687,7 @@ class Insertional_mutant():
             try:
                 # MAYBE-TODO should this be an inexact comparison? Right now 100-101 is NOT equal to ?-101 or to 100-102.
                 assert self.position == other_mutant.position
-                self.update_gene_info(self, other_mutant.gene, other_mutant.orientation, other_mutant.gene_feature)
+                self.update_gene_info(other_mutant.gene, other_mutant.orientation, other_mutant.gene_feature)
             except (AssertionError,MutantError):
                 raise MutantError("Can't add mutant2 as dataset to mutant1: the mutant position/gene data differs!")
 
@@ -762,20 +766,18 @@ class Insertional_mutant_pool_dataset():
      - mutants_in_genes, mutants_not_in_genes, mutants_undetermined - counts of mutants in genes, not in genes, unknown
      - mutant_counts_by_orientation, mutant_count_by_feature - name:count dictionaries for mutant gene location properties
     """
-    # TODO update docstring!!!
+    # TODO-NEXT update docstring!!!
     # - make sure to mention that all mutant positions are immutable by default, and how to deal with changing them
     # - explain about normal datasets and multi-datasets
     # - ____
 
     # Implement new functionality for datasets:
-    # - MAYBE-TODO splitting joint datasets into separate ones?
+    # - MAYBE-TODO splitting joint datasets into separate ones?  Do we need that? PROBABLY NOT.
     # - MAYBE-TODO adding and subtracting datasets (by readcount) - do we currently need that?
-    # - TODO calculating growth rates!
-    #
-    # TODO once the multi-dataset version of Insertional_mutant_pool_dataset is finished and tested and works, implement dataset-joining using that instead of mutant_join_datasets.py!
+    # - TODO-NEXT calculating growth rates!
 
-    def __init__(self, cassette_end='?', reads_are_reverse='?', multi_dataset=False):
-        """ Saves the arguments as properties of the dataset; initializes an empty mutant dict; sets all counts to 0. """
+    def __init__(self, cassette_end='?', reads_are_reverse='?', multi_dataset=False, infile=None):
+        """ Initializes empty dataset; saves properties as provided; optionally reads data from mutant infile. """
         # _mutants_by_position is the main data structure here, but it's also private:
         #      see "METHODS FOR EMULATING A CONTAINER TYPE" section below for proper ways to interact with mutants.
         #   the single mutants should be single-dataset by default, or multi-dataset if the parent dataset is.
@@ -789,6 +791,12 @@ class Insertional_mutant_pool_dataset():
             self.summary = Dataset_summary_data(cassette_end, reads_are_reverse)
         else:
             self.summary = defaultdict(lambda: Dataset_summary_data(cassette_end, reads_are_reverse))
+        # data that's NOT related to a particular dataset
+        # TODO should probably merge that with summary in some sensible way, or something, hmm...
+        self.gene_annotation_header = []
+        # optionally read data from infile
+        if infile is not None:
+            self.read_data_from_file(infile)
 
     ######### METHODS FOR EMULATING A CONTAINER TYPE (a dataset is essentially a container of mutants)
     # everything is currently based on the private self._mutants_by_position dictionary, but this may change.
@@ -915,8 +923,10 @@ class Insertional_mutant_pool_dataset():
         for line in open(infile):
             # LATER-TODO get unaligned/discarded/etc read count from summary, so we can keep track of full counts!
             # ignore comment and header lines, parse other tab-separated lines into values
-            if line.startswith('#'):    continue
-            if line.startswith('chromosome\tstrand\tmin_position\t'):    continue
+            if line.startswith('#'):                                        continue
+            # this is needed only when reading test reference files
+            if line.startswith('<REGEX>#') or line.startswith('<IGNORE>'):  continue       
+            if line.startswith('chromosome\tstrand\tmin_position\t'):       continue
             fields = line.split('\t')
             chromosome = fields[0]
             strand = fields[1]
@@ -948,6 +958,7 @@ class Insertional_mutant_pool_dataset():
             else:                                         summ.mutants_in_genes += 1
             if orientation not in ['?','-']:              summ.mutant_counts_by_orientation[orientation] += 1
             if gene_feature not in ['?','-']:             summ.mutant_counts_by_feature[gene_feature] += 1
+        # MAYBE-TODO update to deal with gene annotation fields?
     
     def add_discarded_reads(self, N, reset_count=False):
         """ Add N to self.discarded_read_count (or set self.discarded_read_count to N if reset_count is True). """
@@ -968,9 +979,10 @@ class Insertional_mutant_pool_dataset():
         for mutant in list(iter(self)):
             if get_readcount(other_dataset.get_mutant(mutant.position)) >= readcount_min:
                 self.remove_mutant(mutant.position)
-        # TODO add unit-test and/or functional-test!
+        # TODO adjust all the summary read counts etc after the removal!!!
+        # TODO should I keep track of removed reads, and print in summary?  PROBABLY.
 
-    def populate_multi_dataset(self, source_dataset_dict, overwrite=False, check_gene_data=False):
+    def populate_multi_dataset(self, source_dataset_dict, overwrite=False, check_gene_data=True):
         """ Given a dataset_name:single_dataset_object dictionary, populate current multi-dataset with the data. 
 
         If dataset already has a dataset with the same name, raise MutantError unless overwrite=True is passed.
@@ -997,7 +1009,8 @@ class Insertional_mutant_pool_dataset():
                 curr_mutant = self.get_mutant(mutant.position)
                 curr_mutant.add_other_mutant_as_dataset(mutant, dataset_name, overwrite=overwrite, 
                                                         check_constant_data=check_gene_data)
-        # TODO add unit-test and/or functional-test!
+        # MAYBE-TODO add option to only include mutants with non-zero reads (total or perfect) in all datasets?  Or should that only happen during printing?  Or do we even care?  If I ever want to do that, there was code for it in the old version of mutant_join_datasets.py (before 2012-04-26)
+        # This has no unit-tests, but has a run-test in mutant_join_datasets.py
 
 
     ######### PROCESSING/MODIFYING DATASET
@@ -1023,25 +1036,40 @@ class Insertional_mutant_pool_dataset():
             # if the two positions are on different chromosomes or aren't adjacent, skip
             if position1.chromosome != position2.chromosome:                                continue
             if abs(position2.min_position-position1.min_position) > merge_max_distance:     continue
+            # if the two positions are SAME POSITION but on different strands, they can't be merged, 
+            #  and they shouldn't be counted either, so we can compare the count to the count of same-strand ones!
+            #   (since two same-strand same-position mutants would be indistinguishable)
+            #  but do print a message, with a higher priority, because this situation is WEIRD really...
+            if position1.strand != position2.strand and position1.min_position==position2.min_position:
+                if verbosity_level>0:
+                    print "SAME-POSITION OPPOSITE-STRAND MUTANTS! STRANGE. %s and %s."%(position1,position2)
+                continue
             # if the two positions are adjacent but on different strands, they can't be merged - count and skip
-            if not position1.strand == position2.strand:
+            elif position1.strand != position2.strand:
                 adjacent_opposite_strands_count += 1
                 if verbosity_level>1:
                     print "  LEAVING adjacent mutants: %s and %s."%(position1,position2)
                 continue
-            # make sure these mutants still exist in the dataset (haven't been merged)
-            try:
+
+            # make sure these mutants still exist in the dataset (haven't been merged) (note: if they don't exist, 
+            #   the dataset will silently create new mutants with readcounts 0, so check "x in self" explicitly)
+            #  (this shouldn't be a problem with a situation like 1,1000,1 readcounts - the first and third will both
+            #   be merged into the second, which won't disappear, so all is fine. However with a situation like
+            #   1000,1,1000 readcounts, the middle mutant will be merged into only one of the sides, which is right.)
+            if position1 in self:
                 mutant1 = self.get_mutant(position1)
-            except KeyError:
-                if verbosity_level>1:
+            else:
+                if verbosity_level>0:
                     print "Warning: attempting to merge a mutant that no longer exists %s with %s!"%(position1,position2)
                 continue
-            try:
+            if position2 in self:
                 mutant2 = self.get_mutant(position2)
-            except KeyError:
-                if verbosity_level>1:
+            else:
+                if verbosity_level>0:
                     print "Warning: attempting to merge a mutant that no longer exists %s with %s!"%(position2, position1)
                 continue
+
+            # calculate readcount ratio
             mutant1_readcount, mutant2_readcount = mutant1.total_read_count, mutant2.total_read_count
             readcount_ratio = max(mutant1_readcount/mutant2_readcount, mutant2_readcount/mutant1_readcount)
             # if the two mutants are adjacent, but the readcounts aren't different enough , count and skip
@@ -1058,17 +1086,16 @@ class Insertional_mutant_pool_dataset():
             if verbosity_level>1:
                 print(" MERGING adjacent mutants: %s and %s, %s and %s reads."%(position1, position2, 
                                                                                 mutant1_readcount, mutant2_readcount))
-            if mutant1_readcount > mutant2_readcount:
+            if mutant1_readcount >= mutant2_readcount:
                 mutant1.merge_mutant(mutant2, dont_merge_positions=dont_change_positions)
                 self.remove_mutant(position2)
-            elif mutant2_readcount > mutant1_readcount:
+            else:
                 mutant2.merge_mutant(mutant1, dont_merge_positions=dont_change_positions)
                 self.remove_mutant(position1)
         self.summary.mutant_merging_info.append("merged %s pairs of adjacent mutants "%adjacent_same_strands_merged 
                                         +"(max distance %s, min count ratio %s) "%(merge_max_distance, merge_count_ratio))
         self.summary.mutant_merging_info.append("  (kept %s pairs on same strand "%adjacent_same_strands_left 
                                         +"and %s on opposite strands)"%adjacent_opposite_strands_count)
-        # TODO add unit-tests or run-tests for this!
 
     def find_genes_for_mutants(self, genefile, detailed_features=False, known_bad_chromosomes=[], 
                                N_run_groups=3, verbosity_level=1):
@@ -1125,11 +1152,18 @@ class Insertional_mutant_pool_dataset():
                 mutant.gene,mutant.orientation,mutant.gene_feature = SPECIAL_GENE_CODES.chromosome_not_in_reference,'-','-'
                 summ.mutants_undetermined += 1
 
-    def add_detailed_gene_info(self, gene_info_file):
-        """ _____ """
-        print "    *** WARNING: getting detailed gene info (-G option) NOT IMPLEMENTED! Skipping. ***"
-        # TODO implement!  Already done in mutant_join_datasets.py...  Get gene name/description/stuff from gene_info_file and add to mutants (how, exactly?  Do we want to add those fields to each mutant separately, or make a new dictionary of genes that can be looked up by geneID to get the detailed info, or just make gene objects that contain all this stuff and use those as mutant.gene instead of just geneID strings?
-        # Once it's implemented, make sure it gets printed somewhere - probably only in the line-per-gene output
+    def add_gene_annotation(self, annotation_file, if_standard_Cre_file=False, custom_header=None):
+        """ Add gene annotation to each mutant, based on annotation_file. See parse_gene_annotation_file doc for detail."""
+        gene_annotation_dict, gene_annotation_header = parse_gene_annotation_file(gene_annotation_file, 
+                                                     standard_Cre_file=if_standard_Cre_file, header_fields=custom_header)
+        # store the annotation header in self.summary, for printing
+        if gene_annotation_header:  self.gene_annotation_header = gene_annotation_header
+        else:                       self.gene_annotation_header = 'GENE_ANNOTATION_DATA'
+        # add the annotation info to each mutant (or nothing, if gene has no annotation)
+        # MAYBE-TODO should I even store gene annotation in each mutant, or just keep a separate per-gene dictionary?
+        for mutant in self:
+            try:                mutant.gene_annotation = gene_annotation_dict[mutant.gene]
+            except KeyError:    mutant.gene_annotation = []
         # LATER-TODO add this to the gene-info run-test case!
 
     def make_by_gene_mutant_dict(self):
@@ -1184,8 +1218,8 @@ class Insertional_mutant_pool_dataset():
     def print_summary(self, OUTPUT=sys.stdout, N_genes_to_print=5, line_prefix='    ', header_prefix=' * '):
         """ Print basic read and mutant counts (prints to stdout by default, can also pass an open file object)."""
         if self.multi_dataset:  raise MutantError("print_summary not implemented for multi-datasets!")
-        # TODO implement for multi-datasets!
-        # TODO should probably rewrite this to start with a real total read number (discarded+total)
+        # TODO-NEXT implement for multi-datasets!
+        # TODO-NEXT should probably rewrite this to start with a real total read number (discarded+total)
         summ = self.summary
         OUTPUT.write(line_prefix+"Reads discarded in preprocessing: %s\n"%(summ.discarded_read_count))
         OUTPUT.write(header_prefix+"Total reads processed: %s\n"%(summ.total_read_count))
@@ -1198,7 +1232,7 @@ class Insertional_mutant_pool_dataset():
             OUTPUT.write(line_prefix+"Reads with insertion direction matching chromosome %s strand: %s\n"%(strand, count))
         for (region,count) in sorted(summ.specific_region_read_counts.iteritems()):
             OUTPUT.write(line_prefix+"Reads aligned to %s: %s\n"%(region, count))
-        # TODO add percentages of total (or aligned) reads to all of these numbers in addition to raw counts!
+        # TODO-NEXT add percentages of total (or aligned) reads to all of these numbers in addition to raw counts!
         # MAYBE-TODO keep track of the count of separate mutants in each category, as well as total read counts?
         OUTPUT.write(header_prefix+"Distinct mutants (read groups) by cassette insertion position: %s\n"%(len(self)))
         OUTPUT.write(line_prefix+"(read is at %s end of cassette, in %s direction to cassette)\n"%(summ.cassette_end, 
@@ -1229,47 +1263,84 @@ class Insertional_mutant_pool_dataset():
                     else:                               genelist_string = ' (%s, ...)'%genelist_to_print
                 else:                                   genelist_string = ''
                 OUTPUT.write(line_prefix+"Genes with %s mutants: %s%s\n"%(mutantN, len(geneset), genelist_string))
-            # TODO Add some measure of mutations, like how many mutants have <50% perfect reads (or something - the number should probably be a command-line option).  Maybe how many mutants have <20%, 20-80%, and >80% perfect reads (or 10 and 90, or make that a variable...)
+            # TODO-NEXT Add some measure of mutations, like how many mutants have <50% perfect reads (or something - the number should probably be a command-line option).  Maybe how many mutants have <20%, 20-80%, and >80% perfect reads (or 10 and 90, or make that a variable...)
 
-    def print_data(self, OUTPUT=None, sort_data_by=None, N_sequences=2, header_line=True, header_prefix="# "):
+    def print_data(self, OUTPUT=sys.stdout, sort_data_by=None, N_sequences=None, header_line=True, header_prefix="# "):
         """ Print full data, one line per mutant: position data, gene info, read counts, optionally sequences.
         (see the file header line for exactly what all the output fields are).
 
-        If N_sequences<1, only prints position (chromosome and position), total and perfect read count, 
-          and the number of sequence variants.  If N_sequences==1, also prints the most common sequence and count; 
-          if N_sequences>1, adds the second most common sequence and count, and so on.
-        Output is tab-separated, with headers starting with "# ".  Prints to an open file object (stdout by default).
+        For a normal dataset, print position/gene info (7 fields), total_reads, perfect_reads, N_sequence_variants, 
+         the N_sequences most common sequences and counts (alternating, taking 2*N_sequences fields), 
+         and gene annotation if it exists (arbitrary number of tab-separated fields).
+
+        For a multi-dataset, print position/gene info (7 fields), the main sequence (taken over all the datasets),
+         then reads_in_<x> and perfect_in_<x> for each dataset (total and perfect reads - total 2*N_datasets fields), 
+         then gene annotation if it exists.
+
+        Data is printed to OUTPUT, which should be an open file object (stdout by default).
+         Output is tab-separated, with optional header starting with "# ".  
         """
-        if self.multi_dataset:  raise MutantError("print_data not implemented for multi-datasets!")
-        # TODO implement for multi-datasets!
-        # MAYBE-TODO should printing the gene info be optional?  Maybe... Would save space when there isn't any meaningful gene info to print anyway.
-        if OUTPUT is None:
-            OUTPUT = sys.stdout
+        if self.multi_dataset and N_sequences is not None:
+            raise MutantError("Only one sequence can currently be printed in print_data for multi-datasets!")
+        if N_sequences is None and not self.multi_dataset:     N_sequences = 2
 
+        # define the order of the dataset columns
+        # TODO this should have a custom order option too!  Either as an argument to print_data (and print_summary?), or at the original populate_multi_dataset run, or just stored in self somewhere so it can be set... NOT SURE.
+        if self.multi_dataset:
+            datasets_in_order = sorted(self.summary.keys())
+
+        ### print the header line (different for normal and multi-datasets)
+        # MAYBE-TODO should printing the gene info be optional?  Maybe... 
+        #   Would save space when there isn't any meaningful gene info to print anyway.
         if header_line:
-            headers = ['chromosome','strand','min_position','full_position', 'gene','orientation','feature',
-                       'total_reads','perfect_reads', 'N_sequence_variants']
-            for N in range(1,N_sequences+1):
-                headers.extend(['read_sequence_%s'%N,'seq_%s_count'%N])
-            OUTPUT.write(header_prefix + '\t'.join(headers) + "\n")
+            header = ['chromosome','strand','min_position','full_position', 'gene','orientation','feature']
+            if not self.multi_dataset:
+                header += ['total_reads','perfect_reads', 'N_sequence_variants']
+                for N in range(1,N_sequences+1):    
+                    header += ['read_sequence_%s'%N, 'seq_%s_count'%N]
+            else:
+                header += ['main_sequence']
+                for dataset_name in datasets_in_order:
+                    header += ['reads_in_%s'%dataset_name, 'perfect_in_%s'%dataset_name]
+            header += self.gene_annotation_header
+            OUTPUT.write(header_prefix + '\t'.join(header) + "\n")
 
+        ### sort all mutants by position or readcount (for single datasets only for now), or don't sort at all
         all_mutants = iter(self)
         if sort_data_by=='position':
             data = sorted(all_mutants, key = lambda m: m.position)
             # x.position here is an Insertion_position object and has a sensible cmp function
         elif sort_data_by=='read_count':
+            if self.multi_dataset:  
+                raise MutantError("Sorting by readcount in print_data not implemented for multi-datasets!")
             data = sorted(all_mutants, key = lambda m: (m.total_read_count,m.perfect_read_count,m.position), reverse=True)
         else:
             data = all_mutants
 
+        # create "empty" annotation line with the correct number of fields, for genes that weren't in annotation file
+        if self.gene_annotation_header:
+            missing_gene_annotation_data = ['NO GENE DATA'] + ['' for x in self.gene_annotation_header[:-1]]
+
+        ### for each mutant, print the mutant data line (different for normal and multi-datasets)
         for mutant in data:
             mutant_data = [mutant.position.chromosome, mutant.position.strand, mutant.position.min_position, 
-                           mutant.position.full_position, mutant.gene, mutant.orientation, mutant.gene_feature, 
-                           mutant.total_read_count, mutant.perfect_read_count, mutant.unique_sequence_count]
+                           mutant.position.full_position, mutant.gene, mutant.orientation, mutant.gene_feature] 
+            if not self.multi_dataset:
+                mutant_data += [mutant.total_read_count, mutant.perfect_read_count, mutant.unique_sequence_count]
+                for N in range(1,N_sequences+1):
+                    mutant_data += list(mutant.get_main_sequence(N))
+                    # MAYBE-TODO also give the length and number of mutations for each sequence? Optionally?  
+                    #   Length is easy, but do I even keep track of mutation number?  I probably should...
+            else:
+                mutant_data += [mutant.get_main_sequence(1)[0]]
+                for dataset_name in datasets_in_order:
+                    mutant_data += [mutant.by_dataset[dataset_name].total_read_count, 
+                                    mutant.by_dataset[dataset_name].perfect_read_count]
+            # add gene annotation, or a line with the right number of fields if gene annotation is missing
+            if self.gene_annotation_header:
+                if mutant.gene_annotation:  mutant_data += mutant.gene_annotation
+                else:                       mutant_data += missing_gene_annotation_data
             OUTPUT.write('\t'.join([str(x) for x in mutant_data]))
-            for N in range(1,N_sequences+1):
-                OUTPUT.write('\t%s\t%s'%mutant.get_main_sequence(N))
-                # MAYBE-TODO also give the length and number of mutations for each sequence? Optionally?  Length is easy, but do I even keep track of mutation number?  I probably should...
             OUTPUT.write('\n')
 
 
@@ -1856,9 +1927,9 @@ class Testing_Insertional_mutant_pool_dataset(unittest.TestCase):
         pass
         # MAYBE-TODO implement based on stuff in test_data, like do_test_run in deepseq_count_alignments.py?
 
-    def test__read_from_file(self):
+    def test__read_data_from_file(self):
         ## 1. input file with no gene information but more variation in other features
-        input_file = 'test_data/test_output__5prime.txt'
+        input_file = 'test_data/count-aln__cassette-end-5prime.txt'
         data = Insertional_mutant_pool_dataset()
         data.read_data_from_file(input_file)
         assert data.summary.total_read_count == data.summary.aligned_read_count == 30
@@ -1907,7 +1978,7 @@ class Testing_Insertional_mutant_pool_dataset(unittest.TestCase):
         data.read_data_from_file(input_file, assume_new_sequences=True)
         assert mutant.unique_sequence_count == 2
         ## 3. input file with gene information
-        input_file2 = 'test_data/test_output2__with-genes.txt'
+        input_file2 = 'test_data/count-aln__with-gene-info.txt'
         data2 = Insertional_mutant_pool_dataset()
         data2.read_data_from_file(input_file2)
         assert data2.summary.total_read_count == data2.summary.aligned_read_count == data2.summary.perfect_read_count == 40

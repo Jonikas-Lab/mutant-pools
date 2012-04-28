@@ -1,0 +1,36 @@
+<REGEX># Command line this file was generated with: mutant_count_alignments.py -T
+<REGEX># Path: .*
+<REGEX># Date: .*
+<REGEX># Full options: {.*}
+### SUMMARY:
+#  Reads discarded in preprocessing: unknown
+## Total reads processed: 25
+#  Unaligned reads: 0
+#  Aligned reads (non-discarded): 25
+#  Perfectly aligned reads (no mismatches): 25
+#  Reads with insertion direction matching chromosome + strand: 22
+#  Reads with insertion direction matching chromosome - strand: 3
+## Distinct mutants (read groups) by cassette insertion position: 12
+#  (read is at 5prime end of cassette, in forward direction to cassette)
+#  merged 3 pairs of adjacent mutants (max distance 1, min count ratio 1) 
+#    (kept 0 pairs on same strand and 1 on opposite strands)
+#  Most common mutant: position [chromosome_A + 100-?], 7 reads (28% of aligned)
+### HEADER AND DATA:
+# chromosome	strand	min_position	full_position	gene	orientation	feature	total_reads	perfect_reads	N_sequence_variants
+<IGNORE> the 99-100-101 group should be merged (distance 1, ratio 5) (this constitutes two pairs)
+chromosome_A	+	100	100-?	gene_unknown	?	?	7	5	1
+<IGNORE> the 200-202 group should NOT be merged (distance 2, ratio 3)
+chromosome_A	+	200	200-?	gene_unknown	?	?	3	3	1
+chromosome_A	+	202	202-?	gene_unknown	?	?	1	1	1
+<IGNORE> the 201-301 group should be merged (distance 1, ratio 1) - into the lower position by default
+chromosome_A	+	300	300-?	gene_unknown	?	?	2	1	1
+<IGNORE> the 400-405 group should NOT be merged (distance 5, ratio 1)
+chromosome_A	+	400	400-?	gene_unknown	?	?	1	1	1
+chromosome_A	+	405	405-?	gene_unknown	?	?	1	1	1
+<IGNORE> the remaining groups are on opposite strands (distance 0, 1, 2) and should never be merged.
+chromosome_A	+	500	500-?	gene_unknown	?	?	1	1	1
+chromosome_A	-	500	?-501	gene_unknown	?	?	1	1	1
+chromosome_A	+	600	600-?	gene_unknown	?	?	5	5	1
+chromosome_A	-	601	?-602	gene_unknown	?	?	1	1	1
+chromosome_A	+	700	700-?	gene_unknown	?	?	1	1	1
+chromosome_A	-	702	?-703	gene_unknown	?	?	1	1	1

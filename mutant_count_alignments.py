@@ -30,20 +30,33 @@ def do_test_run():
     test_folder = "test_data"
     aln_infile1 = "test_data/INPUT_alignment1.sam"
     aln_infile2 = "test_data/INPUT_alignment2_for-genes.sam"
+    aln_infile3 = "test_data/INPUT_alignment3_for-merging.sam"
     gff_genefile = "test_data/INPUT_gene-data.gff3"
+    dataset_to_remove = "test_data/count-aln__merge-adjacent2-r3.txt"
 
-    test_runs = [("count-aln__cassette-end-5prime", "-e 5prime -r forward -U -n3", [aln_infile1]),
-                 ("count-aln__cassette-end-3prime", "-e 3prime -r forward -U -n3", [aln_infile1]),
-                 ("count-aln__read-direction-reverse", "-r reverse -e 5prime -U -n3", [aln_infile1]),
-                 ("count-aln__u_unknown-not-as-match", "-u -e 5prime -r forward -n3", [aln_infile1]),
-                 ("count-aln__b_special-chromosomes", "-b special_chromosome -e 5prime -r forward -U -n3", [aln_infile1]),
-                 ("count-aln__B_ignore-chromosomes", "-B special_chromosome -e 5prime -r forward -U -n3", [aln_infile1]),
-                 ("count-aln__sorted-by-count", "-o read_count -e 5prime -r forward -U -n3", [aln_infile1]),
-                 ("count-aln__with-gene-info", "-e 5prime -r forward -U -g %s -d -n0"%gff_genefile, [aln_infile2]),
-                 ("count-aln__multiple-infiles", "-e 5prime -r forward -U -n0", [aln_infile1,aln_infile2])]
+    test_runs = [('cassette-end-5prime', "-e 5prime -r forward -U -n3", [aln_infile1]),
+                 ('cassette-end-3prime', "-e 3prime -r forward -U -n3", [aln_infile1]),
+                 ('read-direction-reverse', "-r reverse -e 5prime -U -n3", [aln_infile1]),
+                 ('u_unknown-not-as-match', "-u -e 5prime -r forward -n3", [aln_infile1]),
+                 ('b_special-chromosomes', "-b special_chromosome -e 5prime -r forward -U -n3", [aln_infile1]),
+                 ('B_ignore-chromosomes', "-B special_chromosome -e 5prime -r forward -U -n3", [aln_infile1]),
+                 ('sorted-by-count', "-o read_count -e 5prime -r forward -U -n3", [aln_infile1]),
+                 ('with-gene-info', "-e 5prime -r forward -U -g %s -d -n0"%gff_genefile, [aln_infile2]),
+                 ('multiple-infiles', "-e 5prime -r forward -U -n0", [aln_infile1,aln_infile2]),
+                 ('merge-adjacent-none', "-n0", [aln_infile3]),
+                 ('merge-adjacent1-r3', "-M --merge_max_distance=1 --merge_count_ratio=3 -n0", [aln_infile3]),
+                 ('merge-adjacent1-r1', "-M --merge_max_distance=1 --merge_count_ratio=1 -n0", [aln_infile3]),
+                 ('merge-adjacent2-r3', "-M --merge_max_distance=2 --merge_count_ratio=3 -n0", [aln_infile3]), 
+                 ('remove-from-other-all', "-X %s -n0"%dataset_to_remove, [aln_infile2]), 
+                 ('remove-from-other-min4', "-X %s -z4 -n0"%dataset_to_remove, [aln_infile2]), 
+                 ('remove-from-other-perfect', "-X %s -Z -z4 -n0"%dataset_to_remove, [aln_infile2]),
+                ]
+    # MAYBE-TODO add run-test for --gene_annotation_file?
+    # MAYBE-TODO add run-test for --input_collapsed_to_unique?  Or is that unit-tested already?
+
 
     # convert tests into (testname, arg_and_infile_string) format, adding the options that are always used
-    test_names_and_args = [(testname, test_args+' -q '+' '.join(infiles)) 
+    test_names_and_args = [('count-aln__'+testname, test_args+' -q '+' '.join(infiles)) 
                            for testname,test_args,infiles in test_runs]
 
     parser = define_option_parser()
@@ -66,8 +79,8 @@ def define_option_parser():
     from optparse import OptionParser
     parser = OptionParser(__doc__)
 
-    # taken:     --bBcCdDe---gGh---------mMn-o---q-r---tTuUvVwWxX----  
-    # free:      aB-------EfF---HiIjJkKlL---N-OpP-Q-RsS----------yYzZ  
+    # taken:     aAbBcCdDe---g-h---------mMn-o---q-r---tTuUvVwWxX-Y--  
+    # free:      ---------EfF-G-HiIjJkKlL---N-OpP-Q-RsS----------y-zZ  
 
     ### test options
     parser.add_option('-t','--test_functionality', action='store_true', default=False, 
@@ -83,12 +96,22 @@ def define_option_parser():
     parser.add_option('-r','--read_direction', choices=mutant_analysis_classes.SEQ_DIRECTIONS, default='forward',
                       metavar='|'.join(mutant_analysis_classes.SEQ_DIRECTIONS), 
                       help="Is the read in the forward or reverse direction compared to the cassette? (default %default).")
+
     parser.add_option('-M', '--merge_adjacent_mutants', action="store_true", default=False, 
                       help="Merge adjacent mutants if they satisfy the -w/-W constraints (default %default)")
     parser.add_option('-w', '--merge_max_distance', type='int', default=1, metavar='N',
                       help="For -M: merge mutants only if they're at most N bases distant (default %default)")
     parser.add_option('-W', '--merge_count_ratio', type='int', default=1000, metavar='K',
                       help="For -M: merge mutants only if one has K x fewer reads than the other (default %default)")
+
+    parser.add_option('-X', '--remove_mutants_from_file', metavar='FILE',
+                      help='Remove all mutants present in FILE from the datasets (see -Y for read count cutoff).')
+    parser.add_option('-z', '--remove_mutants_readcount_min', type='int', default=1, metavar='M',
+                      help='When applying -X, only remove mutants with at least N reads in FILE (default %default).')
+    parser.add_option('-Z', '--remove_mutants_min_is_perfect', action='store_true', default=False,
+                      help='When applying -X with -z M, compare M to perfect readcount, not total. (default %default).')
+
+    # extremely minor functionality options, do we even care??
     parser.add_option('-u', '--treat_unknown_as_match', action="store_true", default=False, 
                       help="When counting perfect reads, treat undefined alignment regions as matches (default %default)")
     parser.add_option('-U', '--dont_treat_unknown_as_match', action="store_false", dest='treat_unknown_as_match',
@@ -106,11 +129,9 @@ def define_option_parser():
                           +"Can be a filename, AUTO for <infile_basename>_info.txt (warning will be raised if not found), "
                           +"or NONE to not look for a metadata file at all. Default %default.")
 
-    ### gene-finding options 
+    ### gene-finding and gene-annotation options 
     parser.add_option('-g', '--gene_position_reference_file', default=None, metavar='FILE', 
                       help="File to use to look up gene IDs based on chromosomal location (default %default)")
-    parser.add_option('-G', '--gene_info_reference_file', default=None, metavar='FILE', 
-                      help="File to use to look up gene names/descriptions from ID symbols (default %default)")
     parser.add_option('-d', '--detailed_gene_features', action="store_true", default=True,
                       help="Find out what part of the gene (UTR,intron,exon) a mutant hit, based on the -g file "
                           +"(default %default). May take a lot of memory - increase -Y option value to fix that.")
@@ -122,12 +143,17 @@ def define_option_parser():
     # MAYBE-TODO add a "flank" option (with variable size), to catch mutants that are in the flanks of genes? Do we care?
     # MAYBE-TODO add a "negative flank" option (with variable size), to ignore mutants that are in the start/end of genes?
 
+    parser.add_option('-A', '--gene_annotation_file', default=None, metavar='FILE', 
+                      help="Tab-separated file to use to look up gene names/descriptions from IDs (default %default)")
+    parser.add_option('-a', '--annotation_file_is_standard', action='store_true', default=False,
+                      help="Use if file provided in -A is the standard Cre type and (missing a header) (default %default)")
+
     ### output format options
     parser.add_option('-n', '--N_sequences_per_group', type='int', default=2, metavar='N', 
                       help="How many most common sequences should be shown per group? (default %default)")
     parser.add_option('-o', '--sort_data_key', choices=['position','read_count','none'], default='position', 
                       metavar='position|read_count|none', help="Sort the output data: by alignment position, read count, "
-                             +"or don't sort at all (default %default) - sorting may be slow for large lists!")
+                         +"or don't sort at all (default %default) - sorting may be slow for large datasets!")
     parser.add_option('-b', '--bad_chromosomes_count_only', default='insertion_cassette', metavar='comma-separated-list', 
                       help="Count reads aligning to these chromosomes and print the count in the header; "
                           +"otherwise treat them normally. (default %default) (also see -B)")
@@ -235,6 +261,12 @@ def run_main_function(infiles, outfile, options):
                                                   dont_change_positions = True, 
                                                   verbosity_level=options.verbosity_level)
 
+    ### optionally remove mutants based on another dataset
+    if options.remove_mutants_from_file:
+        other_dataset = mutant_analysis_classes.Insertional_mutant_pool_dataset(infile=options.remove_mutants_from_file)
+        all_alignment_data.remove_mutants_based_on_other_dataset(other_dataset, 
+                 readcount_min=options.remove_mutants_readcount_min, perfect_reads=options.remove_mutants_min_is_perfect)
+
     ### optionally parse gene position/info files and look up the genes for each mutant in the data
     if options.gene_position_reference_file is not None:
         genefile = options.gene_position_reference_file
@@ -243,10 +275,13 @@ def run_main_function(infiles, outfile, options):
                                                   known_bad_chromosomes=bad_chromosomes_to_count, 
                                                   N_run_groups=options.N_detail_run_groups, 
                                                   verbosity_level=options.verbosity_level)
-        if options.gene_info_reference_file is not None:
+
+        # if we have gene info, optionally also add annotation
+        if options.gene_annotation_file:
             if options.verbosity_level>1: 
-                print "adding gene details from file %s - time %s."%(options.gene_info_reference_file, time.ctime())
-            all_alignment_data.add_detailed_gene_info(options.gene_info_reference_file)
+                print "adding gene annotation from file %s - time %s."%(options.gene_annotation_file, time.ctime())
+            all_alignment_data.add_gene_annotation(options.gene_annotation_file, 
+                                                   if_standard_Cre_file=options.annotation_file_is_standard)
 
     ### output
     # print summary info to stdout

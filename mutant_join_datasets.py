@@ -13,12 +13,25 @@ import unittest
 # my modules
 from general_utilities import write_header_data
 import mutant_analysis_classes
+from testing_utilities import run_functional_tests
 
 
 def do_test_run():
     """ Test run: run script on test infile, compare output to reference file."""
-    print "RUN-TESTS NOT IMPLEMENTED"
-    # TODO implement
+    test_folder = "test_data"
+    dataset1 = "test_data/INPUT_mutants1_no-genes.txt"
+    dataset2 = "test_data/INPUT_mutants2_with-genes.txt"
+
+    tests = [("join-datasets__basic", "-o position %s %s -q"%(dataset1, dataset2)), 
+             ("join-datasets__with-names", "-D dataset1,dataset2 -o position %s %s -q"%(dataset1, dataset2)),
+            ]
+    # TODO implement some way of specifying the order of the datasets (right now they're always alphabetical), and then add a test for that!
+    # MAYBE-TODO add run test for -A/-a option? 
+
+    parser = define_option_parser()
+    argument_converter = lambda parser,options,args: (args[:-1], args[-1], options)
+    return run_functional_tests(tests, parser, run_main_function, test_folder, 
+                                argument_converter=argument_converter, append_to_outfilenames='.txt') 
 
 
 class Testing(unittest.TestCase):
@@ -36,41 +49,45 @@ def define_option_parser():
     parser = OptionParser(__doc__)
 
     ### functionality options
-    parser.add_option('-G', '--gene_annotation_file', metavar='FILE',
-                      help="Tab-separated gene annotated file (must have Cre gene IDs in first column) (default %default)")
+    parser.add_option('-D', '--dataset_names', default=None, metavar='A,B,C,...', 
+                      help="Comma-separated list of short dataset names (no spaces) to use in header (default %default)")
 
-    parser.set_defaults(which_reads='all')
-    parser.add_option('-p', '--perfect_reads_only',   action='store_const', dest='which_reads', const='perfect', 
-                      help="Take only perfectly aligned read counts (default %default)")
-    parser.add_option('-i', '--imperfect_reads_only', action='store_const', dest='which_reads', const='imperfect',
-                      help="Take only imperfectly aligned read counts (default %default)")
-    parser.add_option('-a', '--all_reads',            action='store_const', dest='which_reads', const='all',
-                      help="Take total read counts (turns -p/-i off).")
-    parser.add_option('-P', '--mutants_perfect_percent', type='int', default=0, metavar='K',
-                      help="Include only mutants with K% or more perfectly aligned reads in all files (default %default)")
-    parser.add_option('-I', '--mutants_imperfect_percent', type='int', default=0, metavar='L',
-                      help="Include only mutants with L% or more imperfectly aligned reads"
-                          +"(calculated out of readcount sum over all infiles) (default %default)")
-    # TODO implement options.mutants_perfect_percent and options.mutants_imperfect_percent!  Similar to options.which_reads
-    #   TODO this isn't as simple as it looks! 
+    parser.add_option('-o', '--sort_data_key', choices=['position','read_count','none'], default='position', 
+                      metavar='position|read_count|none', help="Sort the output data: by alignment position, read count, "
+                         +"or don't sort at all (default %default) - sorting may be slow for large datasets!")
+
+    parser.add_option('-A', '--gene_annotation_file', default=None, metavar='FILE', 
+                      help="Tab-separated file to use to look up gene names/descriptions from IDs (default %default)")
+    parser.add_option('-a', '--annotation_file_is_standard', action='store_true', default=False,
+                      help="Use if file provided in -A is the standard Cre type and (missing a header) (default %default)")
+
+    ### MAYBE-TODO add options to specify whether to show both total and perfect reads, or just one column?
+    #parser.set_defaults(which_reads='all')
+    #parser.add_option('-p', '--perfect_reads_only',   action='store_const', dest='which_reads', const='perfect', 
+    #                  help="Take only perfectly aligned read counts (default %default)")
+    #parser.add_option('-i', '--imperfect_reads_only', action='store_const', dest='which_reads', const='imperfect',
+    #                  help="Take only imperfectly aligned read counts (default %default)")
+    #parser.add_option('-a', '--all_reads',            action='store_const', dest='which_reads', const='all',
+    #                  help="Take total read counts (turns -p/-i off).")
+
+    ### MAYBE-TODO add options to specify which MUTANTS to include, based on:
+    #   - whether they show up in any/all datasets etc
+    #   - perfect/imperfect read %
+    #parser.add_option('-m', '--output_only_shared_mutants', action='store_true', default=False,
+    #                  help="Only output the mutants that have non-zero counts in ALL input files (default %default)")
+    #parser.add_option('-M', '--output_all_mutants', action='store_false', dest='output_only_shared_mutants',
+    #                  help="Output all mutants, including ones that only appear in one input file (turns -o off).")
+    #parser.add_option('-P', '--mutants_perfect_percent', type='int', default=0, metavar='K',
+    #                  help="Include only mutants with K% or more perfectly aligned reads in all files (default %default)")
+    #parser.add_option('-I', '--mutants_imperfect_percent', type='int', default=0, metavar='L',
+    #                  help="Include only mutants with L% or more imperfectly aligned reads"
+    #                      +"(calculated out of readcount sum over all infiles) (default %default)")
+    # TODO move the -P/-I functionality to mutant_make_plots.py!
+    #  Note: this -P/-I thing isn't as simple as it looks! 
     #   1) I'm not sure how to implement it - check the K% or L% for all files, any file, sum over all files?  Make sure it's consistent somehow, and that one mutant will always be in exactly one set between -P and -I (so either both use the sum over all files, or one requires its condition for all files and one for any file)  
     # OR just do it per file here, allowing some mutants to be present in one file but 0 in another, and let them get plotted like that? MIGHT BE THE BEST WAY.  
     # ANYWAY, in the final version, I think the joint-mutant file should just contain both total and perfect reads (possibly with options to do otherwise), and the plotting program should get all these -a/-p/-i/-P/-I options.
     #   2) As this is set up right now, I can't do that anyway, because for each infile there's only one value saved, either total or perfect or imperfect readcount - no way of getting a ratio. I'd have to rewrite a fair amount to fix that, and if I'm rewriting already, I should just do a full rewrite to use the new multi-dataset Insertional_mutant option from mutant_analysis_classes.py!
-
-    parser.add_option('-m', '--output_only_shared_mutants', action='store_true', default=False,
-                      help="Only output the mutants that have non-zero counts in ALL input files (default %default)")
-    parser.add_option('-M', '--output_all_mutants', action='store_false', dest='output_only_shared_mutants',
-                      help="Output all mutants, including ones that only appear in one input file (turns -o off).")
-
-    ### output format options
-    parser.add_option('-H', '--header_level', choices=['0','1','2'], default='2', metavar='0|1|2', 
-                      help="Outfile header type:  0 - no header at all, 1 - a single line giving column headers, "
-                          + "2 - full header with command, options, date, user etc (default %default) (also see -s)")
-    parser.add_option('-s', '--add_summary_to_file', action='store_true', default=True, 
-                      help="Print summary at the end of the file (default %default) (also see -H)")
-    parser.add_option('-S', '--dont_add_summary_to_file', action='store_false', dest='add_summary_to_file', 
-                      help="Turn -s off.")
 
     ### command-line verbosity options
     parser.add_option('-V', '--verbosity_level', action='store_true', default=1, 
@@ -89,273 +106,55 @@ def define_option_parser():
     return parser
 
 
-def parse_gene_annotation_file(gene_annotation_filename, header_list=None, add_empty_fields_to_length=False, 
-                               strip_last_fields=0, field_delimiter='.', ignore_comments=False, verbosity_level=1):
-    """ Parse tab-separated gene annotation file; return a geneID:data_list dict, and a column header list (if present).
-    Try to automatically detect if the file has a header; optionally use header provided; 
-     return None for header if none was provided or detected. 
-    Remove columns with no contents.
-    """
-    if verbosity_level>0:
-        print " *** Parsing file %s for gene annotation info..."%gene_annotation_filename
-
-    # parse the lines into lists of tab-separated fields
-    data_by_row = []
-    for line in open(gene_annotation_filename):
-        if ignore_comments and line[0]=='#':    continue
-        fields = line.strip().split('\t')
-        data_by_row.append(fields)
-        
-    # if the first line doesn't start with a Cre* gene ID, assume it's a header
-    if not data_by_row[0][0].startswith("Cre"):
-        header = data_by_row[0]
-        del data_by_row[0]
-        if verbosity_level>0:
-            print "Assuming the first line is a header: %s"%'\t'.join(header)
-    else: 
-        header = None
-    # if any of the other lines doesn't start with a Cre* gene ID, fail!
-    for row in data_by_row:
-        if not row[0].startswith("Cre"):
-            sys.exit("Can't parse file %s - found line that doesn't start with a Cre gene ID!"%(gene_annotation_filename, 
-                                                                                                '\t'.join(row)))
-    # use the header from arguments if provided
-    if header_list is not None:
-        header = header_list
-        if verbosity_level>1: print "Using header provided: %s"%'\t'.join(header)
-
-    # check that all the data lengths line up (if they don't, don't throw an error
-    mismatched_lengths = False
-    data_lengths = set([len(row) for row in data_by_row])
-    if not len(data_lengths)==1:
-        if verbosity_level>1 or (not add_empty_fields_to_length and verbosity_level>0):
-            print "Warning: not all data rows have the same length! Lengths found: %s"%list(data_lengths)
-        mismatched_lengths = True
-    if header is not None and len(header) not in data_lengths:
-        if verbosity_level>1 or (not add_empty_fields_to_length and verbosity_level>0):
-            print("Warning: header has a different number of fields than the data! "
-                  +"Header length: %s. Data lengths: %s"%(len(header),list(data_lengths)))
-        mismatched_lengths = True
-    
-    if len(data_lengths)>1 and add_empty_fields_to_length:
-        max_length = max(max(data_lengths), len(header))
-        if verbosity_level>0:
-            print "Data field numbers vary between rows - padding all lower-length data rows to length %s"%max_length
-        for row in data_by_row:
-            if len(row)<max_length:
-                row += ['' for x in range(max_length-len(row))]
-        if len(header)<max_length:
-            header += ['?' for x in range(max_length-len(header))]
-        mismatched_lengths = False
-
-    # remove empty columns (only if all the data lengths match!)
-    if not mismatched_lengths:
-        data_length = len(header)
-        columns_to_remove = []
-        for pos in range(data_length):
-            values = set([row[pos] for row in data_by_row])
-            if len(values)==1:
-                value = values.pop()
-                if value.strip()=='':
-                    if verbosity_level>0:
-                        if header:  print "Column %s (%s) is always empty - removing it."%(pos+1, header[pos])
-                        else:       print "Column %s is always empty - removing it."%(pos+1)
-                    columns_to_remove.append(pos)
-                else:
-                    if verbosity_level>0:
-                        print "Note: all the values in column %s are the same! (%s)"%(pos+1, value)
-        for pos in sorted(columns_to_remove, reverse=True):
-            if header:  del header[pos]
-            for row in data_by_row: 
-                del row[pos]
-
-    # convert the list-format data into a by-gene dictionary
-    data_by_gene = {}
-    for row in data_by_row:
-        gene = row[0]
-        if strip_last_fields:
-            gene = field_delimiter.join(gene.split(field_delimiter)[:-strip_last_fields])
-        data = row[1:]
-        if gene in data_by_gene:
-            if verbosity_level>0:
-                print "Warning: gene %s appears twice in the data! Using last appearance."%gene
-        data_by_gene[gene] = data
-    # remove the first word from the header, since it should be "gene ID" or such
-    if header:  del header[0]
-
-    if verbosity_level>0:
-        print " *** DONE Parsing gene annotation file"
-    return data_by_gene, header
-
-
-class Mutant_multi_counts():
-    """ Simple container class for a mutant with multiple counts from different datasets: 
-          contains a position (mutant_analysis_classes.Insertion_position instance), 
-          gene data, a main sequence, and a filename:count dictionary (defaultdict with default value 0).
-    """
-    # TODO I'm not sure if I like this - might want it to be based on the Insertional_mutant class in mutant_analysis_classes.py instead of separate like this!  Just use mutant-merging to merge multiple Insertional_mutant instances into one, and give the result an extra self.dataset_counts attribute... 
-
-    def __init__(self, position, gene, orientation, gene_feature):
-        self.position = position
-        self.gene = gene
-        self.orientation = orientation
-        self.gene_feature = gene_feature
-        self.main_sequence = ''
-        self.dataset_counts = defaultdict(lambda: 0)
-
-
-# TODO why is this so slow on large datasets?
+# MAYBE-TODO why is this so slow on large datasets?  (is that still the case after the rewrite?)
 def run_main_function(infiles, outfile, options):
     """ Run the main functionality of the module (see module docstring for more information), excluding testing.
     The options argument should be generated by an optparse parser.
     """
 
-    # TODO this is a ridiculous wall of code, split it into functions!!  Or extract some functionality to Mutant_multi_counts class or something... 
-
-    summary_lines = []
-    dataset_combination_info = "every dataset" if options.output_only_shared_mutants else "at least one dataset"
-
     # parse all infiles, print summaries to stdout if requested
-    all_datasets = []
-    for infile in infiles:
+    all_datasets = {}
+
+    if options.dataset_names:
+        dataset_names = options.dataset_names.split(',')
+        if not len(dataset_names)==len(infiles):
+            raise ValueError("If dataset names are provided via -D option, you must provide the same number of names "
+                             +"as the total number of infiles! We have %s names and %s infiles."%(len(dataset_names), 
+                                                                                                  len(infiles)))
+    else:
+        dataset_names = [os.path.splitext(os.path.basename(infile))[0] for infile in infiles]
+
+    for dataset_name,infile in zip(dataset_names,infiles):
         if options.verbosity_level>1:   print "parsing input file %s - time %s."%(infile, time.ctime())
-        current_dataset = mutant_analysis_classes.Insertional_mutant_pool_dataset()
-        current_dataset.read_from_file(infile)
-        all_datasets.append((infile,current_dataset))
-        summary_lines.append("%s mutants in dataset from input file %s"%(len(current_dataset.mutants_by_position), infile))
-        if options.verbosity_level>0:   print summary_lines[-1]
+        current_dataset = mutant_analysis_classes.Insertional_mutant_pool_dataset(infile=infile)
+        all_datasets[dataset_name] = current_dataset
+        if options.verbosity_level>0:   print "%s mutants in dataset from input file %s"%(len(current_dataset), infile)
         elif options.verbosity_level>1: current_dataset.print_summary()
     
-    # get a set of all mutant position we're interested in (either a union or an intersection of those from each infile)
-    first_dataset_mutants = all_datasets[0][1].mutants_by_position
-    if options.output_only_shared_mutants:  all_mutant_function = set(first_dataset_mutants.keys()).intersection
-    else:                                   all_mutant_function = set().union
-    all_mutant_positions = all_mutant_function(*[dataset.mutants_by_position.keys() for (infile,dataset) in all_datasets])
-    summary_lines.append("total %s mutants present in %s"%(len(all_mutant_positions),dataset_combination_info))
-    if options.verbosity_level>0:   print summary_lines[-1]
-    
-    # for each mutant, merge the position/gene data and the counts per dataset into a single Mutant_multi_counts object
-    if options.verbosity_level>1:   print "merging the multi-dataset data for each mutant - time %s."%(time.ctime())
-    all_mutants = []
-    for mutant_position in all_mutant_positions:
-        # TODO most of this mutant-merging could probably just be done using the mutant-merging functionality of the standard mutant class, without writing something completely new for it... This new Mutant_multi_counts class seems like ugly code duplication.
-        # make a dictionary of full mutant data per dataset
-        current_mutant_data = {}
-        for infile,dataset in all_datasets:
-            try:                current_mutant_data[infile] = dataset.mutants_by_position[mutant_position]
-            except KeyError:    pass
-        assert len(current_mutant_data)>0
-        # merge the position/gene data from each mutant object into a single Mutant_multi_counts object
-        # I'm hashing positions here, so make them immutable/hashable first
-        for mutant in current_mutant_data.values():     mutant.position.make_immutable()
-        position_set    = set([mutant.position     for mutant in current_mutant_data.values()])
-        gene_set        = set([mutant.gene         for mutant in current_mutant_data.values()])
-        orientation_set = set([mutant.orientation  for mutant in current_mutant_data.values()])
-        feature_set     = set([mutant.gene_feature for mutant in current_mutant_data.values()])
-        if len(position_set)>1:     raise Exception("Multiple positions found for a mutant in different datasets!")
-        if len(gene_set)>1:         raise Exception("Multiple gene locations found for a mutant in different datasets!")
-        if len(orientation_set)>1:  raise Exception("Multiple orientations found for a mutant in different datasets!")
-        if len(feature_set)>1:      raise Exception("Multiple gene features found for a mutant in different datasets!")
-        current_mutant = Mutant_multi_counts(position_set.pop(), gene_set.pop(), orientation_set.pop(), feature_set.pop())
-        # done with hashing positions - make them mutable/non-hashable again (first delete the set that hashes them!)
-        del position_set
-        for mutant in current_mutant_data.values():     mutant.position.make_mutable_REMEMBER_CLEANUP_FIRST()
-        # add the counts from each dataset to an infile:count dictionary to the Mutant_multi_counts object
-        if options.which_reads=='all':          count_getter_function = lambda mutant: mutant.total_read_count
-        elif options.which_reads=='perfect':    count_getter_function = lambda mutant: mutant.perfect_read_count
-        elif options.which_reads=='imperfect':  count_getter_function = lambda mutant: (mutant.total_read_count 
-                                                                                        - mutant.perfect_read_count)
-        for infile,mutant in current_mutant_data.items():
-            current_mutant.dataset_counts[infile] = count_getter_function(mutant)
-        # figure out the overall main sequence - if it's always the same, take that, else take the one with most counts
-        sequence_set = set([mutant.get_main_sequence() for mutant in current_mutant_data.values()])
-        if len(set([seq for seq,count in sequence_set]))==1:      
-            current_mutant.main_sequence = sequence_set.pop()[0]
-        else:
-            if options.verbosity_level>1:
-                print("Warning: different main sequences found for a mutant in different datasets! %s  "%sequence_set
-                      + "Taking the sequence with the most overall counts.")
-            sequence_counts = defaultdict(lambda: 0)
-            for mutant in current_mutant_data.values():
-                for (seq,count) in mutant.sequences_and_counts.items():
-                    sequence_counts[seq] += count
-            sequences_by_count = sorted(sequence_counts.iteritems(), key=lambda x: x[1], reverse=True)
-            current_mutant.main_sequence = sequences_by_count[0][0]
-        # make sure the mutant has a non-zero count in all/any datasets (may not be true if we're taking perfect counts)
-        if options.output_only_shared_mutants:
-            if all(current_mutant.dataset_counts.values()):     all_mutants.append(current_mutant)
-        else:
-            if any(current_mutant.dataset_counts.values()):     all_mutants.append(current_mutant)
-    if options.which_reads=='all':  assert len(all_mutants) == len(all_mutant_positions)
-    else:                           assert len(all_mutants) <= len(all_mutant_positions)
-    summary_lines.append("total %s mutants with a non-zero %s read count in %s"%(len(all_mutants), options.which_reads, 
-                                                                                 dataset_combination_info))
-    if options.verbosity_level>0:   print summary_lines[-1]
+    # merge datasets into one multi-dataset object
+    if options.verbosity_level>1:   print "merging the mutant data into combined dataset - time %s."%(time.ctime())
+    multi_dataset = mutant_analysis_classes.Insertional_mutant_pool_dataset(multi_dataset=True)
+    multi_dataset.populate_multi_dataset(all_datasets, overwrite=False, check_gene_data=True)
+    if options.verbosity_level>0:   print "total %s mutants present in combined dataset"%(len(multi_dataset))
+    elif options.verbosity_level>1: multi_dataset.print_summary()
 
     # if requested, add gene annotation info from separate file
-    if not options.gene_annotation_file:
-        gene_annotation_dict, gene_annotation_header = None, None
-    elif not os.path.lexists(options.gene_annotation_file):
-        print "Warning: couldn't find the %s gene annotation file! Going on without it."%options.gene_annotation_file
-        gene_annotation_dict, gene_annotation_header = None, None
-    else:
-        # special case for the Creinhardtii_169_annotation_info.txt file (from README)
-        if os.path.basename(options.gene_annotation_file)=='Creinhardtii_169_annotation_info.txt':
-            header = ['Phytozome transcript name', 'PFAM', 'Panther', 'KOG', 'KEGG ec', 'KEGG Orthology', 
-                      'best arabidopsis TAIR10 hit name', 'best arabidopsis TAIR10 hit symbol', 
-                      'best arabidopsis TAIR10 hit defline', 
-                      'best rice hit name', 'best rice hit symbol', 'best rice hit defline']
-            strip_last_fields = 2
-            pad_lines = True
-        else:
-            header = None
-            strip_last_fields = 0
-            pad_lines = False
-        gene_annotation_dict, gene_annotation_header = parse_gene_annotation_file(options.gene_annotation_file, 
-                                          header_list=header, add_empty_fields_to_length=pad_lines, 
-                                          strip_last_fields=strip_last_fields, verbosity_level=options.verbosity_level)
-        # change spaces to underscores in headers for readability
-        if gene_annotation_header:
-            gene_annotation_header = [s.replace(' ','_') for s in gene_annotation_header]
-        # make a data line for missing data, with the same number of (empty) fields
-        missing_gene_annotation_data = ['NO GENE DATA'] + ['' for x in range(len(gene_annotation_dict.values()[0])-1)]
+    if options.gene_annotation_file:
+        if options.verbosity_level>1: 
+            print "adding gene annotation from file %s - time %s."%(options.gene_annotation_file, time.ctime())
+        multi_dataset.add_gene_annotation(options.gene_annotation_file, 
+                                               if_standard_Cre_file=options.annotation_file_is_standard)
 
     # print full data to outfile
-    if options.verbosity_level>1:   print "printing output to file %s - time %s."%(outfile, time.ctime())
-    options.header_level = int(options.header_level)
+    if options.verbosity_level>1:   
+        print "printing combined dataset output to file %s - time %s."%(outfile, time.ctime())
     with open(outfile,'w') as OUTFILE:
-        if options.header_level==2:
-            write_header_data(OUTFILE,options)
-        if options.add_summary_to_file:
-            OUTFILE.write("### SUMMARY:\n")
-            for line in summary_lines:
-                OUTFILE.write('# %s\n'%line)
-        if options.header_level==2:
-            OUTFILE.write("### DATA:\n")
-        # print header line 
-        if options.header_level>0:
-            OUTFILE.write("chromosome\tstrand\tmin_position\tfull_position\tgene\torientation\tfeature\tmain_sequence\t")
-            OUTFILE.write('\t'.join(['reads_in_'+os.path.splitext(os.path.basename(infile))[0] 
-                                     for infile,dataset in all_datasets]))
-            if gene_annotation_dict is not None:
-                if gene_annotation_header is not None:  OUTFILE.write('\t' + '\t'.join(gene_annotation_header))
-                else:                                   OUTFILE.write('\t' + '\tgene_annotation_data')
-            OUTFILE.write("\n")
-        # print the data for each mutant (sort mutants by position)
-        all_mutants.sort(key = lambda m: m.position)
-        for mutant in all_mutants:
-            # print basic info (chrom, strand, min_pos, full_pos, gene, orientation, feature)
-            all_mutant_data = [mutant.position.chromosome, mutant.position.strand, mutant.position.min_position, 
-                               mutant.position.full_position, mutant.gene, mutant.orientation, mutant.gene_feature, 
-                               mutant.main_sequence]
-            # print the read count (total or perfect depending on options) from each dataset
-            for infile,dataset in all_datasets:
-                all_mutant_data += (mutant.dataset_counts[infile],)
-            # print the gene annotation info if present
-            if gene_annotation_dict is not None:
-                try:                all_mutant_data += gene_annotation_dict[mutant.gene]
-                except KeyError:    all_mutant_data += missing_gene_annotation_data
-            OUTFILE.write('\t'.join([str(x) for x in all_mutant_data]) + '\n')
+        write_header_data(OUTFILE,options)
+        # TODO implement summary-printing for multi-datasets first!
+        #OUTFILE.write("### SUMMARY:\n")
+        #multi_dataset.print_summary()
+        OUTFILE.write("### HEADER AND DATA:\n")
+        multi_dataset.print_data(OUTPUT=OUTFILE, sort_data_by=options.sort_data_key, header_line=True)
 
 
 if __name__ == "__main__":
