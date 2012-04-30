@@ -791,8 +791,10 @@ class Insertional_mutant_pool_dataset():
             self.summary = Dataset_summary_data(cassette_end, reads_are_reverse)
         else:
             self.summary = defaultdict(lambda: Dataset_summary_data(cassette_end, reads_are_reverse))
+            # TODO should self.dataset_order be here, or somewhere else?
+            self.dataset_order = None
         # data that's NOT related to a particular dataset
-        # TODO should probably merge that with summary in some sensible way, or something, hmm...
+        # TODO should probably merge self.gene_annotation_header with summary in some sensible way, or something, hmm...
         self.gene_annotation_header = []
         # optionally read data from infile
         if infile is not None:
@@ -1284,10 +1286,14 @@ class Insertional_mutant_pool_dataset():
             raise MutantError("Only one sequence can currently be printed in print_data for multi-datasets!")
         if N_sequences is None and not self.multi_dataset:     N_sequences = 2
 
-        # define the order of the dataset columns
-        # TODO this should have a custom order option too!  Either as an argument to print_data (and print_summary?), or at the original populate_multi_dataset run, or just stored in self somewhere so it can be set... NOT SURE.
+        # define the order of the dataset columns (custom if set, otherwise sorted alphabetically)
         if self.multi_dataset:
-            datasets_in_order = sorted(self.summary.keys())
+            if self.dataset_order is not None and set(self.dataset_order) != set(self.summary.keys()):
+                raise MutantError("dataset_order doesn't include all the current datasets, or includes other ones! "
+                                  +"dataset_order: %s, current datasets: %s"%(self.dataset_order, 
+                                                                              sorted(self.summary.keys())))
+            datasets_in_order = self.dataset_order or sorted(self.summary.keys())
+
 
         ### print the header line (different for normal and multi-datasets)
         # MAYBE-TODO should printing the gene info be optional?  Maybe... 

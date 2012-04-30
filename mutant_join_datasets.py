@@ -24,8 +24,8 @@ def do_test_run():
 
     tests = [("join-datasets__basic", "-o position %s %s -q"%(dataset1, dataset2)), 
              ("join-datasets__with-names", "-D dataset1,dataset2 -o position %s %s -q"%(dataset1, dataset2)),
+             ("join-datasets__other-order", "-D dataset2,dataset1 -o position %s %s -q"%(dataset2, dataset1)),
             ]
-    # TODO implement some way of specifying the order of the datasets (right now they're always alphabetical), and then add a test for that!
     # MAYBE-TODO add run test for -A/-a option? 
 
     parser = define_option_parser()
@@ -136,6 +136,10 @@ def run_main_function(infiles, outfile, options):
     if options.verbosity_level>1:   print "merging the mutant data into combined dataset - time %s."%(time.ctime())
     multi_dataset = mutant_analysis_classes.Insertional_mutant_pool_dataset(multi_dataset=True)
     multi_dataset.populate_multi_dataset(all_datasets, overwrite=False, check_gene_data=True)
+    # make sure the datasets are in the same order as they were given on the command-line
+    #  (using all_datasets to initialize multi_dataset didn't give an order, since all_datasets is a dictionary)
+    multi_dataset.dataset_order = dataset_names
+    # print varying amounts of summary data to stdout
     if options.verbosity_level>0:   print "total %s mutants present in combined dataset"%(len(multi_dataset))
     elif options.verbosity_level>1: multi_dataset.print_summary()
 
