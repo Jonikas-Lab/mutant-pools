@@ -62,6 +62,7 @@ def define_option_parser():
                       help="Use if file provided in -A is the standard Cre type and (missing a header) (default %default)")
 
     ### MAYBE-TODO add options to specify whether to show both total and perfect reads, or just one column?
+    # Not sure if there's any need for this - it's implemented in plotting.
     #parser.set_defaults(which_reads='all')
     #parser.add_option('-p', '--perfect_reads_only',   action='store_const', dest='which_reads', const='perfect', 
     #                  help="Take only perfectly aligned read counts (default %default)")
