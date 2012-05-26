@@ -11,6 +11,7 @@ USAGE: mutant_make_plots.py [options] infile
 ### basic libraries
 import os
 from collections import defaultdict
+### other packages
 from numpy import isnan, isinf, isneginf
 from numpy import corrcoef
 from scipy.stats.stats import spearmanr

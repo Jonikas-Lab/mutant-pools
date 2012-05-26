@@ -15,12 +15,11 @@ from itertools import combinations
 # other libraries
 import HTSeq
 from BCBio import GFF
-from Bio import SeqFeature
 # my modules
 from general_utilities import split_into_N_sets_by_counts, add_dicts_of_ints, keybased_defaultdict
 from DNA_basic_utilities import SEQ_ENDS, SEQ_STRANDS, SEQ_DIRECTIONS, SEQ_ORIENTATIONS, position_test_contains, position_test_overlap
 from deepseq_utilities import get_seq_count_from_collapsed_header, check_mutation_count_try_all_methods
-from parse_annotation_file import parse_gene_annotation_file
+# there's a "from parse_annotation_file import parse_gene_annotation_file" in one function, not always needed
 
 
 class SPECIAL_GENE_CODES(object):
@@ -34,6 +33,8 @@ class MutantError(Exception):
     """ Exceptions in the mutant_analysis_classes module; no special behavior."""
     pass
 
+
+# MAYBE-TODO it might be good to split this file into multiple files at some point?  At least Insertion_position/etc.
 
 ############################ Functions/classes for dealing with alignment/insertion positions ###########################
 
@@ -1156,6 +1157,7 @@ class Insertional_mutant_pool_dataset():
 
     def add_gene_annotation(self, annotation_file, if_standard_Cre_file=False, custom_header=None):
         """ Add gene annotation to each mutant, based on annotation_file. See parse_gene_annotation_file doc for detail."""
+        from parse_annotation_file import parse_gene_annotation_file
         gene_annotation_dict, gene_annotation_header = parse_gene_annotation_file(gene_annotation_file, 
                                                      standard_Cre_file=if_standard_Cre_file, header_fields=custom_header)
         # store the annotation header in self.summary, for printing
