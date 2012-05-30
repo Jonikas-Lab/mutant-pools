@@ -117,6 +117,7 @@ def _get_single_clean_sample(all_sample_data, which_sample, min_value=None):
     if min_value is not None:
         sample = [x if (x>min_value or isweird(x)) else min_value for x in sample]
     # TODO for numeric values that just can't be plotted on a given plot (like inf, or 0 for logscale) change them to a min/max value, but also COLOR/SHAPE THEM DIFFERENTLY and put a legend saying that those dots actually represent 0/inf/whatever, and are just plotted as a plottable value.
+    # TODO actually for changing/removing zero/negative values from a log plot I could just use nonposx/nonposy arguments to xscale/yscale functions (set to 'mask' to remove or 'clip' to change to small values) instead of doing this by hand...
     #print "cleaned up:", sample[:10]+sample[-3:]
     return sample
 
