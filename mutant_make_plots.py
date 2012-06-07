@@ -44,12 +44,11 @@ def remove_nan_inf_from_two_samples(sample1, sample2, min_val=None):
     """ Given two float lists, return two lists with any elements that are nan/inf in EITHER list removed from both. """
     assert len(sample1)==len(sample2), "two samples aren't the same length! %s, %s."%(len(sample1),len(sample2))
     new_sample1, new_sample2 = [], []
-    for i in range(len(sample1)):
-        x,y = sample1[i], sample2[i]
+    for x,y in zip(sample1,sample2):
         if isnan(x) or isnan(y) or isinf(x) or isinf(y) or isneginf(x) or isneginf(y) or x<min_val or y<min_val:
             continue
-        new_sample1.append(sample1[i])
-        new_sample2.append(sample2[i])
+        new_sample1.append(x)
+        new_sample2.append(y)
     return new_sample1, new_sample2
 
 def sort_oligo_list(oligo_list):
