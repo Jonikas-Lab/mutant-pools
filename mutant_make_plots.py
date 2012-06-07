@@ -155,8 +155,8 @@ def plot_all_correlations(all_data, plot_scale, figname, print_correlation=False
     else:                   colors = ['k' for mutant_line in mutant_data]
     # TODO might want plotsize to be an option, along with default dotsize
     plotsize = 4
-    # TODO make all the subplots square dammit!!
-    fig = mplt.figure(figsize=(plotsize*(N_samples+1), plotsize*N_samples), dpi=200)
+    # TODO make all the subplots square!!  Using "(plotsize*(N_samples+0.1), plotsize*N_samples)" is close but not exact
+    fig = mplt.figure(figsize=(plotsize*(N_samples+0.1), plotsize*N_samples), dpi=200)
     if print_correlation=='none':        correlation_info = ''
     elif print_correlation=='spearman':  correlation_info = '\n\'corr\' = Spearman rank correlation.'
     elif print_correlation=='pearson':   correlation_info = '\n\'corr\' = Pearson\'s correlation coefficient.'
