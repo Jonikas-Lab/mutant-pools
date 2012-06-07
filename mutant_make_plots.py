@@ -173,6 +173,7 @@ def plot_all_correlations(all_data, plot_scale, figname, print_correlation=False
     # TODO remember to change the scale from 0.1 to 0 too!
     min_value = min_value if plot_scale=='log' else None
     min_val_to_plot = None
+    # MAYBE-TODO min_val_to_plot could also be a list with a different minimum for each sample...
     print "min_value: %s; min_val_to_plot: %s"%(min_value, min_val_to_plot)
     # TODO minimize_tick_labels and same_scale_both_plots should be command-line options
     minimize_tick_labels = False
