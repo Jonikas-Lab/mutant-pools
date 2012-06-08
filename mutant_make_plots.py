@@ -309,19 +309,19 @@ def read_joint_mutant_file(infile, which_read_subtype):
     if which_read_subtype=='perfect':
         columns_to_keep = [n for n,val in enumerate(full_sample_headers) if 'perfect' in val]
         sample_headers = [x for n,x in enumerate(full_sample_headers) if n in columns_to_keep]
-        sample_data = [[int(data_row[x]) for x in columns_to_keep] for data_row in full_sample_data]
+        sample_data = [[float(data_row[x]) for x in columns_to_keep] for data_row in full_sample_data]
     elif which_read_subtype=='imperfect':
         total_columns = [n for n,val in enumerate(full_sample_headers) if 'reads' in val]
         perfect_columns = [n for n,val in enumerate(full_sample_headers) if 'perfect' in val]
         assert len(total_columns)==len(perfect_columns)
         sample_headers = [x.replace('total','imperfect') for n,x in enumerate(full_sample_headers) if n in total_columns]
-        sample_data = [[(int(data_row[t])-int(data_row[p])) for t,p in zip(total_columns,perfect_columns)] 
+        sample_data = [[(float(data_row[t])-float(data_row[p])) for t,p in zip(total_columns,perfect_columns)] 
                        for data_row in full_sample_data]
     else:
         columns_to_keep = [n for n,val in enumerate(full_sample_headers) if not 'perfect' in val]
         sample_headers = [x for n,x in enumerate(full_sample_headers) if n in columns_to_keep]
         sample_data = [[x for n,x in enumerate(data_row) if n in columns_to_keep] for data_row in full_sample_data]
-        sample_data = [[int(data_row[x]) for x in columns_to_keep] for data_row in full_sample_data]
+        sample_data = [[float(data_row[x]) for x in columns_to_keep] for data_row in full_sample_data]
     # grab just the sample names instead of full headers
     sample_names = [x.split('_in_',1)[-1] for x in sample_headers]
     #print "all_data: %s x %s"%(len(all_data), len(all_data[0]))
