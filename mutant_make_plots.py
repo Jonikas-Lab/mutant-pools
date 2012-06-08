@@ -173,8 +173,9 @@ def plot_all_correlations(all_data, plot_scale, figname, print_correlation=False
     # TODO remember to change the scale from 0.1 to 0 too!
     min_value = min_value if plot_scale=='log' else None
     min_val_to_plot = None
-    # MAYBE-TODO min_val_to_plot could also be a list with a different minimum for each sample...
-    print "min_value: %s; min_val_to_plot: %s"%(min_value, min_val_to_plot)
+    grey_out_min = None
+    # MAYBE-TODO min_val_to_plot and grey_out_min could also be a list with a different minimum for each sample...
+    print "min_value: %s; min_val_to_plot: %s, grey_out_min: %s"%(min_value, min_val_to_plot, grey_out_min)
     # TODO minimize_tick_labels and same_scale_both_plots should be command-line options
     minimize_tick_labels = False
     same_scale_both_plots = True
@@ -197,6 +198,10 @@ def plot_all_correlations(all_data, plot_scale, figname, print_correlation=False
                 print "After removing nan/inf values and values below %s, %s datapoints left."%(min_val_to_plot, 
                                                                                                 len(sample_i))
             mplt.subplot(N_samples, N_samples, N_samples*(i)+(j+1))
+            if grey_out_min is not None:
+                if len(set(colors)) > 1:
+                    print "Warning: overwriting any colors set with -C/M/B/G/R options due to grey_out_min being set!"
+                colors = [('k' if x>=grey_out_min and y>=grey_out_min else '0.6') for x,y in zip(sample_i,sample_j)]
             # note: i is on the y axis, j on the x axis, to make it fit the label below
             mplt.scatter(sample_j, sample_i, s=2, c=colors, edgecolors='none')
             ### setting up the axis scale, ticks and tick labels - cosmetic stuff
