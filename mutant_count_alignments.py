@@ -160,6 +160,8 @@ def define_option_parser():
     parser.add_option('-B', '--bad_chromosomes_count_and_ignore', default='', metavar='comma-separated-list', 
                       help="Count reads aligning to these chromosomes and print the count in the header; "
                           +"otherwise ignore them and don't add to normal output. (default %default) (also see -b)")
+    # MAYBE-TODO possibly -b/-B should be regular expressions instead? By default or optionally. Or at least substrings, so that it would be easy to make ALL chromosomes with 'cassette' in the name be -b or -B, since sometimes they also contain the cassette name itself (MJ007 or whatever) and I don't want to list all those separately.  
+    # MAYBE-TODO or just change these options to something like --count_cassette and --ignore_cassette?  Well, --count_cassette should be happening by default ANYWAY, so just --ignore_cassette, I guess... Might be easier.
 
     parser.add_option('-V', '--verbosity_level', action="store_true", default=1, 
                       help="How much information to print to STDOUT: 0 - nothing, 1 - summary only, "
