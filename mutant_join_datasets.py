@@ -27,6 +27,7 @@ def do_test_run():
              ("join-datasets__other-order", "-D dataset2,dataset1 -o position %s %s -q"%(dataset2, dataset1)),
             ]
     # MAYBE-TODO add run test for -A/-a option? 
+    # MAYBE-TODO add run-tests for -X, -z, -Z?
 
     parser = define_option_parser()
     argument_converter = lambda parser,options,args: (args[:-1], args[-1], options)
@@ -50,7 +51,8 @@ def define_option_parser():
 
     ### functionality options
     parser.add_option('-D', '--dataset_names', default=None, metavar='A,B,C,...', 
-                      help="Comma-separated list of short dataset names (no spaces) to use in header (default %default)")
+                      help="Comma-separated list of short dataset names (no spaces) to use in header "
+                          +"(if none, dataset names will be derived from filenames) (default %default)")
 
     parser.add_option('-o', '--sort_data_key', choices=['position','read_count','none'], default='position', 
                       metavar='position|read_count|none', help="Sort the output data: by alignment position, read count, "
@@ -59,7 +61,14 @@ def define_option_parser():
     parser.add_option('-A', '--gene_annotation_file', default=None, metavar='FILE', 
                       help="Tab-separated file to use to look up gene names/descriptions from IDs (default %default)")
     parser.add_option('-a', '--annotation_file_is_standard', action='store_true', default=False,
-                      help="Use if file provided in -A is the standard Cre type and (missing a header) (default %default)")
+                      help="Use if file provided in -A is the standard Cre type (and missing a header) (default %default)")
+
+    parser.add_option('-X', '--remove_mutants_from_file', metavar='FILE',
+                      help='Remove all mutants present in FILE from the datasets (see -Y for read count cutoff).')
+    parser.add_option('-z', '--remove_mutants_readcount_min', type='int', default=1, metavar='M',
+                      help='When applying -X, only remove mutants with at least N reads in FILE (default %default).')
+    parser.add_option('-Z', '--remove_mutants_min_is_perfect', action='store_true', default=False,
+                      help='When applying -X with -z M, compare M to perfect readcount, not total. (default %default).')
 
     ### MAYBE-TODO add options to specify whether to show both total and perfect reads, or just one column?
     # Not sure if there's any need for this - it's implemented in plotting.
@@ -142,6 +151,12 @@ def run_main_function(infiles, outfile, options):
     # print varying amounts of summary data to stdout
     if options.verbosity_level>0:   print "total %s mutants present in combined dataset"%(len(multi_dataset))
     elif options.verbosity_level>1: multi_dataset.print_summary()
+
+    ### optionally remove mutants based on another dataset
+    if options.remove_mutants_from_file:
+        other_dataset = mutant_analysis_classes.Insertional_mutant_pool_dataset(infile=options.remove_mutants_from_file)
+        multi_dataset.remove_mutants_based_on_other_dataset(other_dataset, 
+                 readcount_min=options.remove_mutants_readcount_min, perfect_reads=options.remove_mutants_min_is_perfect)
 
     # if requested, add gene annotation info from separate file
     if options.gene_annotation_file:
