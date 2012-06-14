@@ -79,8 +79,8 @@ def define_option_parser():
     from optparse import OptionParser
     parser = OptionParser(__doc__)
 
-    # taken:     aAbBcCdDe---g-h---------mMn-o---q-r---tTuUvVwWxX-Y--  
-    # free:      ---------EfF-G-HiIjJkKlL---N-OpP-Q-RsS----------y-zZ  
+    # taken:     aAbBcCdDe---g-h---------mMn-o---q-r---tTuUvVwWxX-YzZ  
+    # free:      ---------EfF-G-HiIjJkKlL---N-OpP-Q-RsS----------y---  
 
     ### test options
     parser.add_option('-t','--test_functionality', action='store_true', default=False, 
@@ -105,7 +105,7 @@ def define_option_parser():
                       help="For -M: merge mutants only if one has K x fewer reads than the other (default %default)")
 
     parser.add_option('-X', '--remove_mutants_from_file', metavar='FILE',
-                      help='Remove all mutants present in FILE from the datasets (see -Y for read count cutoff).')
+                      help='Remove all mutants present in FILE from the datasets (see -z/-Z for read count cutoff).')
     parser.add_option('-z', '--remove_mutants_readcount_min', type='int', default=1, metavar='M',
                       help='When applying -X, only remove mutants with at least N reads in FILE (default %default).')
     parser.add_option('-Z', '--remove_mutants_min_is_perfect', action='store_true', default=False,
