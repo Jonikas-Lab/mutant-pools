@@ -38,8 +38,8 @@ def do_test_run():
                  ('cassette-end-3prime', "-e 3prime -r forward -U -n3", [aln_infile1]),
                  ('read-direction-reverse', "-r reverse -e 5prime -U -n3", [aln_infile1]),
                  ('u_unknown-not-as-match', "-u -e 5prime -r forward -n3", [aln_infile1]),
-                 ('b_special-chromosomes', "-b special_chromosome -e 5prime -r forward -U -n3", [aln_infile1]),
-                 ('B_ignore-chromosomes', "-B special_chromosome -e 5prime -r forward -U -n3", [aln_infile1]),
+                 ('dont-count-cassette', "-I -e 5prime -r forward -U -n3", [aln_infile1]),
+                 ('ignore-cassette', "-i -e 5prime -r forward -U -n3", [aln_infile1]),
                  ('sorted-by-count', "-o read_count -e 5prime -r forward -U -n3", [aln_infile1]),
                  ('with-gene-info', "-e 5prime -r forward -U -g %s -d -n0"%gff_genefile, [aln_infile2]),
                  ('multiple-infiles', "-e 5prime -r forward -U -n0", [aln_infile1,aln_infile2]),
@@ -61,7 +61,7 @@ def do_test_run():
 
     parser = define_option_parser()
     argument_converter = lambda parser,options,args: (args[:-1], args[-1], options)
-    return run_functional_tests(test_names_and_args, parser, run_main_function, test_folder, 
+    return run_functional_tests(test_names_and_args, parser, main, test_folder, 
                                 argument_converter=argument_converter, append_to_outfilenames='.txt') 
 
 
@@ -79,8 +79,8 @@ def define_option_parser():
     from optparse import OptionParser
     parser = OptionParser(__doc__)
 
-    # taken:     aAbBcCdDe---g-h---------mMn-o---q-r---tTuUvVwWxX-YzZ  
-    # free:      ---------EfF-G-HiIjJkKlL---N-OpP-Q-RsS----------y---  
+    # taken:     aAbBcCdDe---g-h-iI------mMn-o---q-r---tTuUvVwWxX-YzZ  
+    # free:      ---------EfF-G-H--jJkKlL---N-OpP-Q-RsS----------y---  
 
     ### test options
     parser.add_option('-t','--test_functionality', action='store_true', default=False, 
@@ -154,14 +154,15 @@ def define_option_parser():
     parser.add_option('-o', '--sort_data_key', choices=['position','read_count','none'], default='position', 
                       metavar='position|read_count|none', help="Sort the output data: by alignment position, read count, "
                          +"or don't sort at all (default %default) - sorting may be slow for large datasets!")
-    parser.add_option('-b', '--bad_chromosomes_count_only', default='insertion_cassette', metavar='comma-separated-list', 
-                      help="Count reads aligning to these chromosomes and print the count in the header; "
-                          +"otherwise treat them normally. (default %default) (also see -B)")
-    parser.add_option('-B', '--bad_chromosomes_count_and_ignore', default='', metavar='comma-separated-list', 
-                      help="Count reads aligning to these chromosomes and print the count in the header; "
-                          +"otherwise ignore them and don't add to normal output. (default %default) (also see -b)")
+    parser.add_option('-I', '--dont_count_cassette', action='store_true', default=False, 
+                      help="Count cassette reads and print the count in the header; "
+                          +"otherwise treat them normally. (default %default) (also see -i)")
+    # TODO TODO TODO finish rewriting this from the --bad_chromosomes* version to --dont_count_cassette etc!  Make sure everything works; update run-tests!
+    parser.add_option('-i', '--ignore_cassette', action='store_true', default=False,
+                      help="Ignore reads aligning to cassette (just print total count in the header as removed) "
+                          +"(default %default) (also see -E)")
     # MAYBE-TODO possibly -b/-B should be regular expressions instead? By default or optionally. Or at least substrings, so that it would be easy to make ALL chromosomes with 'cassette' in the name be -b or -B, since sometimes they also contain the cassette name itself (MJ007 or whatever) and I don't want to list all those separately.  
-    # MAYBE-TODO or just change these options to something like --count_cassette and --ignore_cassette?  Well, --count_cassette should be happening by default ANYWAY, so just --ignore_cassette, I guess... Might be easier.
+    # TODO or just change these options to something like --count_cassette and --ignore_cassette?  Well, --count_cassette should be happening by default ANYWAY, so just --ignore_cassette, I guess... Might be easier.
 
     parser.add_option('-V', '--verbosity_level', action="store_true", default=1, 
                       help="How much information to print to STDOUT: 0 - nothing, 1 - summary only, "
@@ -223,15 +224,12 @@ def add_discarded_reads_from_metadata_file(infiles, input_metadata_file, verbosi
     
     
 
-def run_main_function(infiles, outfile, options):
+def main(infiles, outfile, options):
     """ Run the main functionality of the module (see module docstring for more information), excluding testing.
     The options argument should be generated by an optparse parser.
     """
-
-    ### check/modify a few options
-    # parse the -b/-B options
-    bad_chromosomes_to_ignore = set(options.bad_chromosomes_count_and_ignore.split(',')) - set([''])
-    bad_chromosomes_to_count = set(options.bad_chromosomes_count_only.split(',')) - set([''])
+    ### parse/process/reformat some options
+    options.count_cassette = not options.dont_count_cassette
 
     ### generate empty alignment set object with basic read position/orientation properties defined by options
     all_alignment_data = mutant_analysis_classes.Insertional_mutant_pool_dataset(options.read_cassette_end, 
@@ -253,8 +251,8 @@ def run_main_function(infiles, outfile, options):
         all_alignment_data.add_alignment_reader_to_data(infile_reader, 
                                                         uncollapse_read_counts = options.input_collapsed_to_unique, 
                                                         treat_unknown_as_match = options.treat_unknown_as_match, 
-                                                        chromosomes_to_count = bad_chromosomes_to_count, 
-                                                        chromosomes_to_ignore = bad_chromosomes_to_ignore)
+                                                        count_cassette = options.count_cassette, 
+                                                        ignore_cassette = options.ignore_cassette)
 
     ### optionally merge adjacent mutants (since they're probably just artifacts of indels during deepseq)
     if options.merge_adjacent_mutants: 
@@ -274,7 +272,7 @@ def run_main_function(infiles, outfile, options):
         genefile = options.gene_position_reference_file
         if options.verbosity_level>1: print "adding genes from file %s to mutant data - time %s."%(genefile, time.ctime())
         all_alignment_data.find_genes_for_mutants(genefile, detailed_features=options.detailed_gene_features, 
-                                                  known_bad_chromosomes=bad_chromosomes_to_count, 
+                                                  ignore_cassette=ignore_cassette, 
                                                   N_run_groups=options.N_detail_run_groups, 
                                                   verbosity_level=options.verbosity_level)
 
@@ -332,5 +330,5 @@ if __name__ == "__main__":
     outfile = args[-1]
     infiles = args[:-1]
 
-    run_main_function(infiles, outfile, options)
+    main(infiles, outfile, options)
 

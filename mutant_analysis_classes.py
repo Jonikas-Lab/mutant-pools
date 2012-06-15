@@ -34,6 +34,14 @@ class MutantError(Exception):
     pass
 
 
+def is_cassette(chromosome_name):
+    """ Returns True if chromosome_name sounds like one of our insertion cassettes, False otherwise. """
+    return ("insertion_cassette" in chromosome_name)
+    # MAYBE-TODO may want to put this under command-line user control someday?  The most general way would probably be 
+    #  a choice of two command-line options, one providing a cassette name regex string, 
+    #  and one a list of full cassette chromosome names - users can use whichever one they want.
+
+
 # MAYBE-TODO it might be good to split this file into multiple files at some point?  At least Insertion_position/etc.
 
 ############################ Functions/classes for dealing with alignment/insertion positions ###########################
@@ -864,16 +872,15 @@ class Insertional_mutant_pool_dataset():
     ######### READING BASIC DATA INTO DATASET
 
     def add_alignment_reader_to_data(self, HTSeq_alignment_reader, uncollapse_read_counts=False, 
-                                     treat_unknown_as_match=False, chromosomes_to_count=[], chromosomes_to_ignore=[]):
+                                     treat_unknown_as_match=False, count_cassette=True, ignore_cassette=False):
         """ Adds all alignments from the reader to the mutant data; currently based only on position, but that may change. 
 
         Input must be a list/generator/etc of HTSeq.Alignment objects (usually an HTSeq.SAM_Reader).
         Set uncollapse_read_counts to True if the original deepseq data was collapsed to unique sequences using
          fastx_uncollapser before alignment, to get the correct original read counts.
         Treat_unknown_as_match governs whether alignments with no detailed information are treated as perfect or not.
-        Chromosomes_to_count is a list of chromosomes that should have aligned read counts kept and added to the header 
-         summary (they're treated normally otherwise); reads that align to a chromosome in the chromosomes_to_ignore list 
-         will be ignored in the data (but not the total counts contained in the header). 
+        If count_cassette=True, add total cassette read count to header; 
+         if ignore_cassette=True, ignore cassette reads in the data and list them as removed in the header.
         """
         if self.multi_dataset:  raise MutantError("add_alignment_reader_to_data not implemented for multi-datasets!")
 
@@ -897,15 +904,15 @@ class Insertional_mutant_pool_dataset():
             # get the cassette insertion position (as an Insertion_position object) - USE IMMUTABLE POSITIONS BY DEFAULT
             position = get_insertion_pos_from_HTSeq_read_pos(aln.iv, summ.cassette_end, summ.reads_are_reverse, 
                                                              immutable_position=True)
-            # if read is aligned to one of the chromosomes_to_ignore, add to the right count and skip to the next read
-            if position.chromosome in chromosomes_to_ignore:
+            # if read is aligned to cassette and should be ignored, add to the right count and skip to the next read
+            if ignore_cassette and is_cassette(position.chromosome):
                 summ.ignored_region_read_counts[position.chromosome] += read_count
                 continue
             # if read is aligned to anything else, add to aligned count, strand counts etc
             summ.aligned_read_count += read_count
             summ.strand_read_counts[position.strand] += read_count
-            # MAYBE-TODO do I want info on how many reads were aligned to which strand for the chromosomes_to_count or even all chromosomes?  Maybe optionally...  And how many were perfect, and how many mutants there were... Might want to write a separate class or function just for this.  If so, should output it in a tabular format, with all the different data (reads, +, -, perfect, ...) printed tab-separated in one row.
-            if position.chromosome in chromosomes_to_count:
+            # MAYBE-TODO do I want info on how many reads were aligned to which strand for the cassette or even all chromosomes?  Maybe optionally...  And how many were perfect, and how many mutants there were... Might want to write a separate class or function just for this.  If so, should output it in a tabular format, with all the different data (reads, +, -, perfect, ...) printed tab-separated in one row.
+            if count_cassette and is_cassette(position.chromosome):
                 summ.specific_region_read_counts[position.chromosome] += read_count
             # grab the right mutant based on the position, and add the reads to it; 
             #  add_read also returns True if alignment was perfect, to add to dataset perfect_read_count
@@ -1100,7 +1107,7 @@ class Insertional_mutant_pool_dataset():
         self.summary.mutant_merging_info.append("  (kept %s pairs on same strand "%adjacent_same_strands_left 
                                         +"and %s on opposite strands)"%adjacent_opposite_strands_count)
 
-    def find_genes_for_mutants(self, genefile, detailed_features=False, known_bad_chromosomes=[], 
+    def find_genes_for_mutants(self, genefile, detailed_features=False, ignore_cassette=True, 
                                N_run_groups=3, verbosity_level=1):
         """ To each mutant in the dataset, add the gene it's in (look up gene positions for each mutant using genefile).
 
@@ -1149,7 +1156,7 @@ class Insertional_mutant_pool_dataset():
 
         # for mutants in chromosomes that weren't listed in the genefile, use special values
         for chromosome in set(mutants_by_chromosome.keys())-set(all_reference_chromosomes):
-            if not chromosome in known_bad_chromosomes:
+            if ignore_cassette and not is_cassette(chromosome):
                 print 'Warning: chromosome "%s" not found in genefile data!'%(chromosome)
             for mutant in mutants_by_chromosome[chromosome]:
                 mutant.gene,mutant.orientation,mutant.gene_feature = SPECIAL_GENE_CODES.chromosome_not_in_reference,'-','-'
