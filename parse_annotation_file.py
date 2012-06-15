@@ -1,5 +1,7 @@
 #!/usr/bin/env python
 
+import os
+
 def parse_gene_annotation_file(gene_annotation_filename, standard_Cre_file=False, header_fields=None, 
                                genes_start_with='Cre', strip_last_gene_fields=0, gene_field_delimiter='.', 
                                pad_with_empty_fields=True, ignore_comments=False, verbosity_level=1):
@@ -109,11 +111,11 @@ def parse_gene_annotation_file(gene_annotation_filename, standard_Cre_file=False
                 print "Warning: gene %s appears twice in the data! Using last appearance."%gene
         data_by_gene[gene] = data
 
-    # remove the first word from the header, since it should be "gene ID" or such
-    if header:  del header[0]
-    # change spaces to underscores in headers for readability
-    if gene_annotation_header:
-        gene_annotation_header = [s.replace(' ','_') for s in gene_annotation_header]
+    # remove the first word from the header, since it should be "gene ID" or such; 
+    #  change spaces to underscores in header fields for readability
+    if header:  
+        del header[0]
+        header = [s.replace(' ','_') for s in header]
 
     if verbosity_level>0:
         print " *** DONE Parsing gene annotation file"

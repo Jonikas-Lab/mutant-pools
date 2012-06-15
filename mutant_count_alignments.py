@@ -281,7 +281,7 @@ def main(infiles, outfile, options):
             if options.verbosity_level>1: 
                 print "adding gene annotation from file %s - time %s."%(options.gene_annotation_file, time.ctime())
             all_alignment_data.add_gene_annotation(options.gene_annotation_file, 
-                                                   if_standard_Cre_file=options.annotation_file_is_standard)
+                       if_standard_Cre_file=options.annotation_file_is_standard, print_info=(options.verbosity_level >= 2))
 
     ### output
     # print summary info to stdout
