@@ -111,6 +111,13 @@ def define_option_parser():
     parser.add_option('-Z', '--remove_mutants_min_is_perfect', action='store_true', default=False,
                       help='When applying -X with -z M, compare M to perfect readcount, not total. (default %default).')
 
+    parser.add_option('-I', '--dont_count_cassette', action='store_true', default=False, 
+                      help="Count cassette reads and print the count in the header; "
+                          +"otherwise treat them normally. (default %default) (also see -i)")
+    parser.add_option('-i', '--ignore_cassette', action='store_true', default=False,
+                      help="Ignore reads aligning to cassette (just print total count in the header as removed) "
+                          +"(default %default) (also see -E)")
+
     # extremely minor functionality options, do we even care??
     parser.add_option('-u', '--treat_unknown_as_match', action="store_true", default=False, 
                       help="When counting perfect reads, treat undefined alignment regions as matches (default %default)")
@@ -154,12 +161,6 @@ def define_option_parser():
     parser.add_option('-o', '--sort_data_key', choices=['position','read_count','none'], default='position', 
                       metavar='position|read_count|none', help="Sort the output data: by alignment position, read count, "
                          +"or don't sort at all (default %default) - sorting may be slow for large datasets!")
-    parser.add_option('-I', '--dont_count_cassette', action='store_true', default=False, 
-                      help="Count cassette reads and print the count in the header; "
-                          +"otherwise treat them normally. (default %default) (also see -i)")
-    parser.add_option('-i', '--ignore_cassette', action='store_true', default=False,
-                      help="Ignore reads aligning to cassette (just print total count in the header as removed) "
-                          +"(default %default) (also see -E)")
 
     parser.add_option('-V', '--verbosity_level', action="store_true", default=1, 
                       help="How much information to print to STDOUT: 0 - nothing, 1 - summary only, "
