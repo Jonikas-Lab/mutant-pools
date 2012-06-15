@@ -157,12 +157,9 @@ def define_option_parser():
     parser.add_option('-I', '--dont_count_cassette', action='store_true', default=False, 
                       help="Count cassette reads and print the count in the header; "
                           +"otherwise treat them normally. (default %default) (also see -i)")
-    # TODO TODO TODO finish rewriting this from the --bad_chromosomes* version to --dont_count_cassette etc!  Make sure everything works; update run-tests!
     parser.add_option('-i', '--ignore_cassette', action='store_true', default=False,
                       help="Ignore reads aligning to cassette (just print total count in the header as removed) "
                           +"(default %default) (also see -E)")
-    # MAYBE-TODO possibly -b/-B should be regular expressions instead? By default or optionally. Or at least substrings, so that it would be easy to make ALL chromosomes with 'cassette' in the name be -b or -B, since sometimes they also contain the cassette name itself (MJ007 or whatever) and I don't want to list all those separately.  
-    # TODO or just change these options to something like --count_cassette and --ignore_cassette?  Well, --count_cassette should be happening by default ANYWAY, so just --ignore_cassette, I guess... Might be easier.
 
     parser.add_option('-V', '--verbosity_level', action="store_true", default=1, 
                       help="How much information to print to STDOUT: 0 - nothing, 1 - summary only, "
@@ -272,7 +269,7 @@ def main(infiles, outfile, options):
         genefile = options.gene_position_reference_file
         if options.verbosity_level>1: print "adding genes from file %s to mutant data - time %s."%(genefile, time.ctime())
         all_alignment_data.find_genes_for_mutants(genefile, detailed_features=options.detailed_gene_features, 
-                                                  ignore_cassette=ignore_cassette, 
+                                                  ignore_cassette=options.ignore_cassette, 
                                                   N_run_groups=options.N_detail_run_groups, 
                                                   verbosity_level=options.verbosity_level)
 

@@ -10,6 +10,7 @@
 #  Perfectly aligned reads (no mismatches): 62
 #  Reads with insertion direction matching chromosome + strand: 65
 #  Reads with insertion direction matching chromosome - strand: 5
+#  Reads aligned to insertion_cassette_X: 1
 ## Distinct mutants (read groups) by cassette insertion position: 57
 #  (read is at 5prime end of cassette, in forward direction to cassette)
 #  Most common mutant: position [mutation_yes + 204-?], 6 reads (9% of aligned)
@@ -55,6 +56,7 @@ chromosome_D	+	4250	4250-?	gene_unknown	?	?	1	1	1
 chromosome_D	+	4300	4300-?	gene_unknown	?	?	1	1	1
 chromosome_D	+	6450	6450-?	gene_unknown	?	?	1	1	1
 chromosome_D	+	7400	7400-?	gene_unknown	?	?	1	1	1
+insertion_cassette_X	+	104	104-?	gene_unknown	?	?	1	1	1
 min_position_+_5'_104_3'_100	+	104	104-?	gene_unknown	?	?	1	1	1
 min_position_+_5'_106_3'_100	+	106	106-?	gene_unknown	?	?	1	1	1
 min_position_+_5'_108_3'_104	+	108	108-?	gene_unknown	?	?	1	1	1
@@ -69,6 +71,5 @@ reads_2_seqs_1	+	204	204-?	gene_unknown	?	?	2	2	1
 reads_2_seqs_2	+	304	304-?	gene_unknown	?	?	2	2	2
 reads_3_seqs_2	+	404	404-?	gene_unknown	?	?	3	3	2
 reads_3_seqs_3	+	504	504-?	gene_unknown	?	?	3	3	3
-special_chromosome	+	104	104-?	gene_unknown	?	?	1	1	1
 strandedness_+_normal_-_reverse	+	104	104-?	gene_unknown	?	?	1	1	1
 strandedness_-_normal_+_reverse	-	100	?-101	gene_unknown	?	?	1	1	1

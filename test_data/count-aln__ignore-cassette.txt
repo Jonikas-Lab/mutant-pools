@@ -6,7 +6,7 @@
 #  Reads discarded in preprocessing: 5
 ## Total reads processed: 40
 #  Unaligned reads: 10
-#  Discarded reads aligned to special_chromosome: 1
+#  Discarded reads aligned to insertion_cassette_X: 1
 #  Aligned reads (non-discarded): 29
 #  Perfectly aligned reads (no mismatches): 21
 #  Reads with insertion direction matching chromosome + strand: 26
