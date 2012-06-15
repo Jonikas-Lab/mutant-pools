@@ -103,6 +103,8 @@ def define_option_parser():
                       help="For -M: merge mutants only if they're at most N bases distant (default %default)")
     parser.add_option('-W', '--merge_count_ratio', type='int', default=1000, metavar='K',
                       help="For -M: merge mutants only if one has K x fewer reads than the other (default %default)")
+    parser.add_option('-O', '--mutant_merging_outfile', default='AUTO', metavar='FILE|AUTO',
+                      help="Print mutant-merging info to FILE (default AUTO - file will be based on outfile name)")
 
     parser.add_option('-X', '--remove_mutants_from_file', metavar='FILE',
                       help='Remove all mutants present in FILE from the datasets (see -z/-Z for read count cutoff).')
@@ -225,6 +227,8 @@ def main(infiles, outfile, options):
     """
     ### parse/process/reformat some options
     options.count_cassette = not options.dont_count_cassette
+    if options.mutant_merging_outfile=='AUTO':
+        options.mutant_merging_outfile = '%s_merging-info.txt'%os.path.splitext(outfile)[0]
 
     ### generate empty alignment set object with basic read position/orientation properties defined by options
     all_alignment_data = mutant_analysis_classes.Insertional_mutant_pool_dataset(options.read_cassette_end, 
@@ -251,10 +255,11 @@ def main(infiles, outfile, options):
 
     ### optionally merge adjacent mutants (since they're probably just artifacts of indels during deepseq)
     if options.merge_adjacent_mutants: 
-        all_alignment_data.merge_adjacent_mutants(merge_max_distance = options.merge_max_distance, 
-                                                  merge_count_ratio = options.merge_count_ratio, 
-                                                  dont_change_positions = True, 
-                                                  verbosity_level=options.verbosity_level)
+        with open(options.mutant_merging_outfile, 'w') as OUTFILE:
+            all_alignment_data.merge_adjacent_mutants(merge_max_distance = options.merge_max_distance, 
+                                                      merge_count_ratio = options.merge_count_ratio, 
+                                                      dont_change_positions = True, 
+                                                      OUTPUT = OUTFILE)
 
     ### optionally remove mutants based on another dataset
     if options.remove_mutants_from_file:

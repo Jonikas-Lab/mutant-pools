@@ -14,6 +14,7 @@
 #  (read is at 5prime end of cassette, in forward direction to cassette)
 #  merged 2 pairs of adjacent mutants (max distance 1, min count ratio 3) 
 #    (kept 1 pairs on same strand and 1 on opposite strands)
+#    (there were also 1 pairs in exact same position on different strands non-cassette (and 0 cassette))
 #  Most common mutant: position [chromosome_A + 100-?], 7 reads (28% of aligned)
 ### HEADER AND DATA:
 # chromosome	strand	min_position	full_position	gene	orientation	feature	total_reads	perfect_reads	N_sequence_variants

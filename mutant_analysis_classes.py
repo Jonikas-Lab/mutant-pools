@@ -1026,39 +1026,43 @@ class Insertional_mutant_pool_dataset():
     ######### PROCESSING/MODIFYING DATASET
 
     def merge_adjacent_mutants(self, merge_max_distance=1, merge_count_ratio=1000, 
-                               dont_change_positions=False, verbosity_level=1):
+                               dont_change_positions=False, OUTPUT=sys.stdout):
         """ Merge adjacent mutants based on strand, distance, and count ratio; optionally merge positions; print counts.
         Merge mutants if they're distant by merge_max_distance or less and one has at least merge_count_ratio x fewer 
          reads than the other; merge their read counts, sequences etc, and remove the lower-read-count one from dataset.
         If dont_change_positions is True, also change the full position data of the remaining mutant to reflect the merge.
         """
+        # MAYBE-TODO change the default argument to '/dev/null' or something? Do we really ever want this printed to stdout? Unlikely!  And not printing at all might be nice.  (Would also need a 'NONE' choice for the --mutant_merging_outfile command-line option in mutant_count_alignments.py, that would invoke this behavior... Something like that.)
+
         if self.multi_dataset:  raise MutantError("merge_adjacent_mutants not implemented for multi-datasets!")
 
-        if verbosity_level>1:
-            print "Merging adjacent mutants: max distance %s, min count ratio %s..."%(merge_max_distance,merge_count_ratio)
+        OUTPUT.write("# Merging adjacent mutants: max distance %s, min count ratio %s\n"%(merge_max_distance, 
+                                                                                          merge_count_ratio))
         all_positions = sorted([mutant.position for mutant in self])
         adjacent_opposite_strands_count = 0
         adjacent_same_strands_merged = 0
         adjacent_same_strands_left = 0
-        # go over each position1,position2 pair (only once)
-        for (position1, position2) in combinations(all_positions,2):
+        same_pos_opposite_strands_cassette = 0
+        same_pos_opposite_strands_non_cassette = 0
+        # go over each pos1,pos2 pair (only once)
+        for (pos1, pos2) in combinations(all_positions,2):
 
             # if the two positions are on different chromosomes or aren't adjacent, skip
-            if position1.chromosome != position2.chromosome:                                continue
-            if abs(position2.min_position-position1.min_position) > merge_max_distance:     continue
+            if pos1.chromosome != pos2.chromosome:                                continue
+            if abs(pos2.min_position-pos1.min_position) > merge_max_distance:     continue
             # if the two positions are SAME POSITION but on different strands, they can't be merged, 
             #  and they shouldn't be counted either, so we can compare the count to the count of same-strand ones!
             #   (since two same-strand same-position mutants would be indistinguishable)
             #  but do print a message, with a higher priority, because this situation is WEIRD really...
-            if position1.strand != position2.strand and position1.min_position==position2.min_position:
-                if verbosity_level>0:
-                    print "SAME-POSITION OPPOSITE-STRAND MUTANTS! STRANGE. %s and %s."%(position1,position2)
+            if pos1.strand != pos2.strand and pos1.min_position==pos2.min_position:
+                if is_cassette(pos1.chromosome):   same_pos_opposite_strands_cassette += 1
+                else:                                   same_pos_opposite_strands_non_cassette += 1
+                OUTPUT.write("SAME-POSITION OPPOSITE-STRAND MUTANTS! STRANGE. %s and %s.\n"%(pos1,pos2))
                 continue
             # if the two positions are adjacent but on different strands, they can't be merged - count and skip
-            elif position1.strand != position2.strand:
+            elif pos1.strand != pos2.strand:
                 adjacent_opposite_strands_count += 1
-                if verbosity_level>1:
-                    print "  LEAVING adjacent mutants: %s and %s."%(position1,position2)
+                OUTPUT.write("  LEAVING adjacent mutants: %s and %s.\n"%(pos1,pos2))
                 continue
 
             # make sure these mutants still exist in the dataset (haven't been merged) (note: if they don't exist, 
@@ -1066,17 +1070,15 @@ class Insertional_mutant_pool_dataset():
             #  (this shouldn't be a problem with a situation like 1,1000,1 readcounts - the first and third will both
             #   be merged into the second, which won't disappear, so all is fine. However with a situation like
             #   1000,1,1000 readcounts, the middle mutant will be merged into only one of the sides, which is right.)
-            if position1 in self:
-                mutant1 = self.get_mutant(position1)
+            if pos1 in self:
+                mutant1 = self.get_mutant(pos1)
             else:
-                if verbosity_level>0:
-                    print "Warning: attempting to merge a mutant that no longer exists %s with %s!"%(position1,position2)
+                OUTPUT.write("Warning: attempting to merge a mutant that no longer exists %s with %s!\n"%(pos1, pos2))
                 continue
-            if position2 in self:
-                mutant2 = self.get_mutant(position2)
+            if pos2 in self:
+                mutant2 = self.get_mutant(pos2)
             else:
-                if verbosity_level>0:
-                    print "Warning: attempting to merge a mutant that no longer exists %s with %s!"%(position2, position1)
+                OUTPUT.write("Warning: attempting to merge a mutant that no longer exists %s with %s!\n"%(pos2, pos1))
                 continue
 
             # calculate readcount ratio
@@ -1085,27 +1087,32 @@ class Insertional_mutant_pool_dataset():
             # if the two mutants are adjacent, but the readcounts aren't different enough , count and skip
             if not readcount_ratio>=merge_count_ratio:
                 adjacent_same_strands_left += 1
-                if verbosity_level>1:
-                    print("  LEAVING adjacent mutants: %s and %s, %s and %s reads."%(position1, position2, 
-                                                                                     mutant1_readcount, mutant2_readcount))
+                OUTPUT.write("  LEAVING adjacent mutants: %s and %s, %s and %s reads.\n"%(pos1, pos2, 
+                                                                                 mutant1_readcount, mutant2_readcount))
                 continue
             # if the two mutants are adjacent and with sufficiently different readcounts, count, 
             #  MERGE the lower-readcount mutant into the higher-readcount one, 
             #  and remove the lower one from the dataset
             adjacent_same_strands_merged += 1
-            if verbosity_level>1:
-                print(" MERGING adjacent mutants: %s and %s, %s and %s reads."%(position1, position2, 
+            OUTPUT.write(" MERGING adjacent mutants: %s and %s, %s and %s reads.\n"%(pos1, pos2, 
                                                                                 mutant1_readcount, mutant2_readcount))
             if mutant1_readcount >= mutant2_readcount:
                 mutant1.merge_mutant(mutant2, dont_merge_positions=dont_change_positions)
-                self.remove_mutant(position2)
+                self.remove_mutant(pos2)
             else:
                 mutant2.merge_mutant(mutant1, dont_merge_positions=dont_change_positions)
-                self.remove_mutant(position1)
-        self.summary.mutant_merging_info.append("merged %s pairs of adjacent mutants "%adjacent_same_strands_merged 
-                                        +"(max distance %s, min count ratio %s) "%(merge_max_distance, merge_count_ratio))
-        self.summary.mutant_merging_info.append("  (kept %s pairs on same strand "%adjacent_same_strands_left 
-                                        +"and %s on opposite strands)"%adjacent_opposite_strands_count)
+                self.remove_mutant(pos1)
+            # TODO there's a bug here where mutants 1,2,3 all should be merged together and a warning gets printed!  Causes mutant_count_alignments.py run-test count-aln__merge-adjacent2-r3 to fail.  Research and hopefully fix that!  I'm not sure whether the problem is ONLY that is prints an unnecessary warning, or if there's also an actual issue with merging.
+        # add overall counts to dataset summary
+        info = ["merged %s pairs of adjacent mutants (max distance %s, min count ratio %s) "%(
+                        adjacent_same_strands_merged, merge_max_distance, merge_count_ratio), 
+                "  (kept %s pairs on same strand and %s on opposite strands)"%(
+                        adjacent_same_strands_left, adjacent_opposite_strands_count), 
+                "  (there were also %s pairs in exact same position on different strands non-cassette (and %s cassette))"%(
+                        same_pos_opposite_strands_non_cassette, same_pos_opposite_strands_cassette),
+                ]
+        for line in info:   self.summary.mutant_merging_info.append(line)
+
 
     def find_genes_for_mutants(self, genefile, detailed_features=False, ignore_cassette=True, 
                                N_run_groups=3, verbosity_level=1):
