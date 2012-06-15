@@ -171,7 +171,6 @@ def define_option_parser():
     return parser
 
 
-
 def add_discarded_reads_from_metadata_file(infiles, input_metadata_file, verbosity_level):
     """ Parse metadata files to get total discarded read count; return None if it cannot be determined. 
     """
@@ -205,9 +204,8 @@ def add_discarded_reads_from_metadata_file(infiles, input_metadata_file, verbosi
         for line in open(curr_input_metadata_file):
             if line.startswith('## reads removed: '):
                 discarded_counts.append(int(line.split()[3]))
-                line_found = True
                 break
-        if not line_found:
+        else:   # in a for-else loop the else is executed if the for wasn't ended with break, i.e. the line wasn't found
             if verbosity_level>0:
                 print("Warning: metadata input file %s didn't contain discarded read count line! "%curr_input_metadata_file
                       +"Proceeding without it.")
@@ -219,7 +217,6 @@ def add_discarded_reads_from_metadata_file(infiles, input_metadata_file, verbosi
         return None
     # if the discarded read counts for all infiles were found, return the sum as the total discarded read count
     return sum(discarded_counts)
-    
     
 
 def main(infiles, outfile, options):
