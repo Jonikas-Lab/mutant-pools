@@ -1116,8 +1116,7 @@ class Insertional_mutant_pool_dataset():
         for line in info:   self.summary.mutant_merging_info.append(line)
 
 
-    def find_genes_for_mutants(self, genefile, detailed_features=False, ignore_cassette=True, 
-                               N_run_groups=3, verbosity_level=1):
+    def find_genes_for_mutants(self, genefile, detailed_features=False, N_run_groups=3, verbosity_level=1):
         """ To each mutant in the dataset, add the gene it's in (look up gene positions for each mutant using genefile).
 
         If detailed_features is True, also look up whether the mutant is in an exon/intron/UTR (NOT IMPLEMENTED); 
@@ -1165,7 +1164,7 @@ class Insertional_mutant_pool_dataset():
 
         # for mutants in chromosomes that weren't listed in the genefile, use special values
         for chromosome in set(mutants_by_chromosome.keys())-set(all_reference_chromosomes):
-            if ignore_cassette and not is_cassette(chromosome):
+            if not is_cassette(chromosome):
                 print 'Warning: chromosome "%s" not found in genefile data!'%(chromosome)
             for mutant in mutants_by_chromosome[chromosome]:
                 mutant.gene,mutant.orientation,mutant.gene_feature = SPECIAL_GENE_CODES.chromosome_not_in_reference,'-','-'

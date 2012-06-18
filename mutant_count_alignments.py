@@ -272,7 +272,6 @@ def main(infiles, outfile, options):
         genefile = options.gene_position_reference_file
         if options.verbosity_level>1: print "adding genes from file %s to mutant data - time %s."%(genefile, time.ctime())
         all_alignment_data.find_genes_for_mutants(genefile, detailed_features=options.detailed_gene_features, 
-                                                  ignore_cassette=options.ignore_cassette, 
                                                   N_run_groups=options.N_detail_run_groups, 
                                                   verbosity_level=options.verbosity_level)
 
