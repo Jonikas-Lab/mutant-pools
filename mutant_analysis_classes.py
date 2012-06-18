@@ -1292,13 +1292,15 @@ class Insertional_mutant_pool_dataset():
         # MAYBE-TODO may also be a good idea to keep track of the most common SEQUENCE, not just mutant...
         # print the gene annotation info, but only if there is any
         if summ.mutants_in_genes + summ.mutants_not_in_genes + summ.mutants_undetermined:
-            OUTPUT.write(line_prefix+"Mutant cassettes in chromosomes with no gene info (fraction of total): "
+            OUTPUT.write(line_prefix+"Mutant cassettes with unknown gene info (probably cassette-mapped) (fraction of total): "
                          +"%s (%.2g)\n"%(summ.mutants_undetermined, summ.mutants_undetermined/len(self)))
             # MAYBE-TODO keep track of WHICH chromosomes have no gene info, and maybe how many mutants each?
-            OUTPUT.write(line_prefix+"Mutant cassettes not inside genes (fraction of total): "
-                         +"%s (%.2g)\n"%(summ.mutants_not_in_genes, summ.mutants_not_in_genes/len(self)))
-            OUTPUT.write(header_prefix+"Mutant cassettes inside genes (fraction of total): "
-                         +"%s (%.2g)\n"%(summ.mutants_in_genes, summ.mutants_in_genes/len(self)))
+            OUTPUT.write(line_prefix+"Mutant cassettes in intergenic spaces (fraction of total, fraction of known): "
+                         +"%s (%.2g, %.2g)\n"%(summ.mutants_not_in_genes, summ.mutants_not_in_genes/len(self), 
+                                           summ.mutants_not_in_genes/(summ.mutants_not_in_genes+summ.mutants_in_genes)))
+            OUTPUT.write(header_prefix+"Mutant cassettes inside genes (fraction of total, fraction of known): "
+                         +"%s (%.2g, %.2g)\n"%(summ.mutants_in_genes, summ.mutants_in_genes/len(self), 
+                                              summ.mutants_in_genes/(summ.mutants_not_in_genes+summ.mutants_in_genes)))
             for (orientation,count) in sorted(summ.mutant_counts_by_orientation.items(),reverse=True):
                 OUTPUT.write(line_prefix+"Mutant cassettes in %s orientation to gene (fraction of ones in genes): "
                                                                                                          %orientation
