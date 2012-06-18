@@ -3,16 +3,17 @@
 <REGEX># Date: .*
 <REGEX># Full options: {.*}
 ### SUMMARY:
-#  Reads discarded in preprocessing: unknown
-## Total reads processed: 80
-#  Unaligned reads: 10
-#  Aligned reads (non-discarded): 70
-#  Perfectly aligned reads (no mismatches): 62
-#  Reads with insertion direction matching chromosome + strand: 65
-#  Reads with insertion direction matching chromosome - strand: 5
-#  Reads aligned to insertion_cassette_X: 1
+## Total reads processed: 80+unknown
+#  Reads discarded in preprocessing (fraction of total): unknown (unknown)
+#  Unaligned reads (fraction of total, fraction of non-discarded): 10 (0.12, 0.12)
+#  Aligned reads (fraction of total, fraction of non-discarded): 70 (0.88, 0.88)
+#  Perfectly aligned reads, no mismatches (fraction of aligned): 62 (0.89)
+#  Reads with cassette direction matching chromosome + strand (fraction of aligned): 65 (0.93)
+#  Reads with cassette direction matching chromosome - strand (fraction of aligned): 5 (0.071)
+#  Reads aligned to insertion_cassette_X (fraction of aligned): 1 (0.014)
 ## Distinct mutants (read groups) by cassette insertion position: 57
 #  (read is at 5prime end of cassette, in forward direction to cassette)
+#  (average and median reads per mutant: 1, 1)
 #  Most common mutant: position [mutation_yes + 204-?], 6 reads (9% of aligned)
 ### HEADER AND DATA:
 # chromosome	strand	min_position	full_position	gene	orientation	feature	total_reads	perfect_reads	N_sequence_variants

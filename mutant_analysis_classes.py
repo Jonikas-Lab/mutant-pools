@@ -7,11 +7,13 @@ This is a module to be imported and used by other programs.  Running it directly
  -- Weronika Patena, Jonikas Lab, Carnegie Institution, 2011
 """
 
+from __future__ import division
 # basic libraries
 import sys, re
 import unittest
 from collections import defaultdict
 from itertools import combinations
+from numpy import median
 # other libraries
 import HTSeq
 from BCBio import GFF
@@ -968,7 +970,7 @@ class Insertional_mutant_pool_dataset():
             else:                                         summ.mutants_in_genes += 1
             if orientation not in ['?','-']:              summ.mutant_counts_by_orientation[orientation] += 1
             if gene_feature not in ['?','-']:             summ.mutant_counts_by_feature[gene_feature] += 1
-        # MAYBE-TODO update to deal with gene annotation fields?
+        # TODO update to deal with gene annotation fields?-
     
     def add_discarded_reads(self, N, reset_count=False):
         """ Add N to self.discarded_read_count (or set self.discarded_read_count to N if reset_count is True). """
@@ -1102,7 +1104,7 @@ class Insertional_mutant_pool_dataset():
             else:
                 mutant2.merge_mutant(mutant1, dont_merge_positions=dont_change_positions)
                 self.remove_mutant(pos1)
-            # TODO there's a bug here where mutants 1,2,3 all should be merged together and a warning gets printed!  Causes mutant_count_alignments.py run-test count-aln__merge-adjacent2-r3 to fail.  Research and hopefully fix that!  I'm not sure whether the problem is ONLY that is prints an unnecessary warning, or if there's also an actual issue with merging.
+            # TODO there's a bug here where mutants 1,2,3 all should be merged together and a warning gets printed!  See the warning in test_data/count-aln__merge-adjacent2-r3_merging-info.txt, which really shouldn't be there.  Research and hopefully fix that!  I'm not sure whether the problem is ONLY that is prints an unnecessary warning, or if there's also an actual issue with merging.
         # add overall counts to dataset summary
         info = ["merged %s pairs of adjacent mutants (max distance %s, min count ratio %s) "%(
                         adjacent_same_strands_merged, merge_max_distance, merge_count_ratio), 
@@ -1188,6 +1190,7 @@ class Insertional_mutant_pool_dataset():
         """ Fill the self.mutants_by_gene dictionary (gene_name:mutant_list) based on full list of dataset mutants; 
         real gene IDs only (ignore SPECIAL_GENE_CODES, i.e. mutants not in genes, and mutants with unknown gene status).
         """
+        self.mutants_by_gene = defaultdict(lambda: [])
         for mutant in self:
             if mutant.gene not in SPECIAL_GENE_CODES.all_codes:
                 self.mutants_by_gene[mutant.gene].append(mutant)
@@ -1237,50 +1240,85 @@ class Insertional_mutant_pool_dataset():
         """ Print basic read and mutant counts (prints to stdout by default, can also pass an open file object)."""
         if self.multi_dataset:  raise MutantError("print_summary not implemented for multi-datasets!")
         # TODO-NEXT implement for multi-datasets!
-        # TODO-NEXT should probably rewrite this to start with a real total read number (discarded+total)
+        # TODO should probably refactor this with separate info strings and formulas for getting the data, or something?
         summ = self.summary
-        OUTPUT.write(line_prefix+"Reads discarded in preprocessing: %s\n"%(summ.discarded_read_count))
-        OUTPUT.write(header_prefix+"Total reads processed: %s\n"%(summ.total_read_count))
-        OUTPUT.write(line_prefix+"Unaligned reads: %s\n"%(summ.unaligned_read_count))
-        for (region,count) in summ.ignored_region_read_counts.iteritems():
-            OUTPUT.write(line_prefix+"Discarded reads aligned to %s: %s\n"%(region, count))
-        OUTPUT.write(line_prefix+"Aligned reads (non-discarded): %s\n"%(summ.aligned_read_count))
-        OUTPUT.write(line_prefix+"Perfectly aligned reads (no mismatches): %s\n"%(summ.perfect_read_count))
+        try:
+            full_read_count = summ.total_read_count + summ.discarded_read_count
+            OUTPUT.write(header_prefix+"Total reads processed: %s\n"%(full_read_count))
+            OUTPUT.write(line_prefix+"Reads discarded in preprocessing (fraction of total): "
+                         +"%s (%.2g)\n"%(summ.discarded_read_count, summ.discarded_read_count/full_read_count))
+        # TODO we have two different "discarded" categories (preprocessing and optionally cassette - give them different names?)
+        except TypeError:
+            OUTPUT.write(header_prefix+"Total reads processed: %s+%s\n"%(summ.total_read_count, summ.discarded_read_count))
+            full_read_count = summ.total_read_count
+            OUTPUT.write(line_prefix+"Reads discarded in preprocessing (fraction of total): "
+                         +"%s (unknown)\n"%(summ.discarded_read_count))
+        OUTPUT.write(line_prefix+"Unaligned reads (fraction of total, fraction of non-discarded): "
+                     +"%s (%.2g, %.2g)\n"%(summ.unaligned_read_count, summ.unaligned_read_count/full_read_count, 
+                                           summ.unaligned_read_count/summ.total_read_count))
+        aligned_incl_discarded = summ.aligned_read_count + sum(summ.ignored_region_read_counts.values())
+        OUTPUT.write(line_prefix+"Aligned reads (fraction of total, fraction of non-discarded): "
+                     +"%s (%.2g, %.2g)\n"%(aligned_incl_discarded, aligned_incl_discarded/full_read_count, 
+                                           aligned_incl_discarded/summ.total_read_count))
+        if summ.ignored_region_read_counts:
+            for (region,count) in summ.ignored_region_read_counts.iteritems():
+                OUTPUT.write(line_prefix+"Discarded reads aligned to %s (fraction of total, fraction of aligned): "%region
+                             +"%s (%.2g, %.2g)\n"%(count, count/full_read_count, count/aligned_incl_discarded))
+            OUTPUT.write(line_prefix+"Remaining aligned reads (fraction of total, fraction of aligned): "
+                         +"%s (%.2g, %.2g)\n"%(summ.aligned_read_count, summ.aligned_read_count/full_read_count, 
+                                              summ.aligned_read_count/aligned_incl_discarded))
+        OUTPUT.write(line_prefix+"Perfectly aligned reads, no mismatches (fraction of aligned): "
+                     +"%s (%.2g)\n"%(summ.perfect_read_count, summ.perfect_read_count/summ.aligned_read_count))
         for (strand,count) in summ.strand_read_counts.iteritems():
-            OUTPUT.write(line_prefix+"Reads with insertion direction matching chromosome %s strand: %s\n"%(strand, count))
+            OUTPUT.write(line_prefix+"Reads with cassette direction matching chromosome %s strand (fraction of aligned): "
+                                                                                                                 %strand
+                         +"%s (%.2g)\n"%(count, count/summ.aligned_read_count))
         for (region,count) in sorted(summ.specific_region_read_counts.iteritems()):
-            OUTPUT.write(line_prefix+"Reads aligned to %s: %s\n"%(region, count))
-        # TODO-NEXT add percentages of total (or aligned) reads to all of these numbers in addition to raw counts!
+            OUTPUT.write(line_prefix+"Reads aligned to %s (fraction of aligned): "%region
+                         +"%s (%.2g)\n"%(count, count/summ.aligned_read_count))
         # MAYBE-TODO keep track of the count of separate mutants in each category, as well as total read counts?
         OUTPUT.write(header_prefix+"Distinct mutants (read groups) by cassette insertion position: %s\n"%(len(self)))
         OUTPUT.write(line_prefix+"(read is at %s end of cassette, in %s direction to cassette)\n"%(summ.cassette_end, 
                                                 {'?': '?', True: 'reverse', False: 'forward'}[summ.reads_are_reverse]))
+        OUTPUT.write(line_prefix+"(average and median reads per mutant: "
+                     +"%d, %d)\n"%(round(summ.aligned_read_count/len(self)), 
+                                   round(median([m.total_read_count for m in self]))))
         for line in summ.mutant_merging_info:
             OUTPUT.write(line_prefix+line+'\n')
         OUTPUT.write(line_prefix + self.most_common_mutants_info()+ '\n')
         # MAYBE-TODO may also be a good idea to keep track of the most common SEQUENCE, not just mutant...
         # print the gene annotation info, but only if there is any
         if summ.mutants_in_genes + summ.mutants_not_in_genes + summ.mutants_undetermined:
-            OUTPUT.write(line_prefix+"Mutant cassettes in unknown chromosomes: %s\n"%(summ.mutants_undetermined))
-            OUTPUT.write(line_prefix+"Mutant cassettes not inside genes: %s\n"%(summ.mutants_not_in_genes))
-            OUTPUT.write(header_prefix+"Mutant cassettes inside genes: %s\n"%(summ.mutants_in_genes))
+            OUTPUT.write(line_prefix+"Mutant cassettes in chromosomes with no gene info (fraction of total): "
+                         +"%s (%.2g)\n"%(summ.mutants_undetermined, summ.mutants_undetermined/len(self)))
+            # MAYBE-TODO keep track of WHICH chromosomes have no gene info, and maybe how many mutants each?
+            OUTPUT.write(line_prefix+"Mutant cassettes not inside genes (fraction of total): "
+                         +"%s (%.2g)\n"%(summ.mutants_not_in_genes, summ.mutants_not_in_genes/len(self)))
+            OUTPUT.write(header_prefix+"Mutant cassettes inside genes (fraction of total): "
+                         +"%s (%.2g)\n"%(summ.mutants_in_genes, summ.mutants_in_genes/len(self)))
             for (orientation,count) in sorted(summ.mutant_counts_by_orientation.items(),reverse=True):
-                OUTPUT.write(line_prefix+"Mutant cassettes in %s orientation to gene: %s\n"%(orientation,count))
+                OUTPUT.write(line_prefix+"Mutant cassettes in %s orientation to gene (fraction of ones in genes): "
+                                                                                                         %orientation
+                             +"%s (%.2g)\n"%(count, count/summ.mutants_in_genes))
             # custom order for features to make it easier to read: CDS, intron, UTRs, everything else alphabetically after
             proper_feature_order = defaultdict(lambda: 3, {'CDS':0, 'intron':1, 'five_prime_UTR':2, 'three_prime_UTR':2})
+            # TODO or just lump all the other features together as "boundary" instead of listing them separately?
             for (feature,count) in sorted(summ.mutant_counts_by_feature.items(), 
                                           key=lambda (f,n): (proper_feature_order[f],f)):
-                OUTPUT.write(line_prefix+"Mutant cassettes in gene feature %s: %s\n"%(feature,count))
+                OUTPUT.write(line_prefix+"Mutant cassettes in gene feature %s (fraction of ones in genes): "%feature
+                             +"%s (%.2g)\n"%(count, count/summ.mutants_in_genes))
             all_genes = set([mutant.gene for mutant in self]) - set(SPECIAL_GENE_CODES.all_codes)
             OUTPUT.write(header_prefix+"Genes containing a mutant: %s\n"%(len(all_genes)))
-            genes_by_mutantN = self.gene_dict_by_mutant_number()
-            for (mutantN, geneset) in genes_by_mutantN.iteritems():
+            for (mutantN, geneset) in sorted(self.gene_dict_by_mutant_number().iteritems()):
                 if N_genes_to_print>0:
                     genelist_to_print = ', '.join(sorted(list(geneset))[:N_genes_to_print])
                     if len(geneset)<=N_genes_to_print:  genelist_string = ' (%s)'%genelist_to_print
                     else:                               genelist_string = ' (%s, ...)'%genelist_to_print
                 else:                                   genelist_string = ''
-                OUTPUT.write(line_prefix+"Genes with %s mutants: %s%s\n"%(mutantN, len(geneset), genelist_string))
+                OUTPUT.write(line_prefix+"Genes with %s mutants (fraction of all genes with mutants): "%mutantN
+                             # MAYBE-TODO make this fraction of ALL genes, and include genes with no mutants?)
+                             +"%s (%.2g)\n"%(len(geneset), len(geneset)/len(all_genes))
+                             +line_prefix+"   %s\n"%(genelist_string))
             # TODO-NEXT Add some measure of mutations, like how many mutants have <50% perfect reads (or something - the number should probably be a command-line option).  Maybe how many mutants have <20%, 20-80%, and >80% perfect reads (or 10 and 90, or make that a variable...)
 
     def print_data(self, OUTPUT=sys.stdout, sort_data_by=None, N_sequences=None, header_line=True, header_prefix="# "):

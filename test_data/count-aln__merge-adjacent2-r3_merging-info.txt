@@ -1,5 +1,6 @@
 # Merging adjacent mutants: max distance 2, min count ratio 3
  MERGING adjacent mutants: chromosome_A + 99-? and chromosome_A + 100-?, 1 and 5 reads.
+Warning: attempting to merge a mutant that no longer exists chromosome_A + 99-? with chromosome_A + 101-?!
  MERGING adjacent mutants: chromosome_A + 100-? and chromosome_A + 101-?, 6 and 1 reads.
  MERGING adjacent mutants: chromosome_A + 200-? and chromosome_A + 202-?, 3 and 1 reads.
   LEAVING adjacent mutants: chromosome_A + 300-? and chromosome_A + 301-?, 1 and 1 reads.

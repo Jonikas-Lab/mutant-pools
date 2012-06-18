@@ -3,54 +3,60 @@
 <REGEX># Date: .*
 <REGEX># Full options: {.*}
 ### SUMMARY:
-#  Reads discarded in preprocessing: unknown
-## Total reads processed: 40
-#  Unaligned reads: 0
-#  Aligned reads (non-discarded): 40
-#  Perfectly aligned reads (no mismatches): 40
-#  Reads with insertion direction matching chromosome + strand: 38
-#  Reads with insertion direction matching chromosome - strand: 2
+## Total reads processed: 40+unknown
+#  Reads discarded in preprocessing (fraction of total): unknown (unknown)
+#  Unaligned reads (fraction of total, fraction of non-discarded): 0 (0, 0)
+#  Aligned reads (fraction of total, fraction of non-discarded): 40 (1, 1)
+#  Perfectly aligned reads, no mismatches (fraction of aligned): 40 (1)
+#  Reads with cassette direction matching chromosome + strand (fraction of aligned): 38 (0.95)
+#  Reads with cassette direction matching chromosome - strand (fraction of aligned): 2 (0.05)
 ## Distinct mutants (read groups) by cassette insertion position: 40
 #  (read is at 5prime end of cassette, in forward direction to cassette)
+#  (average and median reads per mutant: 1, 1)
 #  Found 40 most common mutants, each with 1 reads (2% of aligned)
-#  Mutant cassettes in unknown chromosomes: 0
-#  Mutant cassettes not inside genes: 1
-## Mutant cassettes inside genes: 39
-#  Mutant cassettes in sense orientation to gene: 37
-#  Mutant cassettes in antisense orientation to gene: 2
-#  Mutant cassettes in gene feature CDS: 6
-#  Mutant cassettes in gene feature intron: 2
-#  Mutant cassettes in gene feature five_prime_UTR: 1
-#  Mutant cassettes in gene feature three_prime_UTR: 1
-#  Mutant cassettes in gene feature ??: 2
-#  Mutant cassettes in gene feature CDS/CDS: 1
-#  Mutant cassettes in gene feature CDS/CDS??: 2
-#  Mutant cassettes in gene feature CDS/five_prime_UTR??: 1
-#  Mutant cassettes in gene feature CDS/intron: 2
-#  Mutant cassettes in gene feature CDS/three_prime_UTR: 1
-#  Mutant cassettes in gene feature five_prime_UTR/CDS: 1
-#  Mutant cassettes in gene feature five_prime_UTR/CDS??: 2
-#  Mutant cassettes in gene feature five_prime_UTR/intron: 2
-#  Mutant cassettes in gene feature five_prime_UTR/mRNA_before_exons: 1
-#  Mutant cassettes in gene feature gene_edge/mRNA_edge: 1
-#  Mutant cassettes in gene feature gene_edge/mRNA_edge/five_prime_UTR: 1
-#  Mutant cassettes in gene feature gene_edge/mRNA_edge/three_prime_UTR: 1
-#  Mutant cassettes in gene feature gene_edge/no_mRNA: 1
-#  Mutant cassettes in gene feature gene_edge/outside_mRNA: 1
-#  Mutant cassettes in gene feature mRNA_after_exons: 1
-#  Mutant cassettes in gene feature mRNA_before_exons: 1
-#  Mutant cassettes in gene feature mRNA_edge: 1
-#  Mutant cassettes in gene feature mRNA_no_exons: 1
-#  Mutant cassettes in gene feature no_mRNA: 1
-#  Mutant cassettes in gene feature outside_mRNA: 1
-#  Mutant cassettes in gene feature three_prime_UTR/intron: 2
-#  Mutant cassettes in gene feature three_prime_UTR/mRNA_after_exons: 1
+#  Mutant cassettes in chromosomes with no gene info (fraction of total): 0 (0)
+#  Mutant cassettes not inside genes (fraction of total): 1 (0.025)
+## Mutant cassettes inside genes (fraction of total): 39 (0.97)
+#  Mutant cassettes in sense orientation to gene (fraction of ones in genes): 37 (0.95)
+#  Mutant cassettes in antisense orientation to gene (fraction of ones in genes): 2 (0.051)
+#  Mutant cassettes in gene feature CDS (fraction of ones in genes): 6 (0.15)
+#  Mutant cassettes in gene feature intron (fraction of ones in genes): 2 (0.051)
+#  Mutant cassettes in gene feature five_prime_UTR (fraction of ones in genes): 1 (0.026)
+#  Mutant cassettes in gene feature three_prime_UTR (fraction of ones in genes): 1 (0.026)
+#  Mutant cassettes in gene feature ?? (fraction of ones in genes): 2 (0.051)
+#  Mutant cassettes in gene feature CDS/CDS (fraction of ones in genes): 1 (0.026)
+#  Mutant cassettes in gene feature CDS/CDS?? (fraction of ones in genes): 2 (0.051)
+#  Mutant cassettes in gene feature CDS/five_prime_UTR?? (fraction of ones in genes): 1 (0.026)
+#  Mutant cassettes in gene feature CDS/intron (fraction of ones in genes): 2 (0.051)
+#  Mutant cassettes in gene feature CDS/three_prime_UTR (fraction of ones in genes): 1 (0.026)
+#  Mutant cassettes in gene feature five_prime_UTR/CDS (fraction of ones in genes): 1 (0.026)
+#  Mutant cassettes in gene feature five_prime_UTR/CDS?? (fraction of ones in genes): 2 (0.051)
+#  Mutant cassettes in gene feature five_prime_UTR/intron (fraction of ones in genes): 2 (0.051)
+#  Mutant cassettes in gene feature five_prime_UTR/mRNA_before_exons (fraction of ones in genes): 1 (0.026)
+#  Mutant cassettes in gene feature gene_edge/mRNA_edge (fraction of ones in genes): 1 (0.026)
+#  Mutant cassettes in gene feature gene_edge/mRNA_edge/five_prime_UTR (fraction of ones in genes): 1 (0.026)
+#  Mutant cassettes in gene feature gene_edge/mRNA_edge/three_prime_UTR (fraction of ones in genes): 1 (0.026)
+#  Mutant cassettes in gene feature gene_edge/no_mRNA (fraction of ones in genes): 1 (0.026)
+#  Mutant cassettes in gene feature gene_edge/outside_mRNA (fraction of ones in genes): 1 (0.026)
+#  Mutant cassettes in gene feature mRNA_after_exons (fraction of ones in genes): 1 (0.026)
+#  Mutant cassettes in gene feature mRNA_before_exons (fraction of ones in genes): 1 (0.026)
+#  Mutant cassettes in gene feature mRNA_edge (fraction of ones in genes): 1 (0.026)
+#  Mutant cassettes in gene feature mRNA_no_exons (fraction of ones in genes): 1 (0.026)
+#  Mutant cassettes in gene feature no_mRNA (fraction of ones in genes): 1 (0.026)
+#  Mutant cassettes in gene feature outside_mRNA (fraction of ones in genes): 1 (0.026)
+#  Mutant cassettes in gene feature three_prime_UTR/intron (fraction of ones in genes): 2 (0.051)
+#  Mutant cassettes in gene feature three_prime_UTR/mRNA_after_exons (fraction of ones in genes): 1 (0.026)
 ## Genes containing a mutant: 16
-#  Genes with 1 mutants: 7 (test.geneB1_only_mRNA, test.geneC0_exon_outside_UTR, test.geneC1_exon_outside_UTR, test.geneC3_two_3prime_UTRs, test.geneD2_bad_touching_exons, ...)
-#  Genes with 2 mutants: 6 (test.geneA1_proper_minus, test.geneB0_no_mRNA, test.geneC4_UTRs_separated_from_exons, test.geneC5_gap_in_mRNA_before_UTR_start, test.geneC6_gap_in_mRNA_after_UTR_end, ...)
-#  Genes with 3 mutants: 1 (test.geneD4_bad_overlapping_exon_UTR)
-#  Genes with 4 mutants: 1 (test.geneB2_only_mRNA_smaller_than_gene)
-#  Genes with 13 mutants: 1 (test.geneA0_proper_plus)
+#  Genes with 1 mutants (fraction of all genes with mutants): 7 (0.44)
+#      (test.geneB1_only_mRNA, test.geneC0_exon_outside_UTR, test.geneC1_exon_outside_UTR, test.geneC3_two_3prime_UTRs, test.geneD2_bad_touching_exons, ...)
+#  Genes with 2 mutants (fraction of all genes with mutants): 6 (0.38)
+#      (test.geneA1_proper_minus, test.geneB0_no_mRNA, test.geneC4_UTRs_separated_from_exons, test.geneC5_gap_in_mRNA_before_UTR_start, test.geneC6_gap_in_mRNA_after_UTR_end, ...)
+#  Genes with 3 mutants (fraction of all genes with mutants): 1 (0.062)
+#      (test.geneD4_bad_overlapping_exon_UTR)
+#  Genes with 4 mutants (fraction of all genes with mutants): 1 (0.062)
+#      (test.geneB2_only_mRNA_smaller_than_gene)
+#  Genes with 13 mutants (fraction of all genes with mutants): 1 (0.062)
+#      (test.geneA0_proper_plus)
 ### HEADER AND DATA:
 # chromosome	strand	min_position	full_position	gene	orientation	feature	total_reads	perfect_reads	N_sequence_variants
 chromosome_A	+	20	20-?	no_gene_found	-	-	1	1	1

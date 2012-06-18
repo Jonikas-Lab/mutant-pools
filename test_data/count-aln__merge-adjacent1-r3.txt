@@ -3,15 +3,16 @@
 <REGEX># Date: .*
 <REGEX># Full options: {.*}
 ### SUMMARY:
-#  Reads discarded in preprocessing: unknown
-## Total reads processed: 25
-#  Unaligned reads: 0
-#  Aligned reads (non-discarded): 25
-#  Perfectly aligned reads (no mismatches): 25
-#  Reads with insertion direction matching chromosome + strand: 22
-#  Reads with insertion direction matching chromosome - strand: 3
+## Total reads processed: 25+unknown
+#  Reads discarded in preprocessing (fraction of total): unknown (unknown)
+#  Unaligned reads (fraction of total, fraction of non-discarded): 0 (0, 0)
+#  Aligned reads (fraction of total, fraction of non-discarded): 25 (1, 1)
+#  Perfectly aligned reads, no mismatches (fraction of aligned): 25 (1)
+#  Reads with cassette direction matching chromosome + strand (fraction of aligned): 22 (0.88)
+#  Reads with cassette direction matching chromosome - strand (fraction of aligned): 3 (0.12)
 ## Distinct mutants (read groups) by cassette insertion position: 13
 #  (read is at 5prime end of cassette, in forward direction to cassette)
+#  (average and median reads per mutant: 2, 1)
 #  merged 2 pairs of adjacent mutants (max distance 1, min count ratio 3) 
 #    (kept 1 pairs on same strand and 1 on opposite strands)
 #    (there were also 1 pairs in exact same position on different strands non-cassette (and 0 cassette))
