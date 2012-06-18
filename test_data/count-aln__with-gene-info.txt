@@ -47,15 +47,15 @@
 #  Mutant cassettes in gene feature three_prime_UTR/intron (fraction of ones in genes): 2 (0.051)
 #  Mutant cassettes in gene feature three_prime_UTR/mRNA_after_exons (fraction of ones in genes): 1 (0.026)
 ## Genes containing a mutant: 16
-#  Genes with 1 mutants (fraction of all genes with mutants): 7 (0.44)
+#  Genes with 1 mutants (fraction of all genes): 7 (0.25)
 #      (test.geneB1_only_mRNA, test.geneC0_exon_outside_UTR, test.geneC1_exon_outside_UTR, test.geneC3_two_3prime_UTRs, test.geneD2_bad_touching_exons, ...)
-#  Genes with 2 mutants (fraction of all genes with mutants): 6 (0.38)
+#  Genes with 2 mutants (fraction of all genes): 6 (0.21)
 #      (test.geneA1_proper_minus, test.geneB0_no_mRNA, test.geneC4_UTRs_separated_from_exons, test.geneC5_gap_in_mRNA_before_UTR_start, test.geneC6_gap_in_mRNA_after_UTR_end, ...)
-#  Genes with 3 mutants (fraction of all genes with mutants): 1 (0.062)
+#  Genes with 3 mutants (fraction of all genes): 1 (0.036)
 #      (test.geneD4_bad_overlapping_exon_UTR)
-#  Genes with 4 mutants (fraction of all genes with mutants): 1 (0.062)
+#  Genes with 4 mutants (fraction of all genes): 1 (0.036)
 #      (test.geneB2_only_mRNA_smaller_than_gene)
-#  Genes with 13 mutants (fraction of all genes with mutants): 1 (0.062)
+#  Genes with 13 mutants (fraction of all genes): 1 (0.036)
 #      (test.geneA0_proper_plus)
 ### HEADER AND DATA:
 # chromosome	strand	min_position	full_position	gene	orientation	feature	total_reads	perfect_reads	N_sequence_variants

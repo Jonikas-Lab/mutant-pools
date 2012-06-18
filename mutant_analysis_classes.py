@@ -1146,6 +1146,7 @@ class Insertional_mutant_pool_dataset():
         ### go over all mutants on each chromosome, figure out which gene they're in (if any), keep track of totals
         # keep track of all the mutant and reference chromosomes to catch chromosomes that are absent in reference
         summ = self.summary
+        summ.total_genes = 0
         for chromosome_set in chromosome_sets:
             genefile_parsing_limits = {'gff_id': list(chromosome_set)}
             if not detailed_features: 
@@ -1153,6 +1154,7 @@ class Insertional_mutant_pool_dataset():
             with open(genefile) as GENEFILE:
                 for chromosome_record in GFF.parse(GENEFILE, limit_info=genefile_parsing_limits):
                     if verbosity_level>1:   print "    parsing %s for mutant gene locations..."%chromosome_record.id
+                    summ.total_genes += len(chromosome_record.features)
                     for mutant in mutants_by_chromosome[chromosome_record.id]:
                         gene_ID, orientation, feature = find_gene_by_pos(mutant.position, chromosome_record, 
                                                                          detailed_features, quiet=(verbosity_level==0))
@@ -1161,6 +1163,8 @@ class Insertional_mutant_pool_dataset():
                         else:                                       summ.mutants_in_genes += 1
                         if orientation not in ['?','-']:            summ.mutant_counts_by_orientation[orientation] += 1
                         if feature not in ['?','-']:                summ.mutant_counts_by_feature[feature] += 1
+                    if verbosity_level>1:   print "    ...found total %s genes."%(len(chromosome_record.features))
+        if verbosity_level>1:   print "    found total %s genes in full genome."%(summ.total_genes)
 
         # for mutants in chromosomes that weren't listed in the genefile, use special values
         for chromosome in set(mutants_by_chromosome.keys())-set(all_reference_chromosomes):
@@ -1308,15 +1312,15 @@ class Insertional_mutant_pool_dataset():
                              +"%s (%.2g)\n"%(count, count/summ.mutants_in_genes))
             all_genes = set([mutant.gene for mutant in self]) - set(SPECIAL_GENE_CODES.all_codes)
             OUTPUT.write(header_prefix+"Genes containing a mutant: %s\n"%(len(all_genes)))
+            # MAYBE-TODO put some kind of maximum on this rather than listing all the numbers?
             for (mutantN, geneset) in sorted(self.gene_dict_by_mutant_number().iteritems()):
                 if N_genes_to_print>0:
                     genelist_to_print = ', '.join(sorted(list(geneset))[:N_genes_to_print])
                     if len(geneset)<=N_genes_to_print:  genelist_string = ' (%s)'%genelist_to_print
                     else:                               genelist_string = ' (%s, ...)'%genelist_to_print
                 else:                                   genelist_string = ''
-                OUTPUT.write(line_prefix+"Genes with %s mutants (fraction of all genes with mutants): "%mutantN
-                             # MAYBE-TODO make this fraction of ALL genes, and include genes with no mutants?)
-                             +"%s (%.2g)\n"%(len(geneset), len(geneset)/len(all_genes))
+                OUTPUT.write(line_prefix+"Genes with %s mutants (fraction of all genes): "%mutantN
+                             +"%s (%.2g)\n"%(len(geneset), len(geneset)/summ.total_genes)
                              +line_prefix+"   %s\n"%(genelist_string))
             # TODO-NEXT Add some measure of mutations, like how many mutants have <50% perfect reads (or something - the number should probably be a command-line option).  Maybe how many mutants have <20%, 20-80%, and >80% perfect reads (or 10 and 90, or make that a variable...)
 
