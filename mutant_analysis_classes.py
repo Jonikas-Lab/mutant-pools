@@ -1241,17 +1241,22 @@ class Insertional_mutant_pool_dataset():
 
 
     @staticmethod
-    def nicer_gene_feature_counts(summary, merge_boundary_features=True):
+    def nicer_gene_feature_counts(summary, merge_boundary_features=True, merge_confusing_features=False):
         """ Return (gene_feature,count) list, biologically sorted, optionally with all "boundary" features counted as one.
 
         The source gene feature counts are based on the summary.mutant_counts_by_feature dict.
-        If merge_boundary_features==True, any locations containing the '/' character will be considered boundary.
+        If merge_confusing_features==True, any locations containing '??' will be listed as '??'.
+        If merge_boundary_features==True, any locations containing '/' and no '??' will be listed as 'boundary'.
         The custom sort order (based on what seems sensible biologically) is: CDS, intron, UTR, other, boundary.
         """
         new_feature_count_dict = defaultdict(lambda: 0)
         for feature, count in summary.mutant_counts_by_feature.items():
-            if '/' in feature and merge_boundary_features:  new_feature_count_dict['boundary'] += count
-            else:                                           new_feature_count_dict[feature] += count
+            # note that anything containing '??' AND '/' never gets merged as boundary
+            if '??' in feature:
+                if merge_confusing_features:                  new_feature_count_dict['??'] += count
+                else:                                         new_feature_count_dict[feature] += count
+            elif '/' in feature and merge_boundary_features:  new_feature_count_dict['boundary'] += count
+            else:                                             new_feature_count_dict[feature] += count
         # proper feature order is first by "importance" (CDS, intron, UTR, other (default), boundary), 
         #  then alphabetically within each importance category.
         proper_feature_order = defaultdict(lambda: 3, 
@@ -1262,7 +1267,7 @@ class Insertional_mutant_pool_dataset():
 
 
     def print_summary(self, OUTPUT=sys.stdout, N_genes_to_print=5, line_prefix='    ', header_prefix=' * ', 
-                      merge_boundary_features=False):
+                      merge_boundary_features=True):
         """ Print basic read and mutant counts (prints to stdout by default, can also pass an open file object)."""
         if self.multi_dataset:  raise MutantError("print_summary not implemented for multi-datasets!")
         # TODO-NEXT implement for multi-datasets!
@@ -1329,6 +1334,7 @@ class Insertional_mutant_pool_dataset():
                                                                                                          %orientation
                              +"%s (%.2g)\n"%(count, count/summ.mutants_in_genes))
             # custom order for features to make it easier to read: CDS, intron, UTRs, everything else alphabetically after
+            # MAYBE-TODO also give print_summary an option for merge_confusing_features arg to nicer_gene_feature_counts?
             for (feature,count) in self.nicer_gene_feature_counts(summ, merge_boundary_features):
                 OUTPUT.write(line_prefix+"Mutant cassettes in gene feature %s (fraction of ones in genes): "%feature
                              +"%s (%.2g)\n"%(count, count/summ.mutants_in_genes))

@@ -41,7 +41,8 @@ def do_test_run():
                  ('dont-count-cassette', "-I -e 5prime -r forward -U -n3", [aln_infile1]),
                  ('ignore-cassette', "-i -e 5prime -r forward -U -n3", [aln_infile1]),
                  ('sorted-by-count', "-o read_count -e 5prime -r forward -U -n3", [aln_infile1]),
-                 ('with-gene-info', "-e 5prime -r forward -U -g %s -d -n0"%gff_genefile, [aln_infile2]),
+                 ('with-gene-info_merged', "-e 5prime -r forward -U -g %s -d -n0"%gff_genefile, [aln_infile2]),
+                 ('with-gene-info_unmerged', "-B -e 5prime -r forward -g %s -d -n0"%gff_genefile, [aln_infile2]),
                  ('multiple-infiles', "-e 5prime -r forward -U -n0", [aln_infile1,aln_infile2]),
                  ('merge-adjacent-none', "-n0", [aln_infile3]),
                  ('merge-adjacent1-r3', "-M --merge_max_distance=1 --merge_count_ratio=3 -n0", [aln_infile3]),
@@ -163,6 +164,9 @@ def define_option_parser():
     parser.add_option('-o', '--sort_data_key', choices=['position','read_count','none'], default='position', 
                       metavar='position|read_count|none', help="Sort the output data: by alignment position, read count, "
                          +"or don't sort at all (default %default) - sorting may be slow for large datasets!")
+    parser.add_option('-B', '--dont_merge_boundary_features', action='store_true', default=False,
+                      help="In the summary, count all feature-boundary cases separately instead of together "
+                          +"(default %default)")
 
     parser.add_option('-V', '--verbosity_level', action="store_true", default=1, 
                       help="How much information to print to STDOUT: 0 - nothing, 1 - summary only, "
@@ -227,6 +231,7 @@ def main(infiles, outfile, options):
     """
     ### parse/process/reformat some options
     options.count_cassette = not options.dont_count_cassette
+    options.merge_boundary_features = not options.dont_merge_boundary_features
     if options.mutant_merging_outfile=='AUTO':
         options.mutant_merging_outfile = '%s_merging-info.txt'%os.path.splitext(outfile)[0]
 
@@ -284,14 +289,15 @@ def main(infiles, outfile, options):
 
     ### output
     # print summary info to stdout
-    if options.verbosity_level>1:   print "\nDATA SUMMARY:"
-    if options.verbosity_level>0:   all_alignment_data.print_summary()
+    if options.verbosity_level>1: print "\nDATA SUMMARY:"
+    if options.verbosity_level>0: all_alignment_data.print_summary(merge_boundary_features=options.merge_boundary_features)
     # print full data to outfile
-    if options.verbosity_level>1:   print "printing output - time %s."%time.ctime()
+    if options.verbosity_level>1: print "printing output - time %s."%time.ctime()
     with open(outfile,'w') as OUTFILE:
         write_header_data(OUTFILE,options)
         OUTFILE.write("### SUMMARY:\n")
-        all_alignment_data.print_summary(OUTFILE, line_prefix="#  ", header_prefix="## ")
+        all_alignment_data.print_summary(OUTFILE, line_prefix="#  ", header_prefix="## ", 
+                                         merge_boundary_features=options.merge_boundary_features)
         OUTFILE.write("### HEADER AND DATA:\n")
         all_alignment_data.print_data(OUTPUT=OUTFILE, sort_data_by=options.sort_data_key, 
                                       N_sequences=options.N_sequences_per_group, 
