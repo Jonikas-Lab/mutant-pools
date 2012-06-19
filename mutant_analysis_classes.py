@@ -1199,8 +1199,9 @@ class Insertional_mutant_pool_dataset():
                 self.mutants_by_gene[mutant.gene].append(mutant)
         # LATER-TODO add unit-test
 
+    @property
     def gene_dict_by_mutant_number(self):
-        """ Return a mutant_count:gene_ID_set dictionary of genes with 1/2/etc mutants. """
+        """ A mutant_count:gene_ID_set dictionary of genes with 1/2/etc mutants. """
         if self.multi_dataset:  raise MutantError("gene_dict_by_mutant_number not implemented for multi-datasets!")
         # MAYBE-TODO implement for multi-datasets?  May need to do that, if only for summary-printing.
         self.make_by_gene_mutant_dict()
@@ -1339,9 +1340,13 @@ class Insertional_mutant_pool_dataset():
                 OUTPUT.write(line_prefix+"Mutant cassettes in gene feature %s (fraction of ones in genes): "%feature
                              +"%s (%.2g)\n"%(count, count/summ.mutants_in_genes))
             all_genes = set([mutant.gene for mutant in self]) - set(SPECIAL_GENE_CODES.all_codes)
-            OUTPUT.write(header_prefix+"Genes containing a mutant: %s\n"%(len(all_genes)))
-            # MAYBE-TODO put some kind of maximum on this rather than listing all the numbers?
-            for (mutantN, geneset) in sorted(self.gene_dict_by_mutant_number().iteritems()):
+            OUTPUT.write(header_prefix+"Genes containing a mutant (fraction of all genes): "
+                         +"%s (%.2g)\n"%(len(all_genes), len(all_genes)/summ.total_genes))
+            genes_in_multiple_mutants = sum([len(genes) for N,genes in self.gene_dict_by_mutant_number.items() if N>1])
+            OUTPUT.write(line_prefix+"Genes containing at least two mutants (fraction of all genes): "
+                         +"%s (%.2g)\n"%(genes_in_multiple_mutants, genes_in_multiple_mutants/summ.total_genes))
+            # MAYBE-TODO put some kind of maximum on this or collapse into ranges rather than listing all the numbers?
+            for (mutantN, geneset) in sorted(self.gene_dict_by_mutant_number.iteritems()):
                 if N_genes_to_print>0:
                     genelist_to_print = ', '.join(sorted(list(geneset))[:N_genes_to_print])
                     if len(geneset)<=N_genes_to_print:  genelist_string = ' (%s)'%genelist_to_print

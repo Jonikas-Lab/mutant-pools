@@ -34,7 +34,8 @@
 #  Mutant cassettes in gene feature no_mRNA (fraction of ones in genes): 1 (0.026)
 #  Mutant cassettes in gene feature outside_mRNA (fraction of ones in genes): 1 (0.026)
 #  Mutant cassettes in gene feature boundary (fraction of ones in genes): 16 (0.41)
-## Genes containing a mutant: 16
+## Genes containing a mutant (fraction of all genes): 16 (0.57)
+#  Genes containing at least two mutants (fraction of all genes): 9 (0.32)
 #  Genes with 1 mutants (fraction of all genes): 7 (0.25)
 #      (test.geneB1_only_mRNA, test.geneC0_exon_outside_UTR, test.geneC1_exon_outside_UTR, test.geneC3_two_3prime_UTRs, test.geneD2_bad_touching_exons, ...)
 #  Genes with 2 mutants (fraction of all genes): 6 (0.21)
