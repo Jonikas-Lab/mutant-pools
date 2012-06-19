@@ -60,6 +60,7 @@ Basic TD calculations per sample and joining all the samples together:
 ...  sample_data, sample_headers, mutant_data = read_joint_mutant_file(infile)
 ...  overall_TD, generations = infiles_overallTDs_generations[infile]
 ...  total_reads_0 = sum([int(line[0]) for line in sample_data])
+TODO when normalizing, should we be using the number of mapped reads only, or TOTAL reads, or what?  We should be counting the genomic non-unique and the cassette reads, at least... Probably not the unmappable reads?  TODO talk about this to Ru/Martin!
 ...  total_reads_1 = sum([int(line[1]) for line in sample_data])
 ...  normalized_reads = [[float(int(line[0]))/total_reads_0, float(int(line[1]))/total_reads_1] for line in sample_data]
 ...  good_mutant_filter = [i for i in range(len(sample_data)) if (int(sample_data[i][0])>=readcount_min_T0 and int(sample_data[i][1])>=readcount_min_T1)]
