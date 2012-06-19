@@ -5,10 +5,10 @@
 ### SUMMARY:
 ## Total reads processed: 45
 #  Reads discarded in preprocessing (fraction of total): 5 (0.11)
-#  Unaligned reads (fraction of total, fraction of non-discarded): 10 (0.22, 0.25)
-#  Aligned reads (fraction of total, fraction of non-discarded): 30 (0.67, 0.75)
-#  Discarded reads aligned to insertion_cassette_X (fraction of total, fraction of aligned): 1 (0.022, 0.033)
-#  Remaining aligned reads (fraction of total, fraction of aligned): 29 (0.64, 0.97)
+#  Unaligned reads (fraction of total, fraction of post-preprocessing): 10 (0.22, 0.25)
+#  Aligned reads (fraction of total, fraction of post-preprocessing): 30 (0.67, 0.75)
+#  Removed reads aligned to insertion_cassette_X (fraction of total, fraction of all aligned): 1 (0.022, 0.033)
+#  Remaining aligned reads (fraction of total, fraction of all aligned): 29 (0.64, 0.97)
 #  Perfectly aligned reads, no mismatches (fraction of aligned): 21 (0.72)
 #  Reads with cassette direction matching chromosome + strand (fraction of aligned): 26 (0.9)
 #  Reads with cassette direction matching chromosome - strand (fraction of aligned): 3 (0.1)

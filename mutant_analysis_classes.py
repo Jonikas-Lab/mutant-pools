@@ -1250,26 +1250,26 @@ class Insertional_mutant_pool_dataset():
             OUTPUT.write(header_prefix+"Total reads processed: %s\n"%(full_read_count))
             OUTPUT.write(line_prefix+"Reads discarded in preprocessing (fraction of total): "
                          +"%s (%.2g)\n"%(summ.discarded_read_count, summ.discarded_read_count/full_read_count))
-        # TODO we have two different "discarded" categories (preprocessing and optionally cassette - give them different names?)
         except TypeError:
             OUTPUT.write(header_prefix+"Total reads processed: %s+%s\n"%(summ.total_read_count, summ.discarded_read_count))
             full_read_count = summ.total_read_count
             OUTPUT.write(line_prefix+"Reads discarded in preprocessing (fraction of total): "
                          +"%s (unknown)\n"%(summ.discarded_read_count))
-        OUTPUT.write(line_prefix+"Unaligned reads (fraction of total, fraction of non-discarded): "
+        OUTPUT.write(line_prefix+"Unaligned reads (fraction of total, fraction of post-preprocessing): "
                      +"%s (%.2g, %.2g)\n"%(summ.unaligned_read_count, summ.unaligned_read_count/full_read_count, 
                                            summ.unaligned_read_count/summ.total_read_count))
-        aligned_incl_discarded = summ.aligned_read_count + sum(summ.ignored_region_read_counts.values())
-        OUTPUT.write(line_prefix+"Aligned reads (fraction of total, fraction of non-discarded): "
-                     +"%s (%.2g, %.2g)\n"%(aligned_incl_discarded, aligned_incl_discarded/full_read_count, 
-                                           aligned_incl_discarded/summ.total_read_count))
+        aligned_incl_removed = summ.aligned_read_count + sum(summ.ignored_region_read_counts.values())
+        OUTPUT.write(line_prefix+"Aligned reads (fraction of total, fraction of post-preprocessing): "
+                     +"%s (%.2g, %.2g)\n"%(aligned_incl_removed, aligned_incl_removed/full_read_count, 
+                                           aligned_incl_removed/summ.total_read_count))
         if summ.ignored_region_read_counts:
             for (region,count) in summ.ignored_region_read_counts.iteritems():
-                OUTPUT.write(line_prefix+"Discarded reads aligned to %s (fraction of total, fraction of aligned): "%region
-                             +"%s (%.2g, %.2g)\n"%(count, count/full_read_count, count/aligned_incl_discarded))
-            OUTPUT.write(line_prefix+"Remaining aligned reads (fraction of total, fraction of aligned): "
+                OUTPUT.write(line_prefix+"Removed reads aligned to %s (fraction of total, fraction of all aligned): "
+                             %region
+                             +"%s (%.2g, %.2g)\n"%(count, count/full_read_count, count/aligned_incl_removed))
+            OUTPUT.write(line_prefix+"Remaining aligned reads (fraction of total, fraction of all aligned): "
                          +"%s (%.2g, %.2g)\n"%(summ.aligned_read_count, summ.aligned_read_count/full_read_count, 
-                                              summ.aligned_read_count/aligned_incl_discarded))
+                                              summ.aligned_read_count/aligned_incl_removed))
         OUTPUT.write(line_prefix+"Perfectly aligned reads, no mismatches (fraction of aligned): "
                      +"%s (%.2g)\n"%(summ.perfect_read_count, summ.perfect_read_count/summ.aligned_read_count))
         for (strand,count) in summ.strand_read_counts.iteritems():

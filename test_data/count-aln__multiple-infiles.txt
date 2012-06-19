@@ -5,8 +5,8 @@
 ### SUMMARY:
 ## Total reads processed: 80+unknown
 #  Reads discarded in preprocessing (fraction of total): unknown (unknown)
-#  Unaligned reads (fraction of total, fraction of non-discarded): 10 (0.12, 0.12)
-#  Aligned reads (fraction of total, fraction of non-discarded): 70 (0.88, 0.88)
+#  Unaligned reads (fraction of total, fraction of post-preprocessing): 10 (0.12, 0.12)
+#  Aligned reads (fraction of total, fraction of post-preprocessing): 70 (0.88, 0.88)
 #  Perfectly aligned reads, no mismatches (fraction of aligned): 62 (0.89)
 #  Reads with cassette direction matching chromosome + strand (fraction of aligned): 65 (0.93)
 #  Reads with cassette direction matching chromosome - strand (fraction of aligned): 5 (0.071)
