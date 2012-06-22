@@ -753,7 +753,7 @@ class Dataset_summary_data():
             raise ValueError("The reads_are_reverse variable must be True, False, or '?'!")
         self.discarded_read_count = 'unknown'
         self.ignored_region_read_counts = defaultdict(lambda: 0)
-        self.total_read_count, self.aligned_read_count, self.unaligned_read_count, self.perfect_read_count = 0,0,0,0
+        self.processed_read_count, self.aligned_read_count, self.unaligned_read_count, self.perfect_read_count = 0,0,0,0
         self.strand_read_counts = defaultdict(lambda: 0)
         self.specific_region_read_counts = defaultdict(lambda: 0)
         self.mutants_in_genes, self.mutants_not_in_genes, self.mutants_undetermined = 0,0,0
@@ -764,15 +764,32 @@ class Dataset_summary_data():
         self.cassette_end = cassette_end
         self.reads_are_reverse = reads_are_reverse
 
+    @property
+    def full_read_count(self):
+        """ Full read count (integer): processed+discarded, or just processed if discarded is unknown. """
+        try:                return self.processed_read_count + self.discarded_read_count
+        except TypeError:   return self.processed_read_count
+
+    @property
+    def full_read_count_str(self):
+        """ Full read count as a string: processed+discarded, or processed+'unknown' if discarded is unknown. """
+        try:                return "%s"%(self.processed_read_count + self.discarded_read_count)
+        except TypeError:   return "%s+unknown"%self.processed_read_count
+
+    @property
+    def aligned_incl_removed(self):
+        return self.aligned_read_count + sum(self.ignored_region_read_counts.values())
+
+
 class Insertional_mutant_pool_dataset():
     """ A dataset of insertional mutants - contains some total counts and a set of Insertional_mutant objects.
     
     Attributes:
      - cassette_end - specifies which end of the insertion cassette the reads are on, and 
      - reads_are_reverse - True if the reads are in reverse orientation to the cassette, False otherwise
-     - discarded_read_count - number of reads discarded in preprocessing before alignment (not counted in total_read_count)
-     - ignored_region_read_counts - region_name:read_count dictionary (not counted in total_read_count)
-     - total_read_count, aligned_read_count, unaligned_read_count, perfect_read_count - various read counts, obvious
+     - discarded_read_count - number of reads discarded in preprocessing before alignment (not counted in processed_read_count)
+     - ignored_region_read_counts - region_name:read_count dictionary (not counted in processed_read_count) ____ REALLY??
+     - processed_read_count, aligned_read_count, unaligned_read_count, perfect_read_count - various read counts, obvious
      - strand_read_counts, specific_region_read_counts - name:count dictionaries for strands and specific regions to track
      - mutants_in_genes, mutants_not_in_genes, mutants_undetermined - counts of mutants in genes, not in genes, unknown
      - mutant_counts_by_orientation, mutant_count_by_feature - name:count dictionaries for mutant gene location properties
@@ -898,7 +915,7 @@ class Insertional_mutant_pool_dataset():
         for aln in HTSeq_alignment_reader:
             if uncollapse_read_counts:      read_count = get_seq_count_from_collapsed_header(aln.read.name)
             else:                           read_count = 1
-            summ.total_read_count += read_count
+            summ.processed_read_count += read_count
             # if read is unaligned, add to unaligned count and skip to the next read
             if (not aln.aligned) or (aln.iv is None):
                 summ.unaligned_read_count += read_count
@@ -961,7 +978,7 @@ class Insertional_mutant_pool_dataset():
             # add to dataset total read/mutant counts
             # MAYBE-TODO Might just want to write a function that recalculates all of the total counts below, to be ran at the end of read_data_from_file and add_alignment_reader_to_data and I guess find_genes_for_mutants, instead of doing it this way
             summ = self.summary
-            summ.total_read_count += total_reads
+            summ.processed_read_count += total_reads
             summ.aligned_read_count += total_reads
             summ.perfect_read_count += perfect_reads
             summ.strand_read_counts[strand] += total_reads
@@ -1274,31 +1291,25 @@ class Insertional_mutant_pool_dataset():
         # TODO-NEXT implement for multi-datasets!
         # TODO should probably refactor this with separate info strings and formulas for getting the data, or something?
         summ = self.summary
-        try:
-            full_read_count = summ.total_read_count + summ.discarded_read_count
-            OUTPUT.write(header_prefix+"Total reads processed: %s\n"%(full_read_count))
-            OUTPUT.write(line_prefix+"Reads discarded in preprocessing (fraction of total): "
-                         +"%s (%.2g)\n"%(summ.discarded_read_count, summ.discarded_read_count/full_read_count))
-        except TypeError:
-            OUTPUT.write(header_prefix+"Total reads processed: %s+%s\n"%(summ.total_read_count, summ.discarded_read_count))
-            full_read_count = summ.total_read_count
-            OUTPUT.write(line_prefix+"Reads discarded in preprocessing (fraction of total): "
-                         +"%s (unknown)\n"%(summ.discarded_read_count))
+        OUTPUT.write(header_prefix+"Total reads processed: %s\n"%(summ.full_read_count_str))
+        try:                discarded_fraction_str = "%.2g"%(summ.discarded_read_count/summ.full_read_count)
+        except TypeError:   discarded_fraction_str = "unknown"
+        OUTPUT.write(line_prefix+"Reads discarded in preprocessing (fraction of total): "
+                     +"%s (%s)\n"%(summ.discarded_read_count, discarded_fraction_str))
         OUTPUT.write(line_prefix+"Unaligned reads (fraction of total, fraction of post-preprocessing): "
-                     +"%s (%.2g, %.2g)\n"%(summ.unaligned_read_count, summ.unaligned_read_count/full_read_count, 
-                                           summ.unaligned_read_count/summ.total_read_count))
-        aligned_incl_removed = summ.aligned_read_count + sum(summ.ignored_region_read_counts.values())
+                     +"%s (%.2g, %.2g)\n"%(summ.unaligned_read_count, summ.unaligned_read_count/summ.full_read_count, 
+                                           summ.unaligned_read_count/summ.processed_read_count))
         OUTPUT.write(line_prefix+"Aligned reads (fraction of total, fraction of post-preprocessing): "
-                     +"%s (%.2g, %.2g)\n"%(aligned_incl_removed, aligned_incl_removed/full_read_count, 
-                                           aligned_incl_removed/summ.total_read_count))
+                     +"%s (%.2g, %.2g)\n"%(summ.aligned_incl_removed, summ.aligned_incl_removed/summ.full_read_count, 
+                                           summ.aligned_incl_removed/summ.processed_read_count))
         if summ.ignored_region_read_counts:
             for (region,count) in summ.ignored_region_read_counts.iteritems():
                 OUTPUT.write(line_prefix+"Removed reads aligned to %s (fraction of total, fraction of all aligned): "
                              %region
-                             +"%s (%.2g, %.2g)\n"%(count, count/full_read_count, count/aligned_incl_removed))
+                             +"%s (%.2g, %.2g)\n"%(count, count/summ.full_read_count, count/summ.aligned_incl_removed))
             OUTPUT.write(line_prefix+"Remaining aligned reads (fraction of total, fraction of all aligned): "
-                         +"%s (%.2g, %.2g)\n"%(summ.aligned_read_count, summ.aligned_read_count/full_read_count, 
-                                              summ.aligned_read_count/aligned_incl_removed))
+                         +"%s (%.2g, %.2g)\n"%(summ.aligned_read_count, summ.aligned_read_count/summ.full_read_count, 
+                                              summ.aligned_read_count/summ.aligned_incl_removed))
         OUTPUT.write(line_prefix+"Perfectly aligned reads, no mismatches (fraction of aligned): "
                      +"%s (%.2g)\n"%(summ.perfect_read_count, summ.perfect_read_count/summ.aligned_read_count))
         for (strand,count) in summ.strand_read_counts.iteritems():
@@ -1993,7 +2004,7 @@ class Testing_Insertional_mutant_pool_dataset(unittest.TestCase):
                 assert data.summary.cassette_end == cassette_end
                 assert data.summary.reads_are_reverse == reads_are_reverse
                 assert len(data) == 0
-                assert data.summary.total_read_count == data.summary.aligned_read_count\
+                assert data.summary.processed_read_count == data.summary.aligned_read_count\
                         == data.summary.perfect_read_count == 0
                 assert data.summary.unaligned_read_count == 0
                 assert data.summary.discarded_read_count == 'unknown'
@@ -2028,7 +2039,7 @@ class Testing_Insertional_mutant_pool_dataset(unittest.TestCase):
         input_file = 'test_data/count-aln__cassette-end-5prime.txt'
         data = Insertional_mutant_pool_dataset()
         data.read_data_from_file(input_file)
-        assert data.summary.total_read_count == data.summary.aligned_read_count == 30
+        assert data.summary.processed_read_count == data.summary.aligned_read_count == 30
         assert data.summary.unaligned_read_count == 0
         assert data.summary.perfect_read_count == 22
         assert data.summary.strand_read_counts == {'+':27, '-':3}
@@ -2077,7 +2088,7 @@ class Testing_Insertional_mutant_pool_dataset(unittest.TestCase):
         input_file2 = 'test_data/count-aln__with-gene-info.txt'
         data2 = Insertional_mutant_pool_dataset()
         data2.read_data_from_file(input_file2)
-        assert data2.summary.total_read_count == data2.summary.aligned_read_count == data2.summary.perfect_read_count == 40
+        assert data2.summary.processed_read_count == data2.summary.aligned_read_count == data2.summary.perfect_read_count == 40
         assert data2.summary.unaligned_read_count == 0
         assert data2.summary.strand_read_counts == {'+':38, '-':2}
         assert len(data2) == 40
