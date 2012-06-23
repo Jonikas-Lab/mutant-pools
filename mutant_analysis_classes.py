@@ -2083,7 +2083,7 @@ class Testing_Insertional_mutant_pool_dataset(unittest.TestCase):
         data.read_data_from_file(input_file, assume_new_sequences=True)
         assert mutant.unique_sequence_count == 2
         ## 3. input file with gene information
-        input_file2 = 'test_data/count-aln__with-gene-info.txt'
+        input_file2 = 'test_data/count-aln__with-gene-info_merged.txt'
         data2 = Insertional_mutant_pool_dataset()
         data2.read_data_from_file(input_file2)
         assert data2.summary.processed_read_count == data2.summary.aligned_read_count == data2.summary.perfect_read_count == 40
