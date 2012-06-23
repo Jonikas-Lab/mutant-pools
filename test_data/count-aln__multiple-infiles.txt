@@ -4,13 +4,13 @@
 <REGEX># Full options: {.*}
 ### SUMMARY:
 ## Total reads processed: 80+unknown
-#  Reads discarded in preprocessing (fraction of total): unknown (unknown)
-#  Unaligned reads (fraction of total, fraction of post-preprocessing): 10 (0.12, 0.12)
-#  Aligned reads (fraction of total, fraction of post-preprocessing): 70 (0.88, 0.88)
-#  Perfectly aligned reads, no mismatches (fraction of aligned): 62 (0.89)
-#  Reads with cassette direction matching chromosome + strand (fraction of aligned): 65 (0.93)
-#  Reads with cassette direction matching chromosome - strand (fraction of aligned): 5 (0.071)
-#  Reads aligned to insertion_cassette_X (fraction of aligned): 1 (0.014)
+#  Reads discarded in preprocessing (% of total): unknown (unknown)
+#  Unaligned reads (% of total, % of post-preprocessing): 10 (12%, 12%)
+#  Aligned reads (% of total, % of post-preprocessing): 70 (88%, 88%)
+#  Perfectly aligned reads, no mismatches (% of aligned): 62 (89%)
+#  Reads with cassette direction matching chromosome + strand (% of aligned): 65 (93%)
+#  Reads with cassette direction matching chromosome - strand (% of aligned): 5 (7.1%)
+#  Reads aligned to insertion_cassette_X (% of aligned): 1 (1.4%)
 ## Distinct mutants (read groups) by cassette insertion position: 57
 #  (read is at 5prime end of cassette, in forward direction to cassette)
 #  (average and median reads per mutant: 1, 1)

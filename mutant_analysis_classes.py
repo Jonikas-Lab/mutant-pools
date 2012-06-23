@@ -1295,30 +1295,28 @@ class Insertional_mutant_pool_dataset():
             discarded_count_fraction_str = value_and_percentages(summ.discarded_read_count, [summ.full_read_count])
         except TypeError:   
             discarded_count_fraction_str = "%s (unknown)"%summ.discarded_read_count
-        OUTPUT.write(line_prefix+"Reads discarded in preprocessing (fraction of total): "
+        OUTPUT.write(line_prefix+"Reads discarded in preprocessing (% of total): "
                      +"%s\n"%discarded_count_fraction_str)
-        OUTPUT.write(line_prefix+"Unaligned reads (fraction of total, fraction of post-preprocessing): "
+        OUTPUT.write(line_prefix+"Unaligned reads (% of total, % of post-preprocessing): "
                      +"%s\n"%value_and_percentages(summ.unaligned_read_count, 
                                                    [summ.full_read_count, summ.processed_read_count]))
-        OUTPUT.write(line_prefix+"Aligned reads (fraction of total, fraction of post-preprocessing): "
+        OUTPUT.write(line_prefix+"Aligned reads (% of total, % of post-preprocessing): "
                      +"%s\n"%value_and_percentages(summ.aligned_incl_removed, 
                                                    [summ.full_read_count, summ.processed_read_count]))
         if summ.ignored_region_read_counts:
             for (region,count) in summ.ignored_region_read_counts.iteritems():
-                OUTPUT.write(line_prefix+"Removed reads aligned to %s (fraction of total, fraction of all aligned): "
-                             %region
+                OUTPUT.write(line_prefix+"Removed reads aligned to %s (%% of total, %% of all aligned): "%region
                              +"%s\n"%value_and_percentages(count, [summ.full_read_count, summ.aligned_incl_removed]))
-            OUTPUT.write(line_prefix+"Remaining aligned reads (fraction of total, fraction of all aligned): "
+            OUTPUT.write(line_prefix+"Remaining aligned reads (% of total, % of all aligned): "
                          +"%s\n"%value_and_percentages(summ.aligned_read_count, 
                                                        [summ.full_read_count, summ.aligned_incl_removed]))
-        OUTPUT.write(line_prefix+"Perfectly aligned reads, no mismatches (fraction of aligned): "
+        OUTPUT.write(line_prefix+"Perfectly aligned reads, no mismatches (% of aligned): "
                      +"%s\n"%value_and_percentages(summ.perfect_read_count, [summ.aligned_read_count]))
         for (strand,count) in summ.strand_read_counts.iteritems():
-            OUTPUT.write(line_prefix+"Reads with cassette direction matching chromosome %s strand (fraction of aligned): "
-                                                                                                                 %strand
+            OUTPUT.write(line_prefix+"Reads with cassette direction matching chromosome %s strand (%% of aligned): "%strand
                          +"%s\n"%value_and_percentages(count, [summ.aligned_read_count]))
         for (region,count) in sorted(summ.specific_region_read_counts.iteritems()):
-            OUTPUT.write(line_prefix+"Reads aligned to %s (fraction of aligned): "%region
+            OUTPUT.write(line_prefix+"Reads aligned to %s (%% of aligned): "%region
                          +"%s\n"%value_and_percentages(count, [summ.aligned_read_count]))
         # MAYBE-TODO keep track of the count of separate mutants in each category, as well as total read counts?
         OUTPUT.write(header_prefix+"Distinct mutants (read groups) by cassette insertion position: %s\n"%(len(self)))
@@ -1333,29 +1331,28 @@ class Insertional_mutant_pool_dataset():
         # MAYBE-TODO may also be a good idea to keep track of the most common SEQUENCE, not just mutant...
         # print the gene annotation info, but only if there is any
         if summ.mutants_in_genes + summ.mutants_not_in_genes + summ.mutants_undetermined:
-            OUTPUT.write(line_prefix+"Mutant cassettes with unknown gene info (probably cassette-mapped) (fraction of total): "
+            OUTPUT.write(line_prefix+"Mutant cassettes with unknown gene info (probably cassette-mapped) (% of total): "
                          +"%s\n"%value_and_percentages(summ.mutants_undetermined, [len(self)]))
             # MAYBE-TODO keep track of WHICH chromosomes have no gene info, and maybe how many mutants each?
-            OUTPUT.write(line_prefix+"Mutant cassettes in intergenic spaces (fraction of total, fraction of known): "
+            OUTPUT.write(line_prefix+"Mutant cassettes in intergenic spaces (% of total, % of known): "
                          +"%s\n"%value_and_percentages(summ.mutants_not_in_genes, 
                                                        [len(self), summ.mutants_not_in_genes+summ.mutants_in_genes]))
-            OUTPUT.write(header_prefix+"Mutant cassettes inside genes (fraction of total, fraction of known): "
+            OUTPUT.write(header_prefix+"Mutant cassettes inside genes (% of total, % of known): "
                          +"%s\n"%value_and_percentages(summ.mutants_in_genes, 
                                                        [len(self), summ.mutants_not_in_genes+summ.mutants_in_genes]))
             for (orientation,count) in sorted(summ.mutant_counts_by_orientation.items(),reverse=True):
-                OUTPUT.write(line_prefix+"Mutant cassettes in %s orientation to gene (fraction of ones in genes): "
-                                                                                                         %orientation
+                OUTPUT.write(line_prefix+"Mutant cassettes in %s orientation to gene (%% of ones in genes): "%orientation
                              +"%s\n"%value_and_percentages(count, [summ.mutants_in_genes]))
             # custom order for features to make it easier to read: CDS, intron, UTRs, everything else alphabetically after
             # MAYBE-TODO also give print_summary an option for merge_confusing_features arg to nicer_gene_feature_counts?
             for (feature,count) in summ.nicer_gene_feature_counts(merge_boundary_features):
-                OUTPUT.write(line_prefix+"Mutant cassettes in gene feature %s (fraction of ones in genes): "%feature
+                OUTPUT.write(line_prefix+"Mutant cassettes in gene feature %s (%% of ones in genes): "%feature
                              +"%s\n"%value_and_percentages(count, [summ.mutants_in_genes]))
             all_genes = set([mutant.gene for mutant in self]) - set(SPECIAL_GENE_CODES.all_codes)
-            OUTPUT.write(header_prefix+"Genes containing a mutant (fraction of all genes): "
+            OUTPUT.write(header_prefix+"Genes containing a mutant (% of all genes): "
                          +"%s\n"%value_and_percentages(len(all_genes), [summ.total_genes]))
             genes_in_multiple_mutants = sum([len(genes) for N,genes in self.gene_dict_by_mutant_number.items() if N>1])
-            OUTPUT.write(line_prefix+"Genes containing at least two mutants (fraction of all genes): "
+            OUTPUT.write(line_prefix+"Genes containing at least two mutants (% of all genes): "
                          +"%s\n"%value_and_percentages(genes_in_multiple_mutants, [summ.total_genes]))
             # MAYBE-TODO put some kind of maximum on this or collapse into ranges rather than listing all the numbers?
             for (mutantN, geneset) in sorted(self.gene_dict_by_mutant_number.iteritems()):
@@ -1364,7 +1361,7 @@ class Insertional_mutant_pool_dataset():
                     if len(geneset)<=N_genes_to_print:  genelist_string = ' (%s)'%genelist_to_print
                     else:                               genelist_string = ' (%s, ...)'%genelist_to_print
                 else:                                   genelist_string = ''
-                OUTPUT.write(line_prefix+"Genes with %s mutants (fraction of all genes): "%mutantN
+                OUTPUT.write(line_prefix+"Genes with %s mutants (%% of all genes): "%mutantN
                              +"%s\n"%value_and_percentages(len(geneset), [summ.total_genes])
                              +line_prefix+"   %s\n"%(genelist_string))
             # TODO-NEXT Add some measure of mutations, like how many mutants have <50% perfect reads (or something - the number should probably be a command-line option).  Maybe how many mutants have <20%, 20-80%, and >80% perfect reads (or 10 and 90, or make that a variable...)
