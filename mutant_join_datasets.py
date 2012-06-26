@@ -150,7 +150,7 @@ def run_main_function(infiles, outfile, options):
     multi_dataset.dataset_order = dataset_names
     # print varying amounts of summary data to stdout
     if options.verbosity_level>0:   print "total %s mutants present in combined dataset"%(len(multi_dataset))
-    elif options.verbosity_level>1: multi_dataset.print_summary()
+    elif options.verbosity_level>0: multi_dataset.print_summary()
 
     ### optionally remove mutants based on another dataset
     if options.remove_mutants_from_file:
@@ -170,9 +170,8 @@ def run_main_function(infiles, outfile, options):
         print "printing combined dataset output to file %s - time %s."%(outfile, time.ctime())
     with open(outfile,'w') as OUTFILE:
         write_header_data(OUTFILE,options)
-        # TODO implement summary-printing for multi-datasets first!
-        #OUTFILE.write("### SUMMARY:\n")
-        #multi_dataset.print_summary()
+        OUTFILE.write("### DATASET SUMMARIES:\n")
+        multi_dataset.print_summary(OUTPUT=OUTFILE, line_prefix="#  ", header_prefix="## ")
         OUTFILE.write("### HEADER AND DATA:\n")
         multi_dataset.print_data(OUTPUT=OUTFILE, sort_data_by=options.sort_data_key, header_line=True)
 
