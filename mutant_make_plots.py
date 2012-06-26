@@ -153,10 +153,12 @@ def plot_all_correlations(all_data, plot_scale, figname, print_correlation=False
     N_samples = len(sample_names)
     if mutants_to_color:    colors = [mutants_to_color[tuple(mutant_line[:3])] for mutant_line in mutant_data]
     else:                   colors = ['k' for mutant_line in mutant_data]
-    # TODO might want plotsize to be an option, along with default dotsize
+    # TODO might want plotsize to be an option, along with default dotsize, and maybe dpi?  Does the dpi even do anything?
     plotsize = 4
+    dotsize = 1
+    # TODO does the dpi here even do anything??  not sure - as far as the final image it's the savefig dpi that matters.
     # TODO make all the subplots square!!  Using "(plotsize*(N_samples+0.1), plotsize*N_samples)" is close but not exact
-    fig = mplt.figure(figsize=(plotsize*(N_samples+0.1), plotsize*N_samples), dpi=200)
+    fig = mplt.figure(figsize=(plotsize*(N_samples+0.1), plotsize*N_samples), dpi=300)
     if print_correlation=='none':        correlation_info = ''
     elif print_correlation=='spearman':  correlation_info = '\n\'corr\' = Spearman rank correlation.'
     elif print_correlation=='pearson':   correlation_info = '\n\'corr\' = Pearson\'s correlation coefficient.'
@@ -203,7 +205,7 @@ def plot_all_correlations(all_data, plot_scale, figname, print_correlation=False
                     print "Warning: overwriting any colors set with -C/M/B/G/R options due to grey_out_min being set!"
                 colors = [('k' if x>=grey_out_min and y>=grey_out_min else '0.6') for x,y in zip(sample_i,sample_j)]
             # note: i is on the y axis, j on the x axis, to make it fit the label below
-            mplt.scatter(sample_j, sample_i, s=2, c=colors, edgecolors='none')
+            mplt.scatter(sample_j, sample_i, s=dotsize, c=colors, edgecolors='none')
             ### setting up the axis scale, ticks and tick labels - cosmetic stuff
             max_i = max(sample_i);  min_i = min(sample_i)
             max_j = max(sample_j);  min_j = min(sample_j)
@@ -274,7 +276,9 @@ def plot_all_correlations(all_data, plot_scale, figname, print_correlation=False
 def savefig(fig,figname,figtype='png'):
     """ Save fig (should be a matplotlib figure object) as file named figname.figtype. """
     mplt.figure(fig.number) # activate fig to save and close it
-    mplt.savefig(figname+'.'+figtype,bbox_inches='tight',pad_inches=0.5)
+    # TODO dpi should probably be a command-line option!  Careful - higher size/dpi takes a LOT of memory!
+    # 
+    mplt.savefig(figname+'.'+figtype,bbox_inches='tight',pad_inches=0.5, dpi=300)
     mplt.close()
 
 
@@ -371,7 +375,7 @@ def get_mutant_colors(color_cassette_mutants=False, color_mutants_from_files={},
     """
     # TODO write somewhere on the plot what the colors mean!
     if color_cassette_mutants:
-        default_color_function = lambda pos_data: grey_color if pos_data[0]=='insertion_cassette' else 'black'
+        default_color_function = lambda pos_data: grey_color if is_cassette(pos_data[0]) else 'black'
         if verbose:
             print "insertion_cassette mutants will be colored grey (%s)"%(grey_color)
     else:
@@ -439,8 +443,8 @@ def main_functionality(infile, options=None):
     # TODO this is ridiculously slow sometimes!  Doing it with several files on the whole-genome library takes up a lot of memory, apparently.  Might be better to rewrite it to only read the files it's currently using, one or two at a time?  It'll be slower but use less memory.  (make it an option, maybe?)
     for (figscale,suffix) in graph_scales:
         if not options.graph_type=='dist':
-            figname = options.outfile_prefix + ('growthrate_correlations' if options.growthrate_infiles 
-                                                else 'readcount_correlations')
+            figname = options.outfile_prefix + ('growthrate' if options.growthrate_infiles 
+                                                else 'readcount')
             fig = plot_all_correlations(all_data, figscale, figname, 
                                         options.print_correlations, mutants_to_color=mutant_to_color)
             savefig(fig, figname+suffix, options.graph_format)
