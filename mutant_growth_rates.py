@@ -15,8 +15,9 @@ from collections import defaultdict
 # other packages
 from numpy import log2, mean, median, std, isnan, isinf
 # my modules
-from parse_annotation_file import parse_gene_annotation_file
+import mutant_analysis_classes
 import mutant_join_datasets
+from parse_annotation_file import parse_gene_annotation_file
 
 
 def define_option_parser():
@@ -165,11 +166,10 @@ def _print_growthrate_data_tmp(multi_dataset, T0_name, T1_name, OUTPUT=sys.stdou
         OUTPUT.write('\n')
 
 
-def _read_growthrate_data_from_file_tmp(self, infile, assume_new_sequences=False):
+def _read_growthrate_data_from_file_tmp(infile, assume_new_sequences=False):
     # modified copy of Insertional_mutant_pool_dataset.read_data_from_file - TODO replace this with something with less repetition!
-    if self.multi_dataset:  raise MutantError("read_data_from_file not implemented for multi-datasets!")
+    dataset = mutant_analysis_classes.Insertional_mutant_pool_dataset()
     for line in open(infile):
-        # LATER-TODO get unaligned/discarded/etc read count from summary, so we can keep track of full counts!
         # ignore comment and header lines, parse other tab-separated lines into values
         if line.startswith('#'):                                        continue
         # this is needed only when reading test reference files
@@ -181,33 +181,18 @@ def _read_growthrate_data_from_file_tmp(self, infile, assume_new_sequences=False
         min_pos = int(fields[2])
         full_pos = fields[3]
         gene, orientation, gene_feature = fields[4:7]
-        total_reads,perfect_reads,sequence_variants = [int(x) for x in fields[7:10]]
+        main_sequence = fields[7]
+        growth_rate = float(fields[8])
+        reads_T0, reads_T1 = map(int, fields[9:11])
+        annotation_data = fields[11:]
         # generate new mutant if necessary; add counts and gene info to mutant (USE IMMUTABLE POSITIONS BY DEFAULT)
-        position = Insertion_position(chromosome, strand, full_position=full_pos, immutable=True)
-        curr_mutant = self.get_mutant(position)
-        curr_mutant.add_counts(total_reads,perfect_reads,sequence_variants,assume_new_sequences)
+        position = mutant_analysis_classes.Insertion_position(chromosome, strand, full_position=full_pos, immutable=True)
+        curr_mutant = dataset.get_mutant(position)
         curr_mutant.update_gene_info(gene, orientation, gene_feature)
-        # get however many specific sequences/counts are listed (this is variable)
-        sequence_fields = fields[10::2]
-        count_fields = fields[11::2]
-        for seq, count in zip(sequence_fields, count_fields):
-            if int(count)>0:
-                assert seq!=''
-                curr_mutant.sequences_and_counts[seq] += int(count)
-        # add to dataset total read/mutant counts
-        # MAYBE-TODO Might just want to write a function that recalculates all of the total counts below, to be ran at the end of read_data_from_file and add_alignment_reader_to_data and I guess find_genes_for_mutants, instead of doing it this way
-        summ = self.summary
-        summ.processed_read_count += total_reads
-        summ.aligned_read_count += total_reads
-        summ.perfect_read_count += perfect_reads
-        summ.strand_read_counts[strand] += total_reads
-        if gene==SPECIAL_GENE_CODES.not_found:        summ.mutants_not_in_genes += 1
-        elif gene in SPECIAL_GENE_CODES.all_codes:    summ.mutants_undetermined += 1  # the two codes beside not_found
-        else:                                         summ.mutants_in_genes += 1
-        if orientation not in ['?','-']:              summ.mutant_counts_by_orientation[orientation] += 1
-        if gene_feature not in ['?','-']:             summ.mutant_counts_by_feature[gene_feature] += 1
-    # TODO update to deal with gene annotation fields?-
-    
+        # TODO currently not putting the read-counts or annotation info or main sequence into the mutant object at all
+        # TODO just making a new growth_rate field for the mutant
+        curr_mutant.growth_rate = growth_rate
+    return dataset
 
 
 def do_test_run():
