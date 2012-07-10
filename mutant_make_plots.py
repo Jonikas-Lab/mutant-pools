@@ -375,7 +375,7 @@ def get_mutant_colors(color_cassette_mutants=False, color_mutants_from_files={},
     """
     # TODO write somewhere on the plot what the colors mean!
     if color_cassette_mutants:
-        default_color_function = lambda pos_data: grey_color if is_cassette(pos_data[0]) else 'black'
+        default_color_function = lambda pos_data: grey_color if is_cassette_chromosome(pos_data[0]) else 'black'
         if verbose:
             print "insertion_cassette mutants will be colored grey (%s)"%(grey_color)
     else:

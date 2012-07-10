@@ -36,12 +36,19 @@ class MutantError(Exception):
     pass
 
 
-def is_cassette(chromosome_name):
+def is_cassette_chromosome(chromosome_name):
     """ Returns True if chromosome_name sounds like one of our insertion cassettes, False otherwise. """
     return ("insertion_cassette" in chromosome_name)
-    # MAYBE-TODO may want to put this under command-line user control someday?  The most general way would probably be 
-    #  a choice of two command-line options, one providing a cassette name regex string, 
-    #  and one a list of full cassette chromosome names - users can use whichever one they want.
+
+def is_other_chromosome(chromosome_name):
+    """ Returns True if chromosome_name is neither cassette nor chromosome/scaffold, False otherwise. """
+    if is_cassette_chromosome(chromosome_name):
+        return False
+    if chromosome_name.startswith('chr') or chromosome_name.startswith('scaffold'):
+        return False
+    return True
+
+# MAYBE-TODO may want to put the is_*_chromosome functionality under command-line user control someday?  Provide option to give list of cassette chromosome names and "other" ones (or cassette ones and prefixes for genomic ones?)
 
 
 # MAYBE-TODO it might be good to split this file into multiple files at some point?  At least Insertion_position/etc.
@@ -757,18 +764,20 @@ class Insertional_mutant():
 
     # MAYBE-TODO should there be a copy_mutant function to make a deepcopy?
 
+
 class Dataset_summary_data():
     """ Summary data for a Insertional_mutant_pool_dataset object.  Lots of obvious attributes; no non-default methods.
     """
     # LATER-TODO update docstring
 
-    def __init__(self, cassette_end, reads_are_reverse):
-        """ Initialize everything to 0/empty/unknown. """
+    def __init__(self, mutants, cassette_end, reads_are_reverse):
+        """ Initialize everything to 0/empty/unknown; keep link to dataset's mutant list/generator for dynamic data. """
          # make sure the arguments are valid values
         if not cassette_end in SEQ_ENDS+['?']: 
             raise ValueError("The cassette_end variable must be one of %s or '?'!"%SEQ_ENDS)
         if not reads_are_reverse in [True,False,'?']: 
             raise ValueError("The reads_are_reverse variable must be True, False, or '?'!")
+        self._mutants = mutants
         # read count information
         self.discarded_read_count = 'unknown'
         self.ignored_region_read_counts = defaultdict(lambda: 0)
@@ -806,6 +815,26 @@ class Dataset_summary_data():
     def aligned_incl_removed(self):
         return self.aligned_read_count + sum(self.ignored_region_read_counts.values())
 
+    @property
+    def all_chromosomes(self):
+        return set(mutant.position.chromosome for mutant in self._mutants)
+        # MAYBE-TODO might be more efficient with a reduce, to avoid storing full list?
+
+    @property
+    def non_genome_chromosomes(self):
+        return set(chrom for chrom in self.all_chromosomes if is_cassette_chromosome(chrom) or is_other_chromosome(chrom))
+        # MAYBE-TODO might be more efficient with a reduce, to avoid storing full list?
+
+    def reads_in_chromosome(self,chromosome):
+        """ Return total number of reads in given chromosome."""
+        return sum(m.get_readcount_by_dataset(self._dataset_name) for m in self._mutants)
+        # TODO unit-test
+
+    def mutants_in_chromosome(self,chromosome):
+        """ Return total number of mutants in given chromosome."""
+        return len(m for m in self._mutants if m.get_readcount_by_dataset(self._dataset_name))
+        # TODO unit-test
+
     def merged_gene_feature_counts(self, merge_boundary_features=True, merge_confusing_features=False):
         """ Return (gene_feature,count) list, biologically sorted, optionally with all "boundary" features counted as one.
 
@@ -823,7 +852,7 @@ class Dataset_summary_data():
             elif '/' in feature and merge_boundary_features:  merged_feature_count_dict['boundary'] += count
             else:                                             merged_feature_count_dict[feature] += count
         return merged_feature_count_dict
-    # TODO unit-test
+        # TODO unit-test
 
 
 class Insertional_mutant_pool_dataset():
@@ -853,7 +882,7 @@ class Insertional_mutant_pool_dataset():
         """ Initializes empty dataset; saves properties as provided; optionally reads data from mutant infile. """
         # _mutants_by_position is the main data structure here, but it's also private:
         #      see "METHODS FOR EMULATING A CONTAINER TYPE" section below for proper ways to interact with mutants.
-        #   the single mutants should be single-dataset by default, or multi-dataset if the parent dataset is.
+        #   the single mutants should be single-dataset by default, or multi-dataset if the containing dataset is.
         self._mutants_by_position = keybased_defaultdict(lambda pos: Insertional_mutant(insertion_position=pos, 
                                                                 multi_dataset=multi_dataset, readcount_related_only=False))
         # other arrangements of the same basic mutant set
@@ -861,9 +890,9 @@ class Insertional_mutant_pool_dataset():
         # various dataset summary data - single for a single dataset, a dictionary for a multi-dataset object.
         self.multi_dataset = multi_dataset
         if not multi_dataset:
-            self.summary = Dataset_summary_data(cassette_end, reads_are_reverse)
+            self.summary = Dataset_summary_data(self.mutants_in_dataset(), cassette_end, reads_are_reverse)
         else:
-            self.summary = defaultdict(lambda: Dataset_summary_data(cassette_end, reads_are_reverse))
+            self.summary = {}
         # data that's NOT related to a particular dataset
         # TODO should probably merge self.gene_annotation_header with summary in some sensible way, or something, hmm...
         self.gene_annotation_header = []
@@ -969,14 +998,14 @@ class Insertional_mutant_pool_dataset():
             position = get_insertion_pos_from_HTSeq_read_pos(aln.iv, summ.cassette_end, summ.reads_are_reverse, 
                                                              immutable_position=True)
             # if read is aligned to cassette and should be ignored, add to the right count and skip to the next read
-            if ignore_cassette and is_cassette(position.chromosome):
+            if ignore_cassette and is_cassette_chromosome(position.chromosome):
                 summ.ignored_region_read_counts[position.chromosome] += read_count
                 continue
             # if read is aligned to anything else, add to aligned count, strand counts etc
             summ.aligned_read_count += read_count
             summ.strand_read_counts[position.strand] += read_count
             # MAYBE-TODO do I want info on how many reads were aligned to which strand for the cassette or even all chromosomes?  Maybe optionally...  And how many were perfect, and how many mutants there were... Might want to write a separate class or function just for this.  If so, should output it in a tabular format, with all the different data (reads, +, -, perfect, ...) printed tab-separated in one row.
-            if count_cassette and is_cassette(position.chromosome):
+            if count_cassette and is_cassette_chromosome(position.chromosome):
                 summ.specific_region_read_counts[position.chromosome] += read_count
             # grab the right mutant based on the position, and add the reads to it; 
             #  add_read also returns True if alignment was perfect, to add to dataset perfect_read_count
@@ -1076,8 +1105,9 @@ class Insertional_mutant_pool_dataset():
                                   +"Pass overwrite=True argument if you want to overwrite the previous data.")
 
             # copy source dataset summaries to own summary dict (by reference) 
-            self.summary[dataset_name] = dataset_object.summary
             # MAYBE-TODO should I deepcopy the summaries rather than just adding a reference to the same object?
+            self.summary[dataset_name] = dataset_object.summary
+            self.summary[dataset_name]._mutants = self.mutants_in_dataset(dataset_name)
 
             # Merge source dataset mutant data into own multi-dataset mutants
             #  (get_mutant will create new empty mutant if one doesn't exist)
@@ -1154,8 +1184,8 @@ class Insertional_mutant_pool_dataset():
             #   (since two same-strand same-position mutants would be indistinguishable)
             #  but do print a message, with a higher priority, because this situation is WEIRD really...
             if pos1.strand != pos2.strand and pos1.min_position==pos2.min_position:
-                if is_cassette(pos1.chromosome):   same_pos_opposite_strands_cassette += 1
-                else:                                   same_pos_opposite_strands_non_cassette += 1
+                if is_cassette_chromosome(pos1.chromosome): same_pos_opposite_strands_cassette += 1
+                else:                                       same_pos_opposite_strands_non_cassette += 1
                 OUTPUT.write("SAME-POSITION OPPOSITE-STRAND MUTANTS! STRANGE. %s and %s.\n"%(pos1,pos2))
                 continue
             # if the two positions are adjacent but on different strands, they can't be merged - count and skip
@@ -1262,7 +1292,7 @@ class Insertional_mutant_pool_dataset():
 
         # for mutants in chromosomes that weren't listed in the genefile, use special values
         for chromosome in set(mutants_by_chromosome.keys())-set(all_reference_chromosomes):
-            if not is_cassette(chromosome):
+            if not is_cassette_chromosome(chromosome):
                 print 'Warning: chromosome "%s" not found in genefile data!'%(chromosome)
             for mutant in mutants_by_chromosome[chromosome]:
                 mutant.gene,mutant.orientation,mutant.gene_feature = SPECIAL_GENE_CODES.chromosome_not_in_reference,'-','-'
