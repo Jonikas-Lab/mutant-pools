@@ -1,20 +1,20 @@
-<REGEX># Command line this file was generated with: mutant_count_alignments.py -T
+<REGEX># Command line this file was generated with: .*
 <REGEX># Path: .*
 <REGEX># Date: .*
 <REGEX># Full options: {.*}
 ### SUMMARY:
-## Total reads processed: 45
-#  Reads discarded in preprocessing (% of total): 5 (11%)
-#  Unaligned reads (% of total, % of post-preprocessing): 10 (22%, 25%)
-#  Aligned reads (% of total, % of post-preprocessing): 30 (67%, 75%)
-#  Perfectly aligned reads, no mismatches (% of aligned): 22 (73%)
-#  Reads with cassette direction matching chromosome + strand (% of aligned): 27 (90%)
-#  Reads with cassette direction matching chromosome - strand (% of aligned): 3 (10%)
-#  Reads aligned to insertion_cassette_X (% of aligned): 1 (3.3%)
-## Distinct mutants (read groups) by cassette insertion position: 17
-#  (read is at 5prime end of cassette, in forward direction to cassette)
-#  (average and median reads per mutant: 2, 1)
-#  Most common mutant: position [mutation_yes + 204-?], 6 reads (20% of aligned)
+## Total reads processed:	45
+#  Reads discarded in preprocessing (% of total):	5 (11%)
+#  Unaligned reads (% of total, % of post-preprocessing):	10 (22%, 25%)
+#  Aligned reads (% of total, % of post-preprocessing):	30 (67%, 75%)
+#  Perfectly aligned reads, no mismatches (% of aligned):	22 (73%)
+#  Reads with cassette direction matching chromosome + strand (% of aligned):	27 (90%)
+#  Reads with cassette direction matching chromosome - strand (% of aligned):	3 (10%)
+#  Reads aligned to insertion_cassette_X (% of aligned):	1 (3.3%)
+## Distinct mutants (read groups) by cassette insertion position:	17
+#  (read location with respect to cassette: which end, which direction):	(5prime, forward)
+#  (average and median reads per mutant):	(2, 1)
+#  Most common mutant(s): reads (% of aligned) (position or count):	6 (20%) (mutation_yes + 204-?)
 ### HEADER AND DATA:
 # chromosome	strand	min_position	full_position	gene	orientation	feature	total_reads	perfect_reads	N_sequence_variants	read_sequence_1	seq_1_count	read_sequence_2	seq_2_count	read_sequence_3	seq_3_count
 mutation_yes	+	204	204-?	gene_unknown	?	?	6	0	1	AAAA	6		0		0

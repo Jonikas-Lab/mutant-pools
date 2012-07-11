@@ -1,20 +1,20 @@
-<REGEX># Command line this file was generated with: mutant_count_alignments.py -T
+<REGEX># Command line this file was generated with: .*
 <REGEX># Path: .*
 <REGEX># Date: .*
 <REGEX># Full options: {.*}
 ### SUMMARY:
-## Total reads processed: 80+unknown
-#  Reads discarded in preprocessing (% of total): unknown (unknown)
-#  Unaligned reads (% of total, % of post-preprocessing): 10 (12%, 12%)
-#  Aligned reads (% of total, % of post-preprocessing): 70 (88%, 88%)
-#  Perfectly aligned reads, no mismatches (% of aligned): 62 (89%)
-#  Reads with cassette direction matching chromosome + strand (% of aligned): 65 (93%)
-#  Reads with cassette direction matching chromosome - strand (% of aligned): 5 (7.1%)
-#  Reads aligned to insertion_cassette_X (% of aligned): 1 (1.4%)
-## Distinct mutants (read groups) by cassette insertion position: 57
-#  (read is at 5prime end of cassette, in forward direction to cassette)
-#  (average and median reads per mutant: 1, 1)
-#  Most common mutant: position [mutation_yes + 204-?], 6 reads (9% of aligned)
+## Total reads processed:	80+unknown
+#  Reads discarded in preprocessing (% of total):	unknown (unknown)
+#  Unaligned reads (% of total, % of post-preprocessing):	10 (12%, 12%)
+#  Aligned reads (% of total, % of post-preprocessing):	70 (88%, 88%)
+#  Perfectly aligned reads, no mismatches (% of aligned):	62 (89%)
+#  Reads with cassette direction matching chromosome + strand (% of aligned):	65 (93%)
+#  Reads with cassette direction matching chromosome - strand (% of aligned):	5 (7.1%)
+#  Reads aligned to insertion_cassette_X (% of aligned):	1 (1.4%)
+## Distinct mutants (read groups) by cassette insertion position:	57
+#  (read location with respect to cassette: which end, which direction):	(5prime, forward)
+#  (average and median reads per mutant):	(1, 1)
+#  Most common mutant(s): reads (% of aligned) (position or count):	6 (8.6%) (mutation_yes + 204-?)
 ### HEADER AND DATA:
 # chromosome	strand	min_position	full_position	gene	orientation	feature	total_reads	perfect_reads	N_sequence_variants
 chromosome_A	+	20	20-?	gene_unknown	?	?	1	1	1

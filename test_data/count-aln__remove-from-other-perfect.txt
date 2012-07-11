@@ -1,19 +1,19 @@
-<REGEX># Command line this file was generated with: mutant_count_alignments.py -T
+<REGEX># Command line this file was generated with: .*
 <REGEX># Path: .*
 <REGEX># Date: .*
 <REGEX># Full options: {.*}
 ### SUMMARY:
-## Total reads processed: 40+unknown
-#  Reads discarded in preprocessing (% of total): unknown (unknown)
-#  Unaligned reads (% of total, % of post-preprocessing): 0 (0%, 0%)
-#  Aligned reads (% of total, % of post-preprocessing): 40 (100%, 100%)
-#  Perfectly aligned reads, no mismatches (% of aligned): 40 (100%)
-#  Reads with cassette direction matching chromosome + strand (% of aligned): 38 (95%)
-#  Reads with cassette direction matching chromosome - strand (% of aligned): 2 (5%)
-## Distinct mutants (read groups) by cassette insertion position: 39
-#  (read is at 5prime end of cassette, in forward direction to cassette)
-#  (average and median reads per mutant: 1, 1)
-#  Found 39 most common mutants, each with 1 reads (2% of aligned)
+## Total reads processed:	40+unknown
+#  Reads discarded in preprocessing (% of total):	unknown (unknown)
+#  Unaligned reads (% of total, % of post-preprocessing):	0 (0%, 0%)
+#  Aligned reads (% of total, % of post-preprocessing):	40 (100%, 100%)
+#  Perfectly aligned reads, no mismatches (% of aligned):	40 (100%)
+#  Reads with cassette direction matching chromosome + strand (% of aligned):	38 (95%)
+#  Reads with cassette direction matching chromosome - strand (% of aligned):	2 (5%)
+## Distinct mutants (read groups) by cassette insertion position:	39
+#  (read location with respect to cassette: which end, which direction):	(5prime, forward)
+#  (average and median reads per mutant):	(1, 1)
+#  Most common mutant(s): reads (% of aligned) (position or count):	1 (2.5%) (39 mutants)
 ### HEADER AND DATA:
 # chromosome	strand	min_position	full_position	gene	orientation	feature	total_reads	perfect_reads	N_sequence_variants
 chromosome_A	+	20	20-?	gene_unknown	?	?	1	1	1

@@ -1,22 +1,23 @@
-<REGEX># Command line this file was generated with: mutant_count_alignments.py -T
+<REGEX># Command line this file was generated with: .*
 <REGEX># Path: .*
 <REGEX># Date: .*
 <REGEX># Full options: {.*}
 ### SUMMARY:
-## Total reads processed: 25+unknown
-#  Reads discarded in preprocessing (% of total): unknown (unknown)
-#  Unaligned reads (% of total, % of post-preprocessing): 0 (0%, 0%)
-#  Aligned reads (% of total, % of post-preprocessing): 25 (100%, 100%)
-#  Perfectly aligned reads, no mismatches (% of aligned): 25 (100%)
-#  Reads with cassette direction matching chromosome + strand (% of aligned): 22 (88%)
-#  Reads with cassette direction matching chromosome - strand (% of aligned): 3 (12%)
-## Distinct mutants (read groups) by cassette insertion position: 13
-#  (read is at 5prime end of cassette, in forward direction to cassette)
-#  (average and median reads per mutant: 2, 1)
-#  merged 2 pairs of adjacent mutants (max distance 1, min count ratio 3) 
-#    (kept 1 pairs on same strand and 1 on opposite strands)
-#    (there were also 1 pairs in exact same position on different strands non-cassette (and 0 cassette))
-#  Most common mutant: position [chromosome_A + 100-?], 7 reads (28% of aligned)
+## Total reads processed:	25+unknown
+#  Reads discarded in preprocessing (% of total):	unknown (unknown)
+#  Unaligned reads (% of total, % of post-preprocessing):	0 (0%, 0%)
+#  Aligned reads (% of total, % of post-preprocessing):	25 (100%, 100%)
+#  Perfectly aligned reads, no mismatches (% of aligned):	25 (100%)
+#  Reads with cassette direction matching chromosome + strand (% of aligned):	22 (88%)
+#  Reads with cassette direction matching chromosome - strand (% of aligned):	3 (12%)
+## Distinct mutants (read groups) by cassette insertion position:	13
+#  (read location with respect to cassette: which end, which direction):	(5prime, forward)
+#  (average and median reads per mutant):	(2, 1)
+#  number of merged adjacent mutant pairs:	2
+#    (mutant merging max distance and min count ratio):	(1, 3)
+#    (remaining unmerged adjacent pairs, on same strand and opposite strands):	(1, 1)
+#    (pairs in exact same position on opposite strands, non-cassette and cassette):	(1, 0)
+#  Most common mutant(s): reads (% of aligned) (position or count):	7 (28%) (chromosome_A + 100-?)
 ### HEADER AND DATA:
 # chromosome	strand	min_position	full_position	gene	orientation	feature	total_reads	perfect_reads	N_sequence_variants
 <IGNORE> the 99-100-101 group should be merged (distance 1, ratio 5) (this constitutes two pairs)

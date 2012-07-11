@@ -1487,9 +1487,9 @@ class Insertional_mutant_pool_dataset():
                                                         [summ.mutants_in_genes]) ))
 
             # TODO how to get all_genes and genes_in_multiple_mutants and self.get_gene_dict_by_mutant_number() to work for multi-dataset?  Just generate them and stick them in summary?
-            _N_all_genes = lambda dataset: sum([N_mutants*len(genes) for N_mutants,genes 
+            _N_all_genes = lambda dataset: sum([len(genes) for N_mutants,genes 
                                                in self.get_gene_dict_by_mutant_number(dataset).items()])
-            _N_genes_in_multiple_mutants = lambda dataset: sum([N_mutants*len(genes) for N_mutants,genes 
+            _N_genes_in_multiple_mutants = lambda dataset: sum([len(genes) for N_mutants,genes 
                                                in self.get_gene_dict_by_mutant_number(dataset).items() if N_mutants>1])
             DVG.append((header_prefix+"Genes containing a mutant (% of all genes):", 
                         lambda summ,mutants,dataset: value_and_percentages(_N_all_genes(dataset), 
