@@ -23,7 +23,7 @@ TEST:2:1:8790:931#0/1	0	chromosome_A	298	255	4M	*	0	0	AAAA	____	XA:i:0	MD:Z:4	NM
 TEST:2:1:8790:931#0/1	0	chromosome_A	397	255	4M	*	0	0	AAAA	____	XA:i:0	MD:Z:4	NM:i:0
 TEST:2:1:8790:931#0/1	0	chromosome_A	402	255	4M	*	0	0	AAAA	____	XA:i:0	MD:Z:4	NM:i:0
 @
-@@@ different strands, same position (500) - should never be merged
+@@@ different strands, same position (500) - should be merged as opposite-strand tandem
 TEST:2:1:8790:931#0/1	0	chromosome_A	497	255	4M	*	0	0	AAAA	____	XA:i:0	MD:Z:4	NM:i:0
 TEST:2:1:8790:931#0/1	16	chromosome_A	501	255	4M	*	0	0	TTTT	____	XA:i:0	MD:Z:4	NM:i:0
 @

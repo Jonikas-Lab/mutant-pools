@@ -32,7 +32,7 @@ def do_test_run():
     aln_infile2 = "test_data/INPUT_alignment2_for-genes.sam"
     aln_infile3 = "test_data/INPUT_alignment3_for-merging.sam"
     gff_genefile = "test_data/INPUT_gene-data.gff3"
-    dataset_to_remove = "test_data/count-aln__merge-adjacent2-r3.txt"
+    dataset_to_remove = "test_data/INPUT_mutants_to_remove.txt"
 
     test_runs = [('cassette-end-5prime', "-e 5prime -r forward -U -n3", [aln_infile1]),
                  ('cassette-end-3prime', "-e 3prime -r forward -U -n3", [aln_infile1]),
@@ -41,17 +41,19 @@ def do_test_run():
                  ('dont-count-cassette', "-I -e 5prime -r forward -U -n3", [aln_infile1]),
                  ('ignore-cassette', "-i -e 5prime -r forward -U -n3", [aln_infile1]),
                  ('sorted-by-count', "-o read_count -e 5prime -r forward -U -n3", [aln_infile1]),
-                 ('with-gene-info_merged', "-e 5prime -r forward -U -g %s -d -n0"%gff_genefile, [aln_infile2]),
-                 ('with-gene-info_unmerged', "-B -e 5prime -r forward -g %s -d -n0"%gff_genefile, [aln_infile2]),
-                 ('multiple-infiles', "-e 5prime -r forward -U -n0", [aln_infile1,aln_infile2]),
+                 ('with-gene-info_merged', "-Q -e 5prime -r forward -U -g %s -d -n0"%gff_genefile, [aln_infile2]),
+                 ('with-gene-info_unmerged', "-B -Q -e 5prime -r forward -g %s -d -n0"%gff_genefile, [aln_infile2]),
+                 ('multiple-infiles', "-Q -e 5prime -r forward -U -n0", [aln_infile1,aln_infile2]),
+                 ('dont-merge-tandems', "-n0 -Q", [aln_infile3]),
                  ('merge-adjacent-none', "-n0", [aln_infile3]),
                  ('merge-adjacent1-r3', "-M --merge_max_distance=1 --merge_count_ratio=3 -n0", [aln_infile3]),
                  ('merge-adjacent1-r1', "-M --merge_max_distance=1 --merge_count_ratio=1 -n0", [aln_infile3]),
                  ('merge-adjacent2-r3', "-M --merge_max_distance=2 --merge_count_ratio=3 -n0", [aln_infile3]), 
-                 ('remove-from-other-all', "-X %s -n0"%dataset_to_remove, [aln_infile2]), 
-                 ('remove-from-other-min4', "-X %s -z4 -n0"%dataset_to_remove, [aln_infile2]), 
-                 ('remove-from-other-perfect', "-X %s -Z -z4 -n0"%dataset_to_remove, [aln_infile2]),
+                 ('remove-from-other-all', "-Q -X %s -n0"%dataset_to_remove, [aln_infile2]), 
+                 ('remove-from-other-min4', "-Q -X %s -z4 -n0"%dataset_to_remove, [aln_infile2]), 
+                 ('remove-from-other-perfect', "-Q -X %s -Z -z4 -n0"%dataset_to_remove, [aln_infile2]),
                 ]
+    # MAYBE-TODO change all the expected files to merge tandems, so I can remove -Q from all test runs except dont-merge-tandems?
     # MAYBE-TODO add run-test for --gene_annotation_file?
     # MAYBE-TODO add run-test for --input_collapsed_to_unique?  Or is that unit-tested already?
 
@@ -80,8 +82,8 @@ def define_option_parser():
     from optparse import OptionParser
     parser = OptionParser(__doc__)
 
-    # taken:     aAbBcCdDe---g-h-iI------mMn-o---q-r---tTuUvVwWxX-YzZ  
-    # free:      ---------EfF-G-H--jJkKlL---N-OpP-Q-RsS----------y---  
+    # taken:     aAbBcCdDe---g-h-iI------mMn-o---qQr---tTuUvVwWxX-YzZ  
+    # free:      ---------EfF-G-H--jJkKlL---N-OpP---RsS----------y---  
 
     ### test options
     parser.add_option('-t','--test_functionality', action='store_true', default=False, 
@@ -104,6 +106,10 @@ def define_option_parser():
                       help="For -M: merge mutants only if they're at most N bases distant (default %default)")
     parser.add_option('-W', '--merge_count_ratio', type='int', default=1000, metavar='K',
                       help="For -M: merge mutants only if one has K x fewer reads than the other (default %default)")
+    parser.add_option('-Q', '--dont_merge_tandems', action="store_true", default=False,
+                      help="DON'T merge mutants on opposite strands same position (tail-to-tail-tandems) "
+                          +"(if False, tandem mutants ARE merged) (default %default)")
+    # TODO or should I not merge tandems by default?
     parser.add_option('-O', '--mutant_merging_outfile', default='AUTO', metavar='FILE|AUTO',
                       help="Print mutant-merging info to FILE (default AUTO - file will be based on outfile name)")
 
@@ -259,10 +265,15 @@ def main(infiles, outfile, options):
                                                         ignore_cassette = options.ignore_cassette)
 
     ### optionally merge adjacent mutants (since they're probably just artifacts of indels during deepseq)
-    if options.merge_adjacent_mutants: 
-        with open(options.mutant_merging_outfile, 'w') as OUTFILE:
+    if options.merge_adjacent_mutants or not options.dont_merge_tandems: 
+        # TODO should put a header on OUTFILE! And a header line giving the main outfile name; and also give the main outfile a header line saying that the mutant merging info is in options.mutant_merging_outfile,
+        # if all we're doing is merging tandems, we don't really need a merging-info outfile (MAYBE-TODO or do we?)
+        if options.merge_adjacent_mutants: merging_outfile = options.mutant_merging_outfile
+        else:                              merging_outfile = os.devnull
+        with open(merging_outfile, 'w') as OUTFILE:
             all_alignment_data.merge_adjacent_mutants(merge_max_distance = options.merge_max_distance, 
                                                       merge_count_ratio = options.merge_count_ratio, 
+                                                      merge_opposite_strand_tandems = (not options.dont_merge_tandems),
                                                       dont_change_positions = True, 
                                                       OUTPUT = OUTFILE)
 
