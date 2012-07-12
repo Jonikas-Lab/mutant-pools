@@ -1531,7 +1531,7 @@ class Insertional_mutant_pool_dataset():
                                                         [summ.mutants_in_genes]) ))
 
             _N_all_genes = lambda dataset: sum([len(genes) for N_mutants,genes 
-                                               in self.get_gene_dict_by_mutant_number(dataset).items()])
+                                               in self.get_gene_dict_by_mutant_number(dataset).items() if N_mutants>0])
             _N_genes_in_multiple_mutants = lambda dataset: sum([len(genes) for N_mutants,genes 
                                                in self.get_gene_dict_by_mutant_number(dataset).items() if N_mutants>1])
             DVG.append((header_prefix+"Genes containing a mutant (% of all genes):", 
