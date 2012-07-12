@@ -803,7 +803,7 @@ class Dataset_summary_data():
         # read count information
         self.discarded_read_count = 'unknown'
         self.ignored_region_read_counts = defaultdict(lambda: 0)
-        self.processed_read_count, self.aligned_read_count, self.unaligned_read_count, self.perfect_read_count = 0,0,0,0
+        self.aligned_read_count, self.unaligned_read_count, self.perfect_read_count = 0,0,0
         self.strand_read_counts = defaultdict(lambda: 0)
         self.specific_region_read_counts = defaultdict(lambda: 0)
         # mutant count information
@@ -820,6 +820,11 @@ class Dataset_summary_data():
         self.reads_are_reverse = reads_are_reverse
         # annotation-related information - TODO should this even be here, or somewhere else?
         self.total_genes_in_genome = 0
+
+    @property
+    def processed_read_count(self):
+        """ Aligned+unaligned read count. """
+        return self.aligned_read_count + self.unaligned_read_count
 
     @property
     def full_read_count(self):
@@ -1011,7 +1016,6 @@ class Insertional_mutant_pool_dataset():
         for aln in HTSeq_alignment_reader:
             if uncollapse_read_counts:      read_count = get_seq_count_from_collapsed_header(aln.read.name)
             else:                           read_count = 1
-            summ.processed_read_count += read_count
             # if read is unaligned, add to unaligned count and skip to the next read
             if (not aln.aligned) or (aln.iv is None):
                 summ.unaligned_read_count += read_count
@@ -1046,12 +1050,36 @@ class Insertional_mutant_pool_dataset():
         """
         if self.multi_dataset:  raise MutantError("read_data_from_file not implemented for multi-datasets!")
         for line in open(infile):
-            # LATER-TODO get unaligned/discarded/etc read count from summary, so we can keep track of full counts!
-            # ignore comment and header lines, parse other tab-separated lines into values
-            if line.startswith('#'):                                        continue
-            # this is needed only when reading test reference files
+            # try to extract info from the comment lines that can't be reproduced from the data, ignore the rest
+            if line.startswith('#'):                                        
+                line = line.strip('#').strip()
+                if line.startswith("Reads discarded in preprocessing"):
+                    data = line.split('\t')[-1].split(' ')[0]
+                    try:                data = int(data)
+                    except ValueError:  pass
+                    self.summary.discarded_read_count = data
+                if line.startswith("Unaligned reads"):
+                    data = line.split('\t')[-1].split(' ')[0]
+                    try:                data = int(data)
+                    except ValueError:  pass
+                    self.summary.unaligned_read_count = data
+                if line.startswith("(read location with respect to cassette: which end, which direction)"):
+                    data = line.split('\t')[-1].strip('()').split(', ')
+                    self.summary.cassette_end = data[0]
+                    self.summary.reads_are_reverse = {'reverse':True, 'forward':False, '?':'?'}[data[1]]
+                if line.startswith("(total genes in genome annotation data)"):
+                    data = line.split('\t')[-1].strip('()')
+                    try:                data = int(data)
+                    except ValueError:  pass
+                    self.summary.total_genes_in_genome = data
+                # MAYBE-TODO what other information do we want?
+                # MAYBE-TODO refactor this somehow so the line contents aren't just constants?
+                # TODO add this summary-reading stuff to unit-test!
+                continue
+            # ignore special-comment and header lines, parse other tab-separated lines into values
             if line.startswith('<REGEX>#') or line.startswith('<IGNORE>'):  continue       
             if line.startswith('chromosome\tstrand\tmin_position\t'):       continue
+            # parse non-comment tab-separated lines into values
             fields = line.split('\t')
             chromosome = fields[0]
             strand = fields[1]
@@ -1074,7 +1102,6 @@ class Insertional_mutant_pool_dataset():
             # add to dataset total read/mutant counts
             # MAYBE-TODO Might just want to write a function that recalculates all of the total counts below, to be ran at the end of read_data_from_file and add_alignment_reader_to_data and I guess find_genes_for_mutants, instead of doing it this way
             summ = self.summary
-            summ.processed_read_count += total_reads
             summ.aligned_read_count += total_reads
             summ.perfect_read_count += perfect_reads
             summ.strand_read_counts[strand] += total_reads
@@ -1083,7 +1110,7 @@ class Insertional_mutant_pool_dataset():
             else:                                         summ.mutants_in_genes += 1
             if orientation not in ['?','-']:              summ.mutant_counts_by_orientation[orientation] += 1
             if gene_feature not in ['?','-']:             summ.mutant_counts_by_feature[gene_feature] += 1
-        # TODO update to deal with gene annotation fields?-
+        # TODO update to deal with gene annotation fields?
     
     def add_discarded_reads(self, N, reset_count=False):
         """ Add N to self.discarded_read_count (or set self.discarded_read_count to N if reset_count is True). """
