@@ -70,15 +70,7 @@ def define_option_parser():
     parser.add_option('-Z', '--remove_mutants_min_is_perfect', action='store_true', default=False,
                       help='When applying -X with -z M, compare M to perfect readcount, not total. (default %default).')
 
-    ### MAYBE-TODO add options to specify whether to show both total and perfect reads, or just one column?
-    # Not sure if there's any need for this - it's implemented in plotting.
-    #parser.set_defaults(which_reads='all')
-    #parser.add_option('-p', '--perfect_reads_only',   action='store_const', dest='which_reads', const='perfect', 
-    #                  help="Take only perfectly aligned read counts (default %default)")
-    #parser.add_option('-i', '--imperfect_reads_only', action='store_const', dest='which_reads', const='imperfect',
-    #                  help="Take only imperfectly aligned read counts (default %default)")
-    #parser.add_option('-a', '--all_reads',            action='store_const', dest='which_reads', const='all',
-    #                  help="Take total read counts (turns -p/-i off).")
+    # TODO add --dont_count_cassette and --dont_count_other options like in mutant_count_alignments.py? 
 
     ### MAYBE-TODO add options to specify which MUTANTS to include, based on:
     #   - whether they show up in any/all datasets etc

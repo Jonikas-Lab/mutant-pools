@@ -1,8 +1,35 @@
-<REGEX># Command line this file was generated with: mutant_join_datasets.py -T
+<REGEX># Command line this file was generated with: .*
 <REGEX># Path: .*
 <REGEX># Date: .*
 <REGEX># Full options: {.*}
-<IGNORE>### NO SUMMARY SECTION, CURRENTLY NOT IMPLEMENTED FOR MULTI-DATASETS
+### DATASET SUMMARIES:
+## DATASETS	INPUT_mutants1_no-genes	INPUT_mutants2_with-genes
+## Total reads processed:	12+unknown	14+unknown
+#  Reads discarded in preprocessing (% of total):	unknown (unknown)	unknown (unknown)
+#  Unaligned reads (% of total, % of post-preprocessing):	0 (0%, 0%)	0 (0%, 0%)
+#  Aligned reads (% of total, % of post-preprocessing):	12 (100%, 100%)	14 (100%, 100%)
+#  Perfectly aligned reads, no mismatches (% of aligned):	9 (75%)	11 (79%)
+#  Reads with cassette direction matching chromosome + strand (% of aligned):	8 (67%)	11 (79%)
+#  Reads with cassette direction matching chromosome - strand (% of aligned):	4 (33%)	3 (21%)
+## Distinct mutants (read groups) by cassette insertion position:	3	3
+#  (read location with respect to cassette: which end, which direction):	(?, ?)	(?, ?)
+#  (average and median reads per mutant):	(4, 4)	(5, 3)
+#  Most common mutant(s): reads (% of aligned) (position or count):	7 (58%) (chromosome_A + 100-?)	9 (64%) (chromosome_A + 100-?)
+#  Mutant cassettes with unknown gene info (probably cassette-mapped) (% of total):	3 (100%)	0 (0%)
+#  Mutant cassettes in intergenic spaces (% of total, % of known):	0 (0%, N/A)	0 (0%, 0%)
+## Mutant cassettes inside genes (% of total, % of known):	0 (0%, N/A)	3 (100%, 100%)
+#  Mutant cassettes in sense orientation to gene (% of ones in genes):	0 (N/A)	2 (67%)
+#  Mutant cassettes in antisense orientation to gene (% of ones in genes):	0 (N/A)	1 (33%)
+#  Mutant cassettes in gene feature CDS (% of ones in genes):	0 (N/A)	1 (33%)
+#  Mutant cassettes in gene feature five_prime_UTR (% of ones in genes):	0 (N/A)	1 (33%)
+#  Mutant cassettes in gene feature boundary (% of ones in genes):	0 (N/A)	1 (33%)
+## Genes containing a mutant (% of all genes):	2 (N/A)	3 (N/A)
+#  Genes containing at least two mutants (% of all genes):	0 (N/A)	0 (N/A)
+#    (total genes in genome annotation data):	(0)	(0)
+#  Genes with 0 mutants (% of all genes):	1 (N/A)	0 (N/A)
+#    (some gene names):	(gene3)	()
+#  Genes with 1 mutants (% of all genes):	2 (N/A)	3 (N/A)
+#    (some gene names):	(gene1, gene2)	(gene1, gene2, gene3)
 ### HEADER AND DATA:
 # chromosome	strand	min_position	full_position	gene	orientation	feature	main_sequence	reads_in_INPUT_mutants1_no-genes	perfect_in_INPUT_mutants1_no-genes	reads_in_INPUT_mutants2_with-genes	perfect_in_INPUT_mutants2_with-genes
 chromosome_A	+	100	100-?	gene1	sense	CDS/intron	AAAA	7	5	9	7

@@ -1,7 +1,3 @@
-<REGEX># Command line this file was generated with: mutant_count_alignments.py -T
-<REGEX># Path: .*
-<REGEX># Date: .*
-<REGEX># Full options: {.*}
 ### SUMMARY:
 ## Total reads processed: 25+unknown
 #  Reads discarded in preprocessing (% of total): unknown (unknown)
