@@ -15,6 +15,7 @@
 #  (read location with respect to cassette: which end, which direction):	(5prime, forward)
 #  (average and median reads per mutant):	(1, 1)
 #  Most common mutant(s): reads (% of aligned) (position or count):	6 (8.6%) (mutation_yes + 204-?)
+#  Mutant cassettes in insertion_cassette_X (% of total):	1 (1.8%)
 ### HEADER AND DATA:
 # chromosome	strand	min_position	full_position	gene	orientation	feature	total_reads	perfect_reads	N_sequence_variants
 chromosome_A	+	20	20-?	gene_unknown	?	?	1	1	1

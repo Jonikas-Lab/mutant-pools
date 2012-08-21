@@ -34,16 +34,16 @@ def do_test_run():
     gff_genefile = "test_data/INPUT_gene-data.gff3"
     dataset_to_remove = "test_data/INPUT_mutants_to_remove.txt"
 
-    test_runs = [('cassette-end-5prime', "-e 5prime -r forward -U -n3", [aln_infile1]),
-                 ('cassette-end-3prime', "-e 3prime -r forward -U -n3", [aln_infile1]),
-                 ('read-direction-reverse', "-r reverse -e 5prime -U -n3", [aln_infile1]),
-                 ('u_unknown-not-as-match', "-u -e 5prime -r forward -n3", [aln_infile1]),
-                 ('dont-count-cassette', "-I -e 5prime -r forward -U -n3", [aln_infile1]),
-                 ('ignore-cassette', "-i -e 5prime -r forward -U -n3", [aln_infile1]),
-                 ('sorted-by-count', "-o read_count -e 5prime -r forward -U -n3", [aln_infile1]),
+    test_runs = [('cassette-end-5prime', "-e 5prime -r forward -U -n3 -J", [aln_infile1]),
+                 ('cassette-end-3prime', "-e 3prime -r forward -U -n3 -J", [aln_infile1]),
+                 ('read-direction-reverse', "-r reverse -e 5prime -U -n3 -J", [aln_infile1]),
+                 ('u_unknown-not-as-match', "-u -e 5prime -r forward -n3 -J", [aln_infile1]),
+                 ('dont-count-cassette', "-I -e 5prime -r forward -U -n3 -J", [aln_infile1]),
+                 ('ignore-cassette', "-i -e 5prime -r forward -U -n3 -J", [aln_infile1]),
+                 ('sorted-by-count', "-o read_count -e 5prime -r forward -U -n3 -J", [aln_infile1]),
                  ('with-gene-info_merged', "-Q -e 5prime -r forward -U -g %s -d -n0"%gff_genefile, [aln_infile2]),
                  ('with-gene-info_unmerged', "-B -Q -e 5prime -r forward -g %s -d -n0"%gff_genefile, [aln_infile2]),
-                 ('multiple-infiles', "-Q -e 5prime -r forward -U -n0", [aln_infile1,aln_infile2]),
+                 ('multiple-infiles', "-Q -e 5prime -r forward -U -n0 -J", [aln_infile1,aln_infile2]),
                  ('dont-merge-tandems', "-n0 -Q", [aln_infile3]),
                  ('merge-adjacent-none', "-n0", [aln_infile3]),
                  ('merge-adjacent1-r3', "-M --merge_max_distance=1 --merge_count_ratio=3 -n0", [aln_infile3]),
@@ -120,12 +120,14 @@ def define_option_parser():
     parser.add_option('-Z', '--remove_mutants_min_is_perfect', action='store_true', default=False,
                       help='When applying -X with -z M, compare M to perfect readcount, not total. (default %default).')
 
-    parser.add_option('-I', '--dont_count_cassette', action='store_true', default=False, 
-                      help="Count cassette reads and print the count in the header; "
-                          +"otherwise treat them normally. (default %default) (also see -i)")
     parser.add_option('-i', '--ignore_cassette', action='store_true', default=False,
                       help="Ignore reads aligning to cassette (just print total count in the header as removed) "
                           +"(default %default) (also see -E)")
+    parser.add_option('-I', '--dont_count_cassette', action='store_true', default=False, 
+                      help="Don't give cassette read/mutant totals in the header; (default %default) (also see -i, -J)")
+    parser.add_option('-J', '--dont_count_other', action='store_true', default=False, 
+                      help="Don't give read/mutant totals in the header for 'strange' chromosomes (not cassette and "
+                          +"not named chromosome* or scaffold*; (default %default) (also see -I)")
 
     # extremely minor functionality options, do we even care??
     parser.add_option('-u', '--treat_unknown_as_match', action="store_true", default=False, 
@@ -237,6 +239,7 @@ def main(infiles, outfile, options):
     """
     ### parse/process/reformat some options
     options.count_cassette = not options.dont_count_cassette
+    options.count_other = not options.dont_count_other
     options.merge_boundary_features = not options.dont_merge_boundary_features
     if options.mutant_merging_outfile=='AUTO':
         options.mutant_merging_outfile = '%s_merging-info.txt'%os.path.splitext(outfile)[0]
@@ -261,7 +264,6 @@ def main(infiles, outfile, options):
         all_alignment_data.add_alignment_reader_to_data(infile_reader, 
                                                         uncollapse_read_counts = options.input_collapsed_to_unique, 
                                                         treat_unknown_as_match = options.treat_unknown_as_match, 
-                                                        count_cassette = options.count_cassette, 
                                                         ignore_cassette = options.ignore_cassette)
 
     ### optionally merge adjacent mutants (since they're probably just artifacts of indels during deepseq)
@@ -301,14 +303,18 @@ def main(infiles, outfile, options):
     ### output
     # print summary info to stdout
     if options.verbosity_level>1: print "\nDATA SUMMARY:"
-    if options.verbosity_level>0: all_alignment_data.print_summary(merge_boundary_features=options.merge_boundary_features)
+    if options.verbosity_level>0: all_alignment_data.print_summary(merge_boundary_features=options.merge_boundary_features,
+                                                                   count_cassette=options.count_cassette, 
+                                                                   count_other=options.count_other)
     # print full data to outfile
     if options.verbosity_level>1: print "printing output - time %s."%time.ctime()
     with open(outfile,'w') as OUTFILE:
         write_header_data(OUTFILE,options)
         OUTFILE.write("### SUMMARY:\n")
         all_alignment_data.print_summary(OUTFILE, line_prefix="#  ", header_prefix="## ", 
-                                         merge_boundary_features=options.merge_boundary_features)
+                                         merge_boundary_features=options.merge_boundary_features,
+                                         count_cassette = options.count_cassette,
+                                         count_other=options.count_other)
         OUTFILE.write("### HEADER AND DATA:\n")
         all_alignment_data.print_data(OUTPUT=OUTFILE, sort_data_by=options.sort_data_key, 
                                       N_sequences=options.N_sequences_per_group, 
