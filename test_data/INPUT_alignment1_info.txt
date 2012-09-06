@@ -3,7 +3,7 @@
 
 other text
 
-## reads removed:   5 (10%)
+## final "bad" reads (in _wrong-start and/or _no-cassette files) (% of total):	5 (10%)
 
 ## other text
 # other text

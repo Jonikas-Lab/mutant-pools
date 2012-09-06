@@ -214,9 +214,12 @@ def add_discarded_reads_from_metadata_file(infiles, input_metadata_file, verbosi
             return None
         # go through the metadata file to find the line with the discarded read count; 
         #  if the line isn't found, total discarded readcount cannot be determined
-        line_found = False
+        # Note that there are two possible formats of that line, old and new
         for line in open(curr_input_metadata_file):
-            if line.startswith('## reads removed: '):
+            if line.startswith('## final "bad" reads'):       # new discarded-read line format
+                discarded_counts.append(int(line.split(':\t')[1].split(' (')[0]))
+                break
+            if line.startswith('## reads removed: '):           # old discarded-read line format
                 discarded_counts.append(int(line.split()[3]))
                 break
         else:   # in a for-else loop the else is executed if the for wasn't ended with break, i.e. the line wasn't found
