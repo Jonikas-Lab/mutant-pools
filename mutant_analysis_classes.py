@@ -678,7 +678,8 @@ class Insertional_mutant():
         # try returning the Nth sequence and count; return nothing if there are under N sequences.
         try:                return tuple(reversed(sequences_by_count[N-1]))
         except IndexError:  return ('',0)
-        # TODO should probably make that '-' or something instead of '', empty strings are hard to see.
+        # MAYBE-TODO should probably make that '-' or something instead of '', empty strings are hard to see. 
+        #  On the other hand '-' isn't a valid sequence, and '' is...
         # MAYBE-TODO should there be a warning/failure/something if it's a multi-dataset mutant and the user wants
         #  an overall main sequence and only some of the mutants have any sequence data?
 
@@ -814,6 +815,7 @@ class Dataset_summary_data():
         self.merged_adjacent_pairs = 0
         self.unmerged_adjacent_pairs = (0, 0)
         self.merged_opposite_tandems = (0, 0)
+        # TODO some of these things (aligned_read_count, perfect_read_count, strand_read_counts, all the mutant-count stuff) can be inferred from the mutant set itself - in that case do I want to keep them separately?  It's faster to keep them separately, but requires more coding, especially as I add dataset-manipulation methods. PROBABLY WANT TO CHANGE IT. And in that case, this class should be renamed from summary to metadata or extra_data or something...
         # MAYBE-TODO should cassette_end and reads_are_reverse be specified for the whole dataset, or just for each set of data added, in add_alignment_reader_to_data? The only real issue with this would be that then I wouldn't be able to print this information in the summary - or I'd have to keep track of what the value was for each alignment reader added and print that in the summary if it's a single value, or 'varied' if it's different values. Might also want to keep track of how many alignment readers were involved, and print THAT in the summary!  Or even print each (infile_name, cassette_end, reads_are_reverse) tuple as a separate line in the header.
         self.cassette_end = cassette_end
         self.reads_are_reverse = reads_are_reverse
@@ -862,9 +864,14 @@ class Dataset_summary_data():
 
 
 class Insertional_mutant_pool_dataset():
-    """ A dataset of insertional mutants - contains some total counts and a set of Insertional_mutant objects.
+    """ A dataset of insertional mutants - contains an iterable of Insertional_mutant objects, and a lot of extra data.
+
+    May be a multi-dataset (i.e. a single dataset that actually contains readcounts for multiple samples) - in that case
+     the Insertional_mutant objects will be multi-dataset mutants.
+
+    WILL ADD MORE INFORMATION HERE ONCE I STOP CHANGING THIS SO OFTEN.
     
-    Attributes:
+    Attributes - THIS MAY BE OUT OF DATE
      - cassette_end - specifies which end of the insertion cassette the reads are on, and 
      - reads_are_reverse - True if the reads are in reverse orientation to the cassette, False otherwise
      - discarded_read_count - number of reads discarded in preprocessing before alignment (not counted in processed_read_count)
@@ -873,8 +880,10 @@ class Insertional_mutant_pool_dataset():
      - strand_read_counts - name:count dictionaries to keep track of reads per strand
      - mutants_in_genes, mutants_not_in_genes, mutants_undetermined - counts of mutants in genes, not in genes, unknown
      - mutant_counts_by_orientation, mutant_count_by_feature - name:count dictionaries for mutant gene location properties
+
+    For methods see method docstrings.
     """
-    # TODO-NEXT update docstring!!!
+    # TODO update docstring to contain up-to-date sensible info on everything!
     # - make sure to mention that all mutant positions are immutable by default, and how to deal with changing them
     # - explain about normal datasets and multi-datasets
     # - ____
@@ -882,7 +891,9 @@ class Insertional_mutant_pool_dataset():
     # Implement new functionality for datasets:
     # - MAYBE-TODO splitting joint datasets into separate ones?  Do we need that? PROBABLY NOT.
     # - MAYBE-TODO adding and subtracting datasets (by readcount) - do we currently need that?
-    # - TODO-NEXT calculating growth rates!
+    # - TODO-NEXT calculating growth rates!  Right now it's in mutant_growth_rates.py separately, but that may be temporary
+
+    # MAYBE-TODO should I make multi-datasets a subclass of normal ones instead of having the same class implement both?
 
     def __init__(self, cassette_end='?', reads_are_reverse='?', multi_dataset=False, infile=None):
         """ Initializes empty dataset; saves properties as provided; optionally reads data from mutant infile. """
@@ -1102,6 +1113,7 @@ class Insertional_mutant_pool_dataset():
 
         This is based on EXACT position equality: a ?-101 mutant won't be removed due to a 100-? or 100-101 or 100-102 one.
         """
+        # TODO do I want this to be based on non-exact position equality instead?
         if perfect_reads:   get_readcount = lambda m: m.perfect_read_count
         else:               get_readcount = lambda m: m.total_read_count
         # go over all mutants in self; need to convert the iterator to a list to make a separate copy, 
@@ -1109,7 +1121,8 @@ class Insertional_mutant_pool_dataset():
         for mutant in list(iter(self)):
             if get_readcount(other_dataset.get_mutant(mutant.position)) >= readcount_min:
                 self.remove_mutant(mutant.position)
-        # TODO adjust all the summary read counts etc after the removal!!!
+        # TODO really I shouldn't be removing mutants outright, just noting them as removed or something...
+        # TODO adjust all the summary read counts etc after the removal!!! (Actually the summary shouldn't even have that!)
         # TODO should I keep track of removed reads, and print in summary?  PROBABLY.
 
     ######### SUMMARY INFORMATION
@@ -1216,9 +1229,9 @@ class Insertional_mutant_pool_dataset():
         Also merge mutants in the same position but opposite strands, as tail-to-tail tandem cases, and change the 
          strand and gene orientation of the merged mutant to "both".
         """
-        # MAYBE-TODO change the default argument to '/dev/null' or something? Do we really ever want this printed to stdout? Unlikely!  And not printing at all might be nice.  (Would also need a 'NONE' choice for the --mutant_merging_outfile command-line option in mutant_count_alignments.py, that would invoke this behavior... Something like that.)
+        # MAYBE-TODO change the default argument to open('/dev/null','w') or something? Do we really ever want this printed to stdout? Unlikely!  And not printing at all might be nice.  (Would also need a 'NONE' choice for the --mutant_merging_outfile command-line option in mutant_count_alignments.py, that would invoke this behavior... Something like that.)
 
-        # MAYBE-TODO make merging opposite-strand tandem cases optional? Or even make merge_tandem_mutants a separate function?
+        # MAYBE-TODO make merge_tandem_mutants a separate function?
 
         if self.multi_dataset:  raise MutantError("merge_adjacent_mutants not implemented for multi-datasets!")
 
@@ -1241,6 +1254,7 @@ class Insertional_mutant_pool_dataset():
                 adjacent_opposite_strands_count += 1
                 OUTPUT.write("  LEAVING opposite-strand adjacent mutants: %s and %s.\n"%(pos1,pos2))
                 continue
+                # TODO should keep track of adjacent opposite-strand unmerged mutants separately depending on whether they're facing "toward" or "away" from each other!  Since one case could be a tail-to-tail tandem with a genomic deletion in the middle, but the other case really HAS TO be random unrelated mutants (right?), so only that case should be used as reference.
             # if the two positions are SAME POSITION but on different strands, it's most probably a tail-to-tail tandem,
             #  so they should be merged (and counted separately, NOT counted as merged)
             if pos1.strand != pos2.strand and pos1.min_position==pos2.min_position:
@@ -1267,6 +1281,9 @@ class Insertional_mutant_pool_dataset():
                 OUTPUT.write("Warning: attempting to merge a mutant that no longer exists %s with %s!\n"%(pos2, pos1))
                 continue
             # TODO there's a bug here where mutants 1,2,3 all should be merged together and a warning gets printed!  See the warning in test_data/count-aln__merge-adjacent2-r3_merging-info.txt, which really shouldn't be there.  Research and hopefully fix that!  I'm not sure whether the problem is ONLY that is prints an unnecessary warning, or if there's also an actual issue with merging.
+            # TODO was there some other bug when doing tandem-merging and adjacent-merging at once?  I think something weird came up in actual data analysis - see ../../1206_Ru-screen1_deepseq-data-early/notes.txt  "Mutants" section.
+
+            # TODO how should mutant lookup by position deal with both-strand mutants?  You can have two mutants in the same position on opposite strands, but you CAN'T have one on both strands and one on + or -...  There should be safeguards to fold the + or - into the both-strand one if it's searched for, and things!
 
             # for adjacent mutants (rather than opposite-tandem ones), calculate readcount ratio
             if pos1.strand==pos2.strand:
