@@ -20,7 +20,8 @@ from BCBio import GFF
 # my modules
 from general_utilities import split_into_N_sets_by_counts, add_dicts_of_ints, keybased_defaultdict, value_and_percentages
 from DNA_basic_utilities import SEQ_ENDS, SEQ_STRANDS, SEQ_DIRECTIONS, SEQ_ORIENTATIONS, position_test_contains, position_test_overlap
-from deepseq_utilities import get_seq_count_from_collapsed_header, check_mutation_count_try_all_methods
+from seq_basic_utilities import get_seq_count_from_collapsed_header
+from deepseq_utilities import check_mutation_count_try_all_methods
 # there's a "from parse_annotation_file import parse_gene_annotation_file" in one function, not always needed
 
 
