@@ -1,0 +1,4 @@
+# Counting adjacent mutants: max distance 1
+  opposite-strand same-position tandem mutants: chromosome_A + 210-? and chromosome_A - ?-211.
+  opposite-strand same-position tandem mutants: chromosome_A + 1210-? and chromosome_A - ?-1211.
+# Finished counting adjacent mutants (max distance 1): 0 adjacent same-strand pairs, 2 same-position opposite-strand pairs, 0 adjacent opposite-strand "away-facing" pairs (may be tandems with a deletion), 0 adjacent opposite-strand "toward-facing" pairs (definitely two separate mutants).

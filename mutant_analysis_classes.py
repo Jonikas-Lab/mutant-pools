@@ -18,7 +18,7 @@ from numpy import median
 import HTSeq
 from BCBio import GFF
 # my modules
-from general_utilities import split_into_N_sets_by_counts, add_dicts_of_ints, keybased_defaultdict, value_and_percentages
+from general_utilities import split_into_N_sets_by_counts, add_dicts_of_ints, keybased_defaultdict, value_and_percentages, FAKE_OUTFILE
 from DNA_basic_utilities import SEQ_ENDS, SEQ_STRANDS, SEQ_DIRECTIONS, SEQ_ORIENTATIONS, position_test_contains, position_test_overlap
 from seq_basic_utilities import get_seq_count_from_collapsed_header
 from deepseq_utilities import check_mutation_count_try_all_methods
@@ -559,7 +559,7 @@ class Insertional_mutant():
         if orientation_both:    self.orientation = orientation_both.pop()
         if feature_both:        self.gene_feature = feature_both.pop()
 
-    def merge_mutant(self, other, merge_positions=False, check_gene_data=True, opposite_strand_tandem=False):
+    def merge_mutant(self, other, check_gene_data=True, opposite_strand_tandem=False):
         """ Merge other mutant into this mutant: merge counts, sequences, optionally position; set other's counts to 0.
         Does NOT check that the positions match - this should be done by the caller. 
         """
@@ -587,12 +587,10 @@ class Insertional_mutant():
             # also set the gene-orientation to "both", unless there is no gene
             if self.gene not in SPECIAL_GENE_CODES.all_codes:
                 self.orientation = 'both'
-        # otherwise, normally we just keep the self position, since that's the one with more reads; 
-        #  but if merge_positions is True, then make self.position be a merged version from self and other. 
-        elif merge_positions:  
-            assert self.total_read_count >= other.total_read_count
-            raise MutantError("Mutant merging with merging positions NOT IMPLEMENTED!")
-            # MAYBE-TODO implement position merging?  Are we ever going to need it, really?
+        # otherwise, just keep the self position, since that should be the one with more reads; 
+        else:
+            assert self.total_read_count >= other.total_read_count, "Merging mutants the wrong way!"
+            # MAYBE-TODO implement position merging?  Are we ever going to need it, really?  PROBABLY NOT.
 
         ### merge read counts
         self.total_read_count += other.total_read_count
@@ -956,6 +954,8 @@ class Insertional_mutant_pool_dataset():
         If mutant doesn't exist, create a new one with no reads/sequences. """
         return self._mutants_by_position[self._make_position_object_if_needed(*args,**kwargs)]
 
+    # TODO how should mutant lookup by position deal with both-strand mutants?  You can have two mutants in the same position on opposite strands, but you CAN'T have one on both strands and one on + or -...  There should be safeguards to fold the + or - into the both-strand one if it's searched for, and things! THINK ABOUT THAT.
+
     # MAYBE-TODO implement get_Nth_mutant_by_position and get_Nth_mutant_by_readcount or some such?
 
     def __contains__(self, *args, **kwargs):
@@ -1216,60 +1216,94 @@ class Insertional_mutant_pool_dataset():
 
     ######### PROCESSING/MODIFYING DATASET
 
-    def merge_adjacent_mutants(self, merge_max_distance=0, merge_count_ratio=1000, merge_opposite_strand_tandems=True,
-                               dont_change_positions=False, OUTPUT=sys.stdout):
-        """ Merge adjacent mutants based on strand, distance, and count ratio; merge opposite-tandem mutants; save counts.
+
+    def _possibly_adjacent_positions(self, max_distance, same_strand_only=False, include_cassette_chromosomes=True, 
+                                     include_other_chromosomes=False):
+        """ Generates all mutant position pairs that might be within max_distance of each other (same strand, or not).
+
+        May or may not be well optimized (the most naive way would just be combinations(all_positions,2)).
+
+        If same_strand_only is True, both-strand positions are counted as both +strand and -strand.
+        """
+        for chromosome in self.all_chromosomes:
+            if include_cassette_chromosomes==False and is_cassette_chromosome(chromosome): continue
+            if include_other_chromosomes==False and is_other_chromosome(chromosome):       continue
+
+            all_positions = sorted([mutant.position for mutant in self if mutant.position.chromosome==chromosome])
+
+            # MAYBE-TODO if same_strand_only, could split up by strand, too!  (both-strand ones should go on both lists?)
+            # MAYBE-TODO could optimize this further by only considering pairs of close-by positions, instead of all pairs:
+            #  positions are sorted by min_position and then strand, so if you sorted all_positions, 
+            #  two mutants on the same strand X bp away can be at most 2X positions away on the sorted position list, 
+            #  so use a sliding window of size 2X+1.  #  (or of size X+1 if they're all on the same strand already)
+
+            # go over each pos1,pos2 pair (only once)
+            for (pos1, pos2) in combinations(all_positions,2):
+                yield (pos1, pos2)
+
+    def _merge_two_mutants(self, pos1, pos2):
+        """ Merge two mutants (given by position), while making sure not to mess up dictionary key immutability. 
+        
+        Doing the merge may require the position to change, and changing a dictionary key is BAD, 
+         so first remove both mutants from the dataset, make the position mutable, 
+         merge the mutants (using the Insertional_mutant.merge_mutant method, which does all the real work), 
+         make the position immutable again, and finally add the merged mutant back to the dataset.
+        """
+        mutant1 = self.get_mutant(pos1)
+        mutant2 = self.get_mutant(pos2)
+        self.remove_mutant(pos1)
+        self.remove_mutant(pos2)
+        mutant1.position.make_mutable_REMEMBER_CLEANUP_FIRST()
+        mutant1.merge_mutant(mutant2, opposite_strand_tandem=(pos1.strand!=pos2.strand))
+        mutant1.position.make_immutable()
+        self.add_mutant(mutant1)
+
+    def merge_adjacent_mutants(self, merge_max_distance=1, merge_count_ratio=1000, merge_cassette_chromosomes=False, 
+                               merge_other_chromosomes=True, OUTPUT=sys.stdout):
+        """ Merge adjacent mutants based on strand, distance, and count ratio; save counts.
 
         Merge mutants if they're distant by merge_max_distance or less and one has at least merge_count_ratio x fewer 
          reads than the other; merge their read counts, sequences etc, and remove the lower-read-count one from dataset.
 
-        If dont_change_positions is True, also change the full position data of the remaining mutant to reflect the merge
-         (NOT IMPLEMENTED).
+        Cannot be run after merge_opposite_tandem_mutants - NOT IMPLEMENTED for both-stranded mutants.
 
-        Also merge mutants in the same position but opposite strands, as tail-to-tail tandem cases, and change the 
-         strand and gene orientation of the merged mutant to "both".
+        If merge_cassette_chromosomes or merge_other_chromosomes is False, don't do merging on cassette chromosomes 
+         and other non-genome chromosomes (chloroplast, mitochondrial, etc) respectively.
+
+        Write details to OUTPUT (open filehandle; pass sys.stdout if desired, or None for no printing);
+         Save information on merged counts to 
         """
-        # MAYBE-TODO change the default argument to open('/dev/null','w') or something? Do we really ever want this printed to stdout? Unlikely!  And not printing at all might be nice.  (Would also need a 'NONE' choice for the --mutant_merging_outfile command-line option in mutant_count_alignments.py, that would invoke this behavior... Something like that.)
-
-        # MAYBE-TODO make merge_tandem_mutants a separate function?
-
         if self.multi_dataset:  raise MutantError("merge_adjacent_mutants not implemented for multi-datasets!")
-
+        if merge_count_ratio < 1:  raise MutantError("merge_count_ratio must be at least 1!")
+        # MAYBE-TODO implement for ratio=1, too? But which position would be used, if both mutants had same readcounts?
+        if any([mutant.position.strand=='both' for mutant in self]):
+            raise Exception("merge_adjacent_mutants should be run BEFORE merge_opposite_tandem_mutants "
+                            +"- NOT IMPLEMENTED for both-stranded mutants!")
+            # LATER-TODO implement for both-stranded mutants too! In that case all strand-comparisons should be
+            #  rewritten so 'both' and either + or - would compare as the same, or something... 
+        if OUTPUT is None: OUTPUT = FAKE_OUTFILE
         OUTPUT.write("# Merging adjacent mutants: max distance %s, min count ratio %s\n"%(merge_max_distance, 
                                                                                           merge_count_ratio))
-        all_positions = sorted([mutant.position for mutant in self])
-        adjacent_opposite_strands_count = 0
-        adjacent_same_strands_merged = 0
-        adjacent_same_strands_left = 0
-        opposite_tandem_cassette = 0
-        opposite_tandem_non_cassette = 0
-        # go over each pos1,pos2 pair (only once)
-        for (pos1, pos2) in combinations(all_positions,2):
-
-            # if the two positions are on different chromosomes or aren't adjacent, skip
-            if pos1.chromosome != pos2.chromosome:                                continue
-            if abs(pos2.min_position-pos1.min_position) > merge_max_distance:     continue
-            # if the two positions are adjacent but on different strands, they can't be merged - count and skip
-            if pos1.strand != pos2.strand and pos1.min_position!=pos2.min_position:
-                adjacent_opposite_strands_count += 1
-                OUTPUT.write("  LEAVING opposite-strand adjacent mutants: %s and %s.\n"%(pos1,pos2))
-                continue
-                # TODO should keep track of adjacent opposite-strand unmerged mutants separately depending on whether they're facing "toward" or "away" from each other!  Since one case could be a tail-to-tail tandem with a genomic deletion in the middle, but the other case really HAS TO be random unrelated mutants (right?), so only that case should be used as reference.
-            # if the two positions are SAME POSITION but on different strands, it's most probably a tail-to-tail tandem,
-            #  so they should be merged (and counted separately, NOT counted as merged)
-            if pos1.strand != pos2.strand and pos1.min_position==pos2.min_position:
-                if merge_opposite_strand_tandems:
-                    if is_cassette_chromosome(pos1.chromosome): opposite_tandem_cassette += 1
-                    else:                                       opposite_tandem_non_cassette += 1
-                else:
-                    OUTPUT.write("  LEAVING opposite-strand same-position tandem mutants: %s and %s.\n"%(pos1,pos2))
-                    continue
+        OUTPUT.write(" (The merged mutant will have the position of whichever original mutant had more reads)\n")
+        if merge_count_ratio == 1:  
+            OUTPUT.write(" (Warning: minimum ratio is 1, so sometimes both mutants will have the same read number "
+                         "- the earlier position is used in that case.)\n")
+        merged_count = 0
+        for pos1,pos2 in self._possibly_adjacent_positions(merge_max_distance, True, merge_cassette_chromosomes, 
+                                                           merge_other_chromosomes):
+            # if the two positions are on different chromosomes or strands or aren't adjacent, skip
+            if pos1.chromosome != pos2.chromosome:                              continue
+            if pos1.strand != pos2.strand:                                      continue
+            if abs(pos2.min_position-pos1.min_position) > merge_max_distance:   continue
+            # all other mutant pairs should be same-strand adjacent - up for merging depending on readcount ratio.
 
             # make sure these mutants still exist in the dataset (haven't been merged) (note: if they don't exist, 
             #   the dataset will silently create new mutants with readcounts 0, so check "x in self" explicitly)
             #  (this shouldn't be a problem with a situation like 1,1000,1 readcounts - the first and third will both
             #   be merged into the second, which won't disappear, so all is fine. However with a situation like
-            #   1000,1,1000 readcounts, the middle mutant will be merged into only one of the sides, which is right.)
+            #   1000,1,1000 readcounts, the middle mutant will be merged into only one of the sides, which is right.
+            #   Which side it is will be arbitrary, but I think that's fine for now - MAYBE-TODO make it random, 
+            #    or split the reads between the two, or use the earlier-position one? Randomness is hard to test...)
             if pos1 in self:
                 mutant1 = self.get_mutant(pos1)
             else:
@@ -1280,55 +1314,145 @@ class Insertional_mutant_pool_dataset():
             else:
                 OUTPUT.write("Warning: attempting to merge a mutant that no longer exists %s with %s!\n"%(pos2, pos1))
                 continue
-            # TODO there's a bug here where mutants 1,2,3 all should be merged together and a warning gets printed!  See the warning in test_data/count-aln__merge-adjacent2-r3_merging-info.txt, which really shouldn't be there.  Research and hopefully fix that!  I'm not sure whether the problem is ONLY that is prints an unnecessary warning, or if there's also an actual issue with merging.
-            # TODO was there some other bug when doing tandem-merging and adjacent-merging at once?  I think something weird came up in actual data analysis - see ../../1206_Ru-screen1_deepseq-data-early/notes.txt  "Mutants" section.
 
-            # TODO how should mutant lookup by position deal with both-strand mutants?  You can have two mutants in the same position on opposite strands, but you CAN'T have one on both strands and one on + or -...  There should be safeguards to fold the + or - into the both-strand one if it's searched for, and things!
-
-            # for adjacent mutants (rather than opposite-tandem ones), calculate readcount ratio
-            if pos1.strand==pos2.strand:
-                mutant1_readcount, mutant2_readcount = mutant1.total_read_count, mutant2.total_read_count
-                readcount_ratio = max(mutant1_readcount/mutant2_readcount, mutant2_readcount/mutant1_readcount)
-                # if the two mutants are adjacent, but the readcounts aren't different enough , count and skip
-                if not readcount_ratio>=merge_count_ratio:
-                    adjacent_same_strands_left += 1
-                    OUTPUT.write("  LEAVING same-strand adjacent mutants: %s and %s, %s and %s reads.\n"%(pos1, pos2, 
-                                                                                     mutant1_readcount, mutant2_readcount))
-                    continue
-                # if the two mutants are adjacent and with sufficiently different readcounts, count, 
-                #  MERGE the lower-readcount mutant into the higher-readcount one, 
-                #  and remove the lower one from the dataset
-                adjacent_same_strands_merged += 1
-                OUTPUT.write(" MERGING same-strand adjacent mutants: %s and %s, %s and %s reads.\n"%(pos1, pos2, 
-                                                                                    mutant1_readcount, mutant2_readcount))
-                # make sure that mutant1.total_read_count >= mutant.total_read_count2
-                if mutant1_readcount < mutant2_readcount:
-                    mutant1, mutant2 = mutant2, mutant1
-                    mutant1_readcount, mutant2_readcount = mutant2_readcount, mutant1_readcount
-                    pos1, pos2 = pos2, pos1
-            else:
-                OUTPUT.write(" MERGING opposite-strand same-position tandem mutants: %s and %s.\n"%(pos1,pos2))
-
-            # now do the merge - doing the merge may require the position to change, 
-            #  and changing a dictionary key is BAD, so first remove both mutants from the dataset, 
-            #  make the position mutable, merge the mutants, make the position immutable again, 
-            #  and finally add the merged mutant back to the dataset.
-            if not merge_opposite_strand_tandems: assert pos1.strand==pos2.strand
-            self.remove_mutant(pos1)
-            self.remove_mutant(pos2)
-            mutant1.position.make_mutable_REMEMBER_CLEANUP_FIRST()
-            mutant1.merge_mutant(mutant2, merge_positions=(not dont_change_positions), 
-                                opposite_strand_tandem=(pos1.strand!=pos2.strand))
-            mutant1.position.make_immutable()
-            self.add_mutant(mutant1)
-            # Note: we do need to keep count of read strands rather than generating the values on the fly,
-            #  otherwise we'll end up with 'both'-strand reads, which I think we don't want, right?  MAYBE-TODO think...
+            # if the two mutants are adjacent and with sufficiently different readcounts, count, 
+            #  merge the lower-readcount mutant into the higher-readcount one, and remove the lower one from the dataset
+            mutant1_readcount, mutant2_readcount = mutant1.total_read_count, mutant2.total_read_count
+            readcount_ratio = max(mutant1_readcount/mutant2_readcount, mutant2_readcount/mutant1_readcount)
+            if not readcount_ratio>=merge_count_ratio:  continue
+            merged_count += 1
+            OUTPUT.write(" MERGING same-strand adjacent mutants: %s and %s, %s and %s reads.\n"%(pos1, pos2, 
+                                                                                mutant1_readcount, mutant2_readcount))
+            assert pos1.strand==pos2.strand, "Mutants for adjacent-merging must be on same strand!"
+            # make sure that mutant1.total_read_count >= mutant.total_read_count2 - switch if they're otherwise
+            if mutant1_readcount < mutant2_readcount:
+                pos1, pos2 = pos2, pos1
+            # if both have equal readcounts, use the earlier one (pos1)
+            if mutant1_readcount == mutant2_readcount:
+                OUTPUT.write("  (mutants have same readcount - using earlier position, %s)\n"%pos1)
+            self._merge_two_mutants(pos1, pos2)
 
         # add overall counts to dataset summary
+        OUTPUT.write("# Finished merging adjacent mutants: %s pairs merged\n"%merged_count) 
         self.summary.merging_conditions = (merge_max_distance, merge_count_ratio)
-        self.summary.merged_adjacent_pairs = adjacent_same_strands_merged
-        self.summary.unmerged_adjacent_pairs = (adjacent_same_strands_left, adjacent_opposite_strands_count)
+        self.summary.merged_adjacent_pairs = merged_count
+
+    def merge_opposite_tandem_mutants(self, merge_cassette_chromosomes=False, merge_other_chromosomes=True, 
+                                      OUTPUT=sys.stdout):
+        """ Merge opposite-strand tandem mutants (in same position but opposite strands), setting strand to 'both'. 
+
+        Merge mutants if they're in the same position but on opposite strands; merge their read counts, sequences etc, 
+         remove both from the dataset, and add a new one to the dataset, with 'both' for strand and gene orientation.
+         If the full positions of the two mutants were 100-? and ?-101, the new one is 100-101.
+
+        If merge_cassette_chromosomes or merge_other_chromosomes is False, don't do merging on cassette chromosomes 
+         and other non-genome chromosomes (chloroplast, mitochondrial, etc) respectively.
+
+        Write details to OUTPUT (open filehandle; pass sys.stdout if desired, or None for no printing);
+         save the number of merged cases to self.summary.
+        """
+        if self.multi_dataset:  raise MutantError("merge_opposite_tandem_mutants not implemented for multi-datasets!")
+        if OUTPUT is None: OUTPUT = FAKE_OUTFILE
+        OUTPUT.write("# Merging opposite-strand same-position mutants (presumably tail-to-tail tandems)\n")
+
+        opposite_tandem_cassette = 0
+        opposite_tandem_non_cassette = 0
+        all_positions = sorted([mutant.position for mutant in self])
+        # same-position opposite-strand mutants will always be adjacent on the sorted position list, so only look at those
+        for pos1,pos2 in zip(all_positions,all_positions[1:]):
+            # if the two positions are on different chromosomes or aren't same-position opposite-strand
+            if pos1.chromosome != pos2.chromosome:        continue
+            if pos2.min_position != pos1.min_position:    continue
+            assert pos1.strand != pos2.strand, "Mutants with same chromosome/position must have different strands!"
+            assert 'both' not in [pos1.strand, pos2.strand], "Two mutants in one position must be +/- strand, not both!"
+
+            OUTPUT.write(" MERGING opposite-strand same-position tandem mutants: %s and %s.\n"%(pos1,pos2))
+            if is_cassette_chromosome(pos1.chromosome): opposite_tandem_cassette += 1
+            else:                                       opposite_tandem_non_cassette += 1
+            self._merge_two_mutants(pos1, pos2)
+
+        # add overall counts to dataset summary
+        OUTPUT.write(("# Finished merging opposite-strand same-position mutants: %s non-cassette pairs merged, "
+                      +"and %s cassette\n")%(opposite_tandem_non_cassette, opposite_tandem_cassette)) 
         self.summary.merged_opposite_tandems = (opposite_tandem_non_cassette, opposite_tandem_cassette)
+
+    def count_adjacent_mutants(self, adjacent_max_distance=1, count_cassette_chromosomes=False, 
+                               count_other_chromosomes=True, OUTPUT=sys.stdout):
+        """ Count various categories of adjacent mutants; save data to self.summary. 
+        
+        Specific cases counted are:
+            - adjacent mutants on the same strand
+            - same-position mutants on opposite strands (100-? and ?-101 - both have min_position 100)
+            - adjacent mutants on opposite strands, facing away from each other (100-? and ?-103)
+            - adjacent mutants on opposite strands, facing toward each other (?-101 and 102-?)
+            (the reason for differentiating between the "away" and "toward" cases is that 
+             the "away" case could be a tail-to-tail tandem with a genomic deletion in the middle, 
+             but the "toward" case really HAS TO be random unrelated mutants (right?), so it can be used as a reference.)
+
+        If count_cassette_chromosomes or count_other_chromosomes is False, don't include in the count cassette chromosomes 
+         and other non-genome chromosomes (chloroplast, mitochondrial, etc) respectively.
+
+        Also write details to OUTPUT (open filehandle; pass sys.stdout if desired, or None for no printing).
+        """
+        if self.multi_dataset:  raise MutantError("count_adjacent_mutants not implemented for multi-datasets!")
+        if OUTPUT is None: OUTPUT = FAKE_OUTFILE
+        OUTPUT.write("# Counting adjacent mutants: max distance %s\n"%adjacent_max_distance)
+        adjacent_same_strand = 0
+        same_position_opposite_strands = 0
+        adjacent_opposite_strands_away = 0
+        adjacent_opposite_strands_toward = 0
+        # MAYBE-TODO may want to make all the adjacent_* counts dictionaries by distance?
+        for pos1,pos2 in self._possibly_adjacent_positions(adjacent_max_distance, False, count_cassette_chromosomes, 
+                                                           count_other_chromosomes):
+            # if the two positions are on different chromosomes or aren't adjacent, skip
+            if pos1.chromosome != pos2.chromosome:                                continue
+            if abs(pos2.min_position-pos1.min_position) > adjacent_max_distance:  continue
+            # same position, opposite strands
+            if pos1.min_position==pos2.min_position:
+                assert pos1.strand != pos2.strand, "Two mutants with same position and strand shouldn't happen!"
+                same_position_opposite_strands += 1
+                OUTPUT.write("  opposite-strand same-position tandem mutants: %s and %s.\n"%(pos1,pos2))
+            # adjacent positions, same strand
+            elif pos1.strand == pos2.strand: 
+                assert pos1.min_position!=pos2.min_position, "Two mutants with same position and strand shouldn't happen!"
+                adjacent_same_strand += 1
+                mutant1_readcount = self.get_mutant(pos1).total_read_count
+                mutant2_readcount = self.get_mutant(pos2).total_read_count
+                OUTPUT.write("  same-strand adjacent mutants: %s and %s, %s and %s reads.\n"%(pos1,pos2, 
+                                                                                     mutant1_readcount, mutant2_readcount))
+            # adjacent positions, opposite strands
+            else:
+                assert pos1.min_position != pos2.min_position and pos1.strand != pos2.strand, "Fell through if/elif!"
+                #  ?-X is -strand, X-? is +strand.  
+                # away  =  100-? and ?-103  =  +strand has a lower position than -strand;  toward  =  other way around
+                first_pos = sorted([pos1, pos2])[0]
+                if first_pos.strand == '+':
+                    OUTPUT.write('  adjacent opposite-strand "away-facing" mutants: %s and %s.\n'%(pos1,pos2))
+                    adjacent_opposite_strands_away += 1
+                else:
+                    OUTPUT.write('  adjacent opposite-strand "toward-facing" mutants : %s and %s.\n'%(pos1,pos2))
+                    adjacent_opposite_strands_toward += 1
+
+        # add overall counts to dataset summary
+        OUTPUT.write("# Finished counting adjacent mutants (max distance %s): "%adjacent_max_distance
+                     +"%s adjacent same-strand pairs, "%adjacent_same_strand
+                     +"%s same-position opposite-strand pairs, "%same_position_opposite_strands
+                     +"%s adjacent opposite-strand \"away-facing\" pairs "%adjacent_opposite_strands_away
+                     +"(may be tandems with a deletion), "
+                     +"%s adjacent opposite-strand \"toward-facing\" pairs "%adjacent_opposite_strands_toward
+                     +"(definitely two separate mutants).\n")
+        self.summary.unmerged_adjacent_pairs = (adjacent_same_strand, same_position_opposite_strands
+                                                + adjacent_opposite_strands_away + adjacent_opposite_strands_toward)
+        # TODO change this (and change summary formatting) to include all the new information instead of just the sum!
+        #  We probably want the following in the summary: tandem pairs merged and left, 
+        #   and adjacent pairs same-strand and opposite-away and opposite-toward (with sensible comparisons)
+        #   (compare opposite-away to opposite-toward, and same-strand to 2x opposite-toward)
+
+    # TODO there was a bug here where mutants 1,2,3 all should be merged together and a warning gets printed!  See the warning in test_data/count-aln__merge-adjacent2-r3_merging-info.txt, which really shouldn't be there.  Research and hopefully fix that!  I'm not sure whether the problem is ONLY that is prints an unnecessary warning, or if there's also an actual issue with merging.
+    # TODO was there some other bug when doing tandem-merging and adjacent-merging at once?  I think something weird came up in actual data analysis - see ../../1206_Ru-screen1_deepseq-data-early/notes.txt  "Mutants" section.
+
+    # Note: we do need to keep count of per-strand readcount totals rather than generating the values on the fly,
+    #  otherwise we'll end up with 'both'-strand reads, which I think we don't want, right?  MAYBE-TODO think...
 
 
     def find_genes_for_mutants(self, genefile, detailed_features=False, N_run_groups=3, verbosity_level=1):
@@ -1983,23 +2107,21 @@ class Testing_Insertional_mutant(unittest.TestCase):
         assert (mutant1.total_read_count, mutant1.perfect_read_count) == (2, 2)
         assert (mutant2.total_read_count, mutant2.perfect_read_count) == (1, 0)
         assert (mutant1.sequences_and_counts, mutant2.sequences_and_counts) == ({'AAA':2}, {'AA':1})
-        mutant1.merge_mutant(mutant2, merge_positions=False)
+        mutant1.merge_mutant(mutant2)
         assert (mutant1.total_read_count, mutant1.perfect_read_count) == (3, 2)
         assert (mutant2.total_read_count, mutant2.perfect_read_count) == (0, 0)
         assert (mutant1.sequences_and_counts, mutant2.sequences_and_counts) == ({'AAA':2, 'AA':1}, {})
         # if we define the gene for one of the mutants but not the other, still works
         #  (note that starting here mutant2 has 0 reads, but we can still merge it all we want just to check for errors)
         mutant2.gene = 'X'
-        mutant1.merge_mutant(mutant2, check_gene_data=True, merge_positions=False)
+        mutant1.merge_mutant(mutant2, check_gene_data=True)
         # if we define the gene for both mutants and it's the same gene, also works
         mutant1.gene = 'X'
-        mutant1.merge_mutant(mutant2, check_gene_data=True, merge_positions=False)
+        mutant1.merge_mutant(mutant2, check_gene_data=True)
         # if we define the gene for both mutants and it's a DIFFERENT gene, we get an exception unless we don't check
         mutant2.gene = 'Y'
-        self.assertRaises(MutantError, mutant1.merge_mutant, mutant2, merge_positions=False, check_gene_data=True)
-        mutant1.merge_mutant(mutant2, check_gene_data=False, merge_positions=False)
-        # merge_positions=True option currently NOT IMPLEMENTED
-        self.assertRaises(MutantError, mutant1.merge_mutant, mutant2, merge_positions=True, check_gene_data=False)
+        self.assertRaises(MutantError, mutant1.merge_mutant, mutant2, check_gene_data=True)
+        mutant1.merge_mutant(mutant2, check_gene_data=False)
         # mutant-merging for multi-dataset mutants currently NOT IMPLEMENTED
 
     def test__add_counts(self):

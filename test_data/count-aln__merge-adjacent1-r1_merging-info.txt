@@ -1,6 +1,14 @@
 # Merging adjacent mutants: max distance 1, min count ratio 1
+ (The merged mutant will have the position of whichever original mutant had more reads)
+ (Warning: minimum ratio is 1, so sometimes both mutants will have the same read number - the earlier position is used in that case.)
  MERGING same-strand adjacent mutants: chromosome_A + 99-? and chromosome_A + 100-?, 1 and 5 reads.
  MERGING same-strand adjacent mutants: chromosome_A + 100-? and chromosome_A + 101-?, 6 and 1 reads.
  MERGING same-strand adjacent mutants: chromosome_A + 300-? and chromosome_A + 301-?, 1 and 1 reads.
+  (mutants have same readcount - using earlier position, chromosome_A + 300-?)
+# Finished merging adjacent mutants: 3 pairs merged
+# Merging opposite-strand same-position mutants (presumably tail-to-tail tandems)
  MERGING opposite-strand same-position tandem mutants: chromosome_A + 500-? and chromosome_A - ?-501.
-  LEAVING opposite-strand adjacent mutants: chromosome_A + 600-? and chromosome_A - ?-602.
+# Finished merging opposite-strand same-position mutants: 1 non-cassette pairs merged, and 0 cassette
+# Counting adjacent mutants: max distance 1
+  adjacent opposite-strand "away-facing" mutants: chromosome_A + 600-? and chromosome_A - ?-602.
+# Finished counting adjacent mutants (max distance 1): 0 adjacent same-strand pairs, 0 same-position opposite-strand pairs, 1 adjacent opposite-strand "away-facing" pairs (may be tandems with a deletion), 0 adjacent opposite-strand "toward-facing" pairs (definitely two separate mutants).

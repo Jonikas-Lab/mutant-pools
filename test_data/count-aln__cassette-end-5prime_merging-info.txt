@@ -1,0 +1,4 @@
+# Merging opposite-strand same-position mutants (presumably tail-to-tail tandems)
+# Finished merging opposite-strand same-position mutants: 0 non-cassette pairs merged, and 0 cassette
+# Counting adjacent mutants: max distance 1
+# Finished counting adjacent mutants (max distance 1): 0 adjacent same-strand pairs, 0 same-position opposite-strand pairs, 0 adjacent opposite-strand "away-facing" pairs (may be tandems with a deletion), 0 adjacent opposite-strand "toward-facing" pairs (definitely two separate mutants).

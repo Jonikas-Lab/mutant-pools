@@ -270,18 +270,15 @@ def main(infiles, outfile, options):
                                                         ignore_cassette = options.ignore_cassette)
 
     ### optionally merge adjacent mutants (since they're probably just artifacts of indels during deepseq)
-    if options.merge_adjacent_mutants or not options.dont_merge_tandems: 
+    with open(options.mutant_merging_outfile, 'w') as OUTFILE:
         # TODO should put a header on OUTFILE! And a header line giving the main outfile name; and also give the main outfile a header line saying that the mutant merging info is in options.mutant_merging_outfile,
-        # if all we're doing is merging tandems, we don't really need a merging-info outfile (MAYBE-TODO or do we?)
-        if options.merge_adjacent_mutants: merging_outfile = options.mutant_merging_outfile
-        else:                              merging_outfile = os.devnull
-        with open(merging_outfile, 'w') as OUTFILE:
+        # TODO make command-line options for the merge_cassette_chromosomes and merge_other_chromosomes arguments to all three of the functions
+        if options.merge_adjacent_mutants: 
             all_alignment_data.merge_adjacent_mutants(merge_max_distance = options.merge_max_distance, 
-                                                      merge_count_ratio = options.merge_count_ratio, 
-                                                      merge_opposite_strand_tandems = (not options.dont_merge_tandems),
-                                                      dont_change_positions = True, 
-                                                      OUTPUT = OUTFILE)
-
+                                                      merge_count_ratio = options.merge_count_ratio, OUTPUT = OUTFILE)
+        if not options.dont_merge_tandems: 
+            all_alignment_data.merge_opposite_tandem_mutants(OUTPUT = OUTFILE)
+        all_alignment_data.count_adjacent_mutants(adjacent_max_distance = options.merge_max_distance, OUTPUT = OUTFILE)
     ### optionally remove mutants based on another dataset
     if options.remove_mutants_from_file:
         other_dataset = mutant_analysis_classes.Insertional_mutant_pool_dataset(infile=options.remove_mutants_from_file)
