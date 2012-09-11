@@ -14,11 +14,10 @@ It also only deals with single-end alignments at the moment.
 
 USAGE: mutant_count_alignments.py [options] infile1 [infile2 infile3 ...] outfile """
 
-# basic libraries
+# basic library
 import sys, os, time
-import filecmp
 import unittest
-# other libraries
+# other packages
 import HTSeq
 # my modules
 from general_utilities import write_header_data
@@ -34,16 +33,16 @@ def do_test_run():
     gff_genefile = "test_data/INPUT_gene-data.gff3"
     dataset_to_remove = "test_data/INPUT_mutants_to_remove.txt"
 
-    test_runs = [('cassette-end-5prime', "-e 5prime -r forward -U -n3 -J", [aln_infile1]),
-                 ('cassette-end-3prime', "-e 3prime -r forward -U -n3 -J", [aln_infile1]),
-                 ('read-direction-reverse', "-r reverse -e 5prime -U -n3 -J", [aln_infile1]),
-                 ('u_unknown-not-as-match', "-u -e 5prime -r forward -n3 -J", [aln_infile1]),
-                 ('dont-count-cassette', "-I -e 5prime -r forward -U -n3 -J", [aln_infile1]),
-                 ('ignore-cassette', "-i -e 5prime -r forward -U -n3 -J", [aln_infile1]),
-                 ('sorted-by-count', "-o read_count -e 5prime -r forward -U -n3 -J", [aln_infile1]),
+    test_runs = [('cassette-end-5prime', "-e 5prime -r forward -U -n3 -L", [aln_infile1]),
+                 ('cassette-end-3prime', "-e 3prime -r forward -U -n3 -L", [aln_infile1]),
+                 ('read-direction-reverse', "-r reverse -e 5prime -U -n3 -L", [aln_infile1]),
+                 ('u_unknown-not-as-match', "-u -e 5prime -r forward -n3 -L", [aln_infile1]),
+                 ('dont-count-cassette', "-I -e 5prime -r forward -U -n3 -L", [aln_infile1]),
+                 ('ignore-cassette', "-i -e 5prime -r forward -U -n3 -L", [aln_infile1]),
+                 ('sorted-by-count', "-o read_count -e 5prime -r forward -U -n3 -L", [aln_infile1]),
                  ('with-gene-info_merged', "-Q -e 5prime -r forward -U -g %s -d -n0"%gff_genefile, [aln_infile2]),
                  ('with-gene-info_unmerged', "-B -Q -e 5prime -r forward -g %s -d -n0"%gff_genefile, [aln_infile2]),
-                 ('multiple-infiles', "-Q -e 5prime -r forward -U -n0 -J", [aln_infile1,aln_infile2]),
+                 ('multiple-infiles', "-Q -e 5prime -r forward -U -n0 -L", [aln_infile1,aln_infile2]),
                  ('dont-merge-tandems', "-n0 -Q", [aln_infile3]),
                  ('merge-adjacent-none', "-n0", [aln_infile3]),
                  ('merge-adjacent1-r3', "-M --merge_max_distance=1 --merge_count_ratio=3 -n0", [aln_infile3]),
@@ -82,8 +81,8 @@ def define_option_parser():
     from optparse import OptionParser
     parser = OptionParser(__doc__)
 
-    # taken:     aAbBcCdDe---g-h-iI------mMn-o---qQr---tTuUvVwWxX-YzZ  
-    # free:      ---------EfF-G-H--jJkKlL---N-OpP---RsS----------y---  
+    # taken:     aAbBcCdDe---g-h-iIjJ---LmMn-o---qQr---tTuUvVwWxX-YzZ  
+    # free:      ---------EfF-G-H----kKl----N-OpP---RsS----------y---  
 
     ### test options
     parser.add_option('-t','--test_functionality', action='store_true', default=False, 
@@ -109,7 +108,11 @@ def define_option_parser():
     parser.add_option('-Q', '--dont_merge_tandems', action="store_true", default=False,
                       help="DON'T merge mutants on opposite strands same position (tail-to-tail-tandems) "
                           +"(if False, tandem mutants ARE merged) (default %default)")
-    # TODO or should I not merge tandems by default?
+    parser.add_option('-j', '--merge_in_cassette', action='store_true', default=False, 
+                      help="For adjacent and tandem merging/counts: include mutants in cassette (default %default)")
+    parser.add_option('-J', '--dont_merge_in_other_chrom', action='store_true', default=False, 
+                      help="For adjacent and tandem merging/counts: don't include mutants in non-cassette non-genome "
+                          +"chromosomes like chloroplast and mitochondrial(default %default)")
     parser.add_option('-O', '--mutant_merging_outfile', default='AUTO', metavar='FILE|AUTO',
                       help="Print mutant-merging info to FILE (default AUTO - file will be based on outfile name)")
 
@@ -124,10 +127,11 @@ def define_option_parser():
                       help="Ignore reads aligning to cassette (just print total count in the header as removed) "
                           +"(default %default) (also see -E)")
     parser.add_option('-I', '--dont_count_cassette', action='store_true', default=False, 
-                      help="Don't give cassette read/mutant totals in the header; (default %default) (also see -i, -J)")
-    parser.add_option('-J', '--dont_count_other', action='store_true', default=False, 
-                      help="Don't give read/mutant totals in the header for 'strange' chromosomes (not cassette and "
-                          +"not named chromosome* or scaffold*; (default %default) (also see -I)")
+                      help="Don't give separate cassette read/mutant totals in the header; (default %default) "
+                          +"(also see -i, -J)")
+    parser.add_option('-L', '--dont_count_other', action='store_true', default=False, 
+                      help="Don't give separate read/mutant totals in the header for 'strange' chromosomes "
+                          +"(not cassette and not named chromosome* or scaffold*; (default %default) (also see -I)")
 
     # extremely minor functionality options, do we even care??
     parser.add_option('-u', '--treat_unknown_as_match', action="store_true", default=False, 
@@ -271,14 +275,20 @@ def main(infiles, outfile, options):
 
     ### optionally merge adjacent mutants (since they're probably just artifacts of indels during deepseq)
     with open(options.mutant_merging_outfile, 'w') as OUTFILE:
-        # TODO should put a header on OUTFILE! And a header line giving the main outfile name; and also give the main outfile a header line saying that the mutant merging info is in options.mutant_merging_outfile,
-        # TODO make command-line options for the merge_cassette_chromosomes and merge_other_chromosomes arguments to all three of the functions
         if options.merge_adjacent_mutants: 
             all_alignment_data.merge_adjacent_mutants(merge_max_distance = options.merge_max_distance, 
-                                                      merge_count_ratio = options.merge_count_ratio, OUTPUT = OUTFILE)
+                                                      merge_count_ratio = options.merge_count_ratio, 
+                                                      merge_cassette_chromosomes = options.merge_in_cassette, 
+                                                      merge_other_chromosomes = (not options.dont_merge_in_other_chrom), 
+                                                      OUTPUT = OUTFILE)
         if not options.dont_merge_tandems: 
-            all_alignment_data.merge_opposite_tandem_mutants(OUTPUT = OUTFILE)
-        all_alignment_data.count_adjacent_mutants(adjacent_max_distance = options.merge_max_distance, OUTPUT = OUTFILE)
+            all_alignment_data.merge_opposite_tandem_mutants(merge_cassette_chromosomes = options.merge_in_cassette, 
+                                                      merge_other_chromosomes = (not options.dont_merge_in_other_chrom), 
+                                                      OUTPUT = OUTFILE)
+        all_alignment_data.count_adjacent_mutants(adjacent_max_distance = options.merge_max_distance, 
+                                                  count_cassette_chromosomes = options.merge_in_cassette, 
+                                                  count_other_chromosomes = (not options.dont_merge_in_other_chrom), 
+                                                  OUTPUT = OUTFILE)
     ### optionally remove mutants based on another dataset
     if options.remove_mutants_from_file:
         other_dataset = mutant_analysis_classes.Insertional_mutant_pool_dataset(infile=options.remove_mutants_from_file)

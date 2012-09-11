@@ -1,4 +1,5 @@
 # Counting adjacent mutants: max distance 1
+ (not including cassette chromosomes) (including non-nuclear chromosomes)
   same-strand adjacent mutants: chromosome_A + 99-? and chromosome_A + 100-?, 1 and 5 reads.
   same-strand adjacent mutants: chromosome_A + 100-? and chromosome_A + 101-?, 5 and 1 reads.
   same-strand adjacent mutants: chromosome_A + 300-? and chromosome_A + 301-?, 1 and 1 reads.

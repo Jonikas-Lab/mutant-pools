@@ -10,13 +10,18 @@
 #  Perfectly aligned reads, no mismatches (% of aligned):	25 (100%)
 #  Reads with cassette direction matching chromosome + strand (% of aligned):	22 (88%)
 #  Reads with cassette direction matching chromosome - strand (% of aligned):	3 (12%)
+## Mutant merging/counts (deciding when different-position reads should be one mutant)	
+#   (adjacent-merging/counting max distance):	(1)
+#   (if we're including mutants in cassette and in non-nuclear chromosomes):	(False, True)
+#  merged same-strand adjacent mutant pairs and opposite-strand tandem pairs:	3, 1
+#   (adjacent-merging min count ratio - None if no adjacent-merging):	(1)
+#  remaining same-position opposite-strand pairs (if not merged as tandems):	0
+#  remaining adjacent opposite-strand "toward-facing" pairs (those are definitely real):	0
+#  remaining adjacent opposite-strand "away-facing" pairs (% of toward-facing):	1 (N/A)
+#  remaining adjacent same-strand unmerged pairs (% of 2*toward-facing):	0 (N/A)
 ## Distinct mutants (read groups) by cassette insertion position:	11
 #  (read location with respect to cassette: which end, which direction):	(5prime, forward)
 #  (average and median reads per mutant):	(2, 1)
-#  (merged opposite-strand same-position tandems, non-cassette and cassette):	(1, 0)
-#  number of merged adjacent mutant pairs:	3
-#    (mutant merging max distance and min count ratio):	(1, 1)
-#    (remaining unmerged adjacent pairs, on same strand and opposite strands):	(0, 1)
 #  Most common mutant(s): reads (% of aligned) (position or count):	7 (28%) (chromosome_A + 100-?)
 ### HEADER AND DATA:
 # chromosome	strand	min_position	full_position	gene	orientation	feature	total_reads	perfect_reads	N_sequence_variants

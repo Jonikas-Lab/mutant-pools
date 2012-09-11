@@ -799,6 +799,8 @@ class Dataset_summary_data():
             raise ValueError("The cassette_end variable must be one of %s or '?'!"%SEQ_ENDS)
         if not reads_are_reverse in [True,False,'?']: 
             raise ValueError("The reads_are_reverse variable must be True, False, or '?'!")
+        # TODO some of these things (aligned_read_count, perfect_read_count, strand_read_counts, all the mutant-count stuff) can be inferred from the mutant set itself - in that case do I want to keep them separately?  It's faster to keep them separately, but requires more coding, especially as I add dataset-manipulation methods. PROBABLY WANT TO CHANGE IT. And in that case, this class should be renamed from summary to metadata or extra_data or something...
+        #  But we do need to keep count of per-strand readcount totals rather than generating the values on the fly, or we'll end up with 'both'-strand reads after tandem-merging, which I think we don't want, right?  Unless we keep track of read-strand for each sequence, separately from mutant-strand...
         # read count information
         self.discarded_read_count = 'unknown'
         self.ignored_region_read_counts = defaultdict(lambda: 0)
@@ -809,15 +811,20 @@ class Dataset_summary_data():
         self.mutant_counts_by_orientation = defaultdict(lambda: 0)
         self.mutant_counts_by_feature = defaultdict(lambda: 0)
         # mutant merging information
-        self.merging_conditions = ('none', 'none')
+        NaN = float('NaN')
+        self.adjacent_max_distance = None
+        self.adjacent_merging_count_ratio = None
+        self.merging_which_chromosomes = (None, None)
         self.merged_adjacent_pairs = 0
-        self.unmerged_adjacent_pairs = (0, 0)
-        self.merged_opposite_tandems = (0, 0)
-        # TODO some of these things (aligned_read_count, perfect_read_count, strand_read_counts, all the mutant-count stuff) can be inferred from the mutant set itself - in that case do I want to keep them separately?  It's faster to keep them separately, but requires more coding, especially as I add dataset-manipulation methods. PROBABLY WANT TO CHANGE IT. And in that case, this class should be renamed from summary to metadata or extra_data or something...
+        self.merged_opposite_tandems = 0
+        self.same_position_opposite = NaN
+        self.adjacent_opposite_toward = NaN
+        self.adjacent_opposite_away = NaN
+        self.adjacent_same_strand = NaN
         # MAYBE-TODO should cassette_end and reads_are_reverse be specified for the whole dataset, or just for each set of data added, in add_alignment_reader_to_data? The only real issue with this would be that then I wouldn't be able to print this information in the summary - or I'd have to keep track of what the value was for each alignment reader added and print that in the summary if it's a single value, or 'varied' if it's different values. Might also want to keep track of how many alignment readers were involved, and print THAT in the summary!  Or even print each (infile_name, cassette_end, reads_are_reverse) tuple as a separate line in the header.
         self.cassette_end = cassette_end
         self.reads_are_reverse = reads_are_reverse
-        # annotation-related information - TODO should this even be here, or somewhere else?
+        # annotation-related information - LATER-TODO should this even be here, or somewhere else?
         self.total_genes_in_genome = 0
 
     @property
@@ -1063,6 +1070,7 @@ class Insertional_mutant_pool_dataset():
                 # MAYBE-TODO what other information do we want?  Mutant-merging info?
                 # LATER-TODO add +/- strand readcounts to the information we read.  Normally they can be generated on the fly, but if opposite-strand mutants are merged, the strand is 'both' and the original +/- counts are lost. 
                 # MAYBE-TODO refactor this somehow so the line contents aren't just constants?
+                # TODO-TODO-TODO add reading mutant-merging info!
                 # TODO add this summary-reading stuff to unit-test!
                 continue
             # ignore special-comment and header lines, parse other tab-separated lines into values
@@ -1122,7 +1130,7 @@ class Insertional_mutant_pool_dataset():
             if get_readcount(other_dataset.get_mutant(mutant.position)) >= readcount_min:
                 self.remove_mutant(mutant.position)
         # TODO really I shouldn't be removing mutants outright, just noting them as removed or something...
-        # TODO adjust all the summary read counts etc after the removal!!! (Actually the summary shouldn't even have that!)
+        # TODO adjust all the summary read counts etc after the removal!!!
         # TODO should I keep track of removed reads, and print in summary?  PROBABLY.
 
     ######### SUMMARY INFORMATION
@@ -1216,7 +1224,6 @@ class Insertional_mutant_pool_dataset():
 
     ######### PROCESSING/MODIFYING DATASET
 
-
     def _possibly_adjacent_positions(self, max_distance, same_strand_only=False, include_cassette_chromosomes=True, 
                                      include_other_chromosomes=False):
         """ Generates all mutant position pairs that might be within max_distance of each other (same strand, or not).
@@ -1270,15 +1277,27 @@ class Insertional_mutant_pool_dataset():
         If merge_cassette_chromosomes or merge_other_chromosomes is False, don't do merging on cassette chromosomes 
          and other non-genome chromosomes (chloroplast, mitochondrial, etc) respectively.
 
-        Write details to OUTPUT (open filehandle; pass sys.stdout if desired, or None for no printing);
+        Write details to OUTPUT (open filehandle; pass sys.stdout if desired, or None for no writing);
          Save information on merged counts to 
         """
         if self.multi_dataset:  raise MutantError("merge_adjacent_mutants not implemented for multi-datasets!")
         if merge_count_ratio < 1:  raise MutantError("merge_count_ratio must be at least 1!")
-        # MAYBE-TODO implement for ratio=1, too? But which position would be used, if both mutants had same readcounts?
+        if self.summary.adjacent_merging_count_ratio is not None:
+            raise MutantError("merge_adjacent_mutants has been run already - cannot run twice on same dataset!")
+            # MAYBE-TODO or should that be allowed?  But then it could be done with different conditions, which would 
+            #  make things confusing, and the new self.summary.adjacent_merging_count_ratio would overwrite the old...
+        if self.summary.adjacent_max_distance not in (None, merge_max_distance):
+            raise MutantError("Cannot change max adjacent distance once it's been set! (by merging or counting) "
+                              "Currently %s, can't change to %s."%(self.summary.adjacent_max_distance, merge_max_distance))
+            # MAYBE-TODO or allow this and just re-run count_adjacent_mutants afterward with new value?
+        if not self.summary.merging_which_chromosomes in [(merge_cassette_chromosomes,merge_other_chromosomes), 
+                                                          (None,None)]:
+            raise MutantError("Cannot change which chromosomes are subject to mutant-merging! "
+                             +"Currently %s for cassette, %s for non-nuclear."%self.summary.merging_which_chromosomes
+                             +"Trying to change to %s and %s."%(merge_cassette_chromosomes, merge_other_chromosomes))
         if any([mutant.position.strand=='both' for mutant in self]):
-            raise Exception("merge_adjacent_mutants should be run BEFORE merge_opposite_tandem_mutants "
-                            +"- NOT IMPLEMENTED for both-stranded mutants!")
+            raise MutantError("merge_adjacent_mutants should be run BEFORE merge_opposite_tandem_mutants "
+                             +"- NOT IMPLEMENTED for both-stranded mutants!")
             # LATER-TODO implement for both-stranded mutants too! In that case all strand-comparisons should be
             #  rewritten so 'both' and either + or - would compare as the same, or something... 
         if OUTPUT is None: OUTPUT = FAKE_OUTFILE
@@ -1288,6 +1307,8 @@ class Insertional_mutant_pool_dataset():
         if merge_count_ratio == 1:  
             OUTPUT.write(" (Warning: minimum ratio is 1, so sometimes both mutants will have the same read number "
                          "- the earlier position is used in that case.)\n")
+        OUTPUT.write(" (%sincluding cassette chromosomes)"%('' if merge_cassette_chromosomes else 'not ')
+                    +" (%sincluding non-nuclear chromosomes)\n"%('' if merge_other_chromosomes else 'not '))
         merged_count = 0
         for pos1,pos2 in self._possibly_adjacent_positions(merge_max_distance, True, merge_cassette_chromosomes, 
                                                            merge_other_chromosomes):
@@ -1334,8 +1355,14 @@ class Insertional_mutant_pool_dataset():
 
         # add overall counts to dataset summary
         OUTPUT.write("# Finished merging adjacent mutants: %s pairs merged\n"%merged_count) 
-        self.summary.merging_conditions = (merge_max_distance, merge_count_ratio)
+        self.summary.adjacent_max_distance = merge_max_distance
+        self.summary.adjacent_merging_count_ratio = merge_count_ratio
+        self.summary.merging_which_chromosomes = (merge_cassette_chromosomes, merge_other_chromosomes)
         self.summary.merged_adjacent_pairs = merged_count
+
+    # TODO there was a bug here where mutants 1,2,3 all should be merged together and a warning gets printed!  See the warning in test_data/count-aln__merge-adjacent2-r3_merging-info.txt, which really shouldn't be there.  Research and hopefully fix that!  I'm not sure whether the problem is ONLY that is prints an unnecessary warning, or if there's also an actual issue with merging.
+    # TODO was there some other bug when doing tandem-merging and adjacent-merging at once?  I think something weird came up in actual data analysis - see ../../1206_Ru-screen1_deepseq-data-early/notes.txt  "Mutants" section.
+    # LATER-TODO should put a header line on merging-outfile giving the main outfile name; and also give the main outfile a header line saying that the mutant merging info is in options.mutant_merging_outfile.
 
     def merge_opposite_tandem_mutants(self, merge_cassette_chromosomes=False, merge_other_chromosomes=True, 
                                       OUTPUT=sys.stdout):
@@ -1352,11 +1379,16 @@ class Insertional_mutant_pool_dataset():
          save the number of merged cases to self.summary.
         """
         if self.multi_dataset:  raise MutantError("merge_opposite_tandem_mutants not implemented for multi-datasets!")
+        if not self.summary.merging_which_chromosomes in [(merge_cassette_chromosomes,merge_other_chromosomes), 
+                                                          (None,None)]:
+            raise MutantError("Cannot change which chromosomes are subject to mutant-merging! "
+                              "Currently %s for cassette, %s for non-nuclear."%self.summary.merging_which_chromosomes)
         if OUTPUT is None: OUTPUT = FAKE_OUTFILE
-        OUTPUT.write("# Merging opposite-strand same-position mutants (presumably tail-to-tail tandems)\n")
+        OUTPUT.write("# Merging opposite-strand same-position mutants (presumably tail-to-tail tandems)\n"
+                    +" (%sincluding cassette chromosomes)"%('' if merge_cassette_chromosomes else 'not ')
+                    +" (%sincluding non-nuclear chromosomes)\n"%('' if merge_other_chromosomes else 'not '))
 
-        opposite_tandem_cassette = 0
-        opposite_tandem_non_cassette = 0
+        merged_tandem_count = 0
         all_positions = sorted([mutant.position for mutant in self])
         # same-position opposite-strand mutants will always be adjacent on the sorted position list, so only look at those
         for pos1,pos2 in zip(all_positions,all_positions[1:]):
@@ -1367,17 +1399,16 @@ class Insertional_mutant_pool_dataset():
             assert 'both' not in [pos1.strand, pos2.strand], "Two mutants in one position must be +/- strand, not both!"
 
             OUTPUT.write(" MERGING opposite-strand same-position tandem mutants: %s and %s.\n"%(pos1,pos2))
-            if is_cassette_chromosome(pos1.chromosome): opposite_tandem_cassette += 1
-            else:                                       opposite_tandem_non_cassette += 1
+            merged_tandem_count += 1
             self._merge_two_mutants(pos1, pos2)
 
         # add overall counts to dataset summary
-        OUTPUT.write(("# Finished merging opposite-strand same-position mutants: %s non-cassette pairs merged, "
-                      +"and %s cassette\n")%(opposite_tandem_non_cassette, opposite_tandem_cassette)) 
-        self.summary.merged_opposite_tandems = (opposite_tandem_non_cassette, opposite_tandem_cassette)
+        OUTPUT.write("# Finished merging opposite-strand same-position mutants: %s pairs merged\n"%merged_tandem_count)
+        self.summary.merging_which_chromosomes = (merge_cassette_chromosomes, merge_other_chromosomes)
+        self.summary.merged_opposite_tandems = merged_tandem_count
 
     def count_adjacent_mutants(self, adjacent_max_distance=1, count_cassette_chromosomes=False, 
-                               count_other_chromosomes=True, OUTPUT=sys.stdout):
+                               count_other_chromosomes=True, different_parameters=False, OUTPUT=sys.stdout):
         """ Count various categories of adjacent mutants; save data to self.summary. 
         
         Specific cases counted are:
@@ -1390,13 +1421,28 @@ class Insertional_mutant_pool_dataset():
              but the "toward" case really HAS TO be random unrelated mutants (right?), so it can be used as a reference.)
 
         If count_cassette_chromosomes or count_other_chromosomes is False, don't include in the count cassette chromosomes 
-         and other non-genome chromosomes (chloroplast, mitochondrial, etc) respectively.
+         and other non-nuclear chromosomes (chloroplast, mitochondrial, etc) respectively.
+        If different_parameters is True, check that adjacent_max_distance, count_cassette_chromosomes, 
+         and count_other_chromosomes match previously used merging settings.
+
 
         Also write details to OUTPUT (open filehandle; pass sys.stdout if desired, or None for no printing).
         """
         if self.multi_dataset:  raise MutantError("count_adjacent_mutants not implemented for multi-datasets!")
+        if not different_parameters:
+            if not self.summary.merging_which_chromosomes in [(count_cassette_chromosomes,count_other_chromosomes), 
+                                                              (None,None)]:
+                raise MutantError("If trying to change which chromosomes are included when doing adjacent-mutant-count "
+                                  "compared to mutant-merging, use different_parameters argument."
+                                  "(Merging: %s for cassette, %s for non-nuclear.)"%self.summary.merging_which_chromosomes)
+            if not self.summary.adjacent_max_distance in [adjacent_max_distance, None]:
+                raise MutantError("If trying to change the adjacent-mutant max distance when doing adjacent-mutant-count "
+                                  "compared to mutant-merging, use different_parameters argument."
+                                  "(Merging: max distance %s.)"%self.summary.adjacent_max_distance)
         if OUTPUT is None: OUTPUT = FAKE_OUTFILE
-        OUTPUT.write("# Counting adjacent mutants: max distance %s\n"%adjacent_max_distance)
+        OUTPUT.write("# Counting adjacent mutants: max distance %s\n"%adjacent_max_distance
+                    +" (%sincluding cassette chromosomes)"%('' if count_cassette_chromosomes else 'not ')
+                    +" (%sincluding non-nuclear chromosomes)\n"%('' if count_other_chromosomes else 'not '))
         adjacent_same_strand = 0
         same_position_opposite_strands = 0
         adjacent_opposite_strands_away = 0
@@ -1441,19 +1487,13 @@ class Insertional_mutant_pool_dataset():
                      +"(may be tandems with a deletion), "
                      +"%s adjacent opposite-strand \"toward-facing\" pairs "%adjacent_opposite_strands_toward
                      +"(definitely two separate mutants).\n")
-        self.summary.unmerged_adjacent_pairs = (adjacent_same_strand, same_position_opposite_strands
-                                                + adjacent_opposite_strands_away + adjacent_opposite_strands_toward)
-        # TODO change this (and change summary formatting) to include all the new information instead of just the sum!
-        #  We probably want the following in the summary: tandem pairs merged and left, 
-        #   and adjacent pairs same-strand and opposite-away and opposite-toward (with sensible comparisons)
-        #   (compare opposite-away to opposite-toward, and same-strand to 2x opposite-toward)
-
-    # TODO there was a bug here where mutants 1,2,3 all should be merged together and a warning gets printed!  See the warning in test_data/count-aln__merge-adjacent2-r3_merging-info.txt, which really shouldn't be there.  Research and hopefully fix that!  I'm not sure whether the problem is ONLY that is prints an unnecessary warning, or if there's also an actual issue with merging.
-    # TODO was there some other bug when doing tandem-merging and adjacent-merging at once?  I think something weird came up in actual data analysis - see ../../1206_Ru-screen1_deepseq-data-early/notes.txt  "Mutants" section.
-
-    # Note: we do need to keep count of per-strand readcount totals rather than generating the values on the fly,
-    #  otherwise we'll end up with 'both'-strand reads, which I think we don't want, right?  MAYBE-TODO think...
-
+        self.summary.adjacent_same_strand = adjacent_same_strand
+        self.summary.same_position_opposite = same_position_opposite_strands
+        self.summary.adjacent_opposite_away = adjacent_opposite_strands_away
+        self.summary.adjacent_opposite_toward = adjacent_opposite_strands_toward
+        self.summary.adjacent_max_distance = adjacent_max_distance
+        if not different_parameters:
+            self.summary.merging_which_chromosomes = (count_cassette_chromosomes, count_other_chromosomes)
 
     def find_genes_for_mutants(self, genefile, detailed_features=False, N_run_groups=3, verbosity_level=1):
         """ To each mutant in the dataset, add the gene it's in (look up gene positions for each mutant using genefile).
@@ -1657,6 +1697,27 @@ class Insertional_mutant_pool_dataset():
                                                                               self.reads_in_chromosome(chromosome,dataset),
                                                                               [summ.aligned_read_count]) ))
         
+        DVG.append((header_prefix+"Mutant merging/counts (deciding when different-position reads should be one mutant)", 
+                    lambda summ,mutants,dataset: '' ))
+        DVG.append((line_prefix+" (adjacent-merging/counting max distance):", 
+                    lambda summ,mutants,dataset: "(%s)"%summ.adjacent_max_distance ))
+        DVG.append((line_prefix+" (if we're including mutants in cassette and in non-nuclear chromosomes):", 
+                    lambda summ,mutants,dataset: "(%s, %s)"%summ.merging_which_chromosomes )) 
+        DVG.append((line_prefix+"merged same-strand adjacent mutant pairs and opposite-strand tandem pairs:", 
+                    lambda summ,mutants,dataset: "%s, %s"%(summ.merged_adjacent_pairs, summ.merged_opposite_tandems) ))
+        DVG.append((line_prefix+" (adjacent-merging min count ratio - None if no adjacent-merging):", 
+                    lambda summ,mutants,dataset: "(%s)"%(summ.adjacent_merging_count_ratio) ))
+        DVG.append((line_prefix+"remaining same-position opposite-strand pairs (if not merged as tandems):", 
+                    lambda summ,mutants,dataset: "%s"%summ.same_position_opposite )) 
+        DVG.append((line_prefix+'remaining adjacent opposite-strand "toward-facing" pairs (those are definitely real):', 
+                    lambda summ,mutants,dataset: "%s"%summ.adjacent_opposite_toward )) 
+        DVG.append((line_prefix+'remaining adjacent opposite-strand "away-facing" pairs (% of toward-facing):', 
+                    lambda summ,mutants,dataset: value_and_percentages(summ.adjacent_opposite_away, 
+                                                       [summ.adjacent_opposite_toward], percentage_format_str='%.0f') )) 
+        DVG.append((line_prefix+'remaining adjacent same-strand unmerged pairs (% of 2*toward-facing):', 
+                    lambda summ,mutants,dataset: value_and_percentages(summ.adjacent_same_strand, 
+                                                       [2*summ.adjacent_opposite_toward], percentage_format_str='%.0f') )) 
+
         DVG.append((header_prefix+"Distinct mutants (read groups) by cassette insertion position:", 
                     lambda summ,mutants,dataset: "%s"%len(mutants) ))
         DVG.append((line_prefix+"(read location with respect to cassette: which end, which direction):", 
@@ -1665,17 +1726,6 @@ class Insertional_mutant_pool_dataset():
         DVG.append((line_prefix+"(average and median reads per mutant):", 
                     lambda summ,mutants,dataset: "(%d, %d)"%(round((summ.aligned_read_count)/len(mutants)), 
                                                  round(median([m.get_readcount_by_dataset(dataset) for m in mutants]))) ))
-
-        if any([sum(summ.merged_opposite_tandems) for summ in summaries]):
-            DVG.append((line_prefix+"(merged opposite-strand same-position tandems, non-cassette and cassette):", 
-                        lambda summ,mutants,dataset: "(%s, %s)"%summ.merged_opposite_tandems )) 
-        if any([summ.merged_adjacent_pairs for summ in summaries]):
-            DVG.append((line_prefix+"number of merged adjacent mutant pairs:", 
-                        lambda summ,mutants,dataset: str(summ.merged_adjacent_pairs) ))
-            DVG.append((line_prefix+"  (mutant merging max distance and min count ratio):", 
-                        lambda summ,mutants,dataset: "(%s, %s)"%summ.merging_conditions ))
-            DVG.append((line_prefix+"  (remaining unmerged adjacent pairs, on same strand and opposite strands):", 
-                        lambda summ,mutants,dataset: "(%s, %s)"%summ.unmerged_adjacent_pairs )) 
 
         DVG.append((line_prefix+"Most common mutant(s): reads (% of aligned) (position or count):",
                     lambda summ,mutants,dataset: self._most_common_mutants_info(dataset) ))
