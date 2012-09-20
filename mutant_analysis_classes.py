@@ -1043,6 +1043,8 @@ class Insertional_mutant_pool_dataset():
         data (if the data originally listed 1 unique sequence, and new data adds another 2 sequences, is the total 2 or 3 
          unique sequences?  If assume_new_sequences is True, the total is old+new; if it's False, it's max(old,new)). 
         """
+        # TODO instead of all this file-reading functionality, it'd probably make more sense to just use pickle to write the whole object in python-readable form and then read it in again!  In a separate file from the human-readable form.
+        # Would probably still need the read_data_from_file function around to read old datasets that don't have pickled versions, only text ones.
         if self.multi_dataset:  raise MutantError("read_data_from_file not implemented for multi-datasets!")
         for line in open(infile):
             # try to extract info from the comment lines that can't be reproduced from the data, ignore the rest

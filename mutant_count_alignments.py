@@ -226,6 +226,7 @@ def add_discarded_reads_from_metadata_file(infiles, input_metadata_file, verbosi
             if line.startswith('## reads removed: '):           # old discarded-read line format
                 discarded_counts.append(int(line.split()[3]))
                 break
+            # TODO include the separate "bad" read counts from start-trimming and cassette-trimming?  And probably other categories later if I add any... (like the cassette-end special cases)
         else:   # in a for-else loop the else is executed if the for wasn't ended with break, i.e. the line wasn't found
             if verbosity_level>0:
                 print("Warning: metadata input file %s didn't contain discarded read count line! "%curr_input_metadata_file

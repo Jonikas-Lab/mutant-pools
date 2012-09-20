@@ -130,6 +130,8 @@ def main(infiles, outfile, options):
     for dataset_name,infile in zip(dataset_names,infiles):
         if options.verbosity_level>1:   print "parsing input file %s - time %s."%(infile, time.ctime())
         current_dataset = mutant_analysis_classes.Insertional_mutant_pool_dataset(infile=infile)
+        current_dataset.count_adjacent_mutants(OUTPUT=None)
+        # TODO once read_data_from_file actually reads mutant-merging info, get the adjacent-max-distance from that and pass that to current_dataset.count_adjacent_mutants instead of using the default value
         all_datasets[dataset_name] = current_dataset
         if options.verbosity_level>0:   print "%s mutants in dataset from input file %s"%(len(current_dataset), infile)
         elif options.verbosity_level>1: current_dataset.print_summary()
