@@ -1394,9 +1394,12 @@ class Insertional_mutant_pool_dataset():
         all_positions = sorted([mutant.position for mutant in self])
         # same-position opposite-strand mutants will always be adjacent on the sorted position list, so only look at those
         for pos1,pos2 in zip(all_positions,all_positions[1:]):
-            # if the two positions are on different chromosomes or aren't same-position opposite-strand
+            # if the two mutants are on different chromosomes or different positions, go on to the next pair
             if pos1.chromosome != pos2.chromosome:        continue
             if pos2.min_position != pos1.min_position:    continue
+            # if the two mutants are on chromosomes that shouldn't be merged, go on to the next pair
+            if merge_cassette_chromosomes==False and is_cassette_chromosome(pos1.chromosome): continue
+            if merge_other_chromosomes==False and is_other_chromosome(pos1.chromosome):       continue
             assert pos1.strand != pos2.strand, "Mutants with same chromosome/position must have different strands!"
             assert 'both' not in [pos1.strand, pos2.strand], "Two mutants in one position must be +/- strand, not both!"
 
