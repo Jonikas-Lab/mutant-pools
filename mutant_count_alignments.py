@@ -17,6 +17,7 @@ USAGE: mutant_count_alignments.py [options] infile1 [infile2 infile3 ...] outfil
 # basic library
 import sys, os, time
 import unittest
+import pickle
 # other packages
 import HTSeq
 # my modules
@@ -55,7 +56,6 @@ def do_test_run():
     # MAYBE-TODO change all the expected files to merge tandems, so I can remove -Q from all test runs except dont-merge-tandems?
     # MAYBE-TODO add run-test for --gene_annotation_file?
     # MAYBE-TODO add run-test for --input_collapsed_to_unique?  Or is that unit-tested already?
-
 
     # convert tests into (testname, arg_and_infile_string) format, adding the options that are always used
     test_names_and_args = [('count-aln__'+testname, test_args+' -q '+' '.join(infiles)) 
@@ -113,8 +113,6 @@ def define_option_parser():
     parser.add_option('-J', '--dont_merge_in_other_chrom', action='store_true', default=False, 
                       help="For adjacent and tandem merging/counts: don't include mutants in non-cassette non-genome "
                           +"chromosomes like chloroplast and mitochondrial(default %default)")
-    parser.add_option('-O', '--mutant_merging_outfile', default='AUTO', metavar='FILE|AUTO',
-                      help="Print mutant-merging info to FILE (default AUTO - file will be based on outfile name)")
 
     parser.add_option('-X', '--remove_mutants_from_file', metavar='FILE',
                       help='Remove all mutants present in FILE from the datasets (see -z/-Z for read count cutoff).')
@@ -249,8 +247,10 @@ def main(infiles, outfile, options):
     options.count_cassette = not options.dont_count_cassette
     options.count_other = not options.dont_count_other
     options.merge_boundary_features = not options.dont_merge_boundary_features
-    if options.mutant_merging_outfile=='AUTO':
-        options.mutant_merging_outfile = '%s_merging-info.txt'%os.path.splitext(outfile)[0]
+    # MAYBE-TODO change outfile to a folder?  Since it'll have three things in it now...
+    outfile_basename = os.path.splitext(outfile)[0]
+    mutant_merging_outfile = outfile_basename + '_merging-info.txt'
+    pickled_outfile = outfile_basename + '.pickle'
 
     ### generate empty alignment set object with basic read position/orientation properties defined by options
     all_alignment_data = mutant_analysis_classes.Insertional_mutant_pool_dataset(options.read_cassette_end, 
@@ -275,21 +275,21 @@ def main(infiles, outfile, options):
                                                         ignore_cassette = options.ignore_cassette)
 
     ### optionally merge adjacent mutants (since they're probably just artifacts of indels during deepseq)
-    with open(options.mutant_merging_outfile, 'w') as OUTFILE:
+    with open(mutant_merging_outfile, 'w') as MERGEFILE:
         if options.merge_adjacent_mutants: 
             all_alignment_data.merge_adjacent_mutants(merge_max_distance = options.merge_max_distance, 
                                                       merge_count_ratio = options.merge_count_ratio, 
                                                       merge_cassette_chromosomes = options.merge_in_cassette, 
                                                       merge_other_chromosomes = (not options.dont_merge_in_other_chrom), 
-                                                      OUTPUT = OUTFILE)
+                                                      OUTPUT = MERGEFILE)
         if not options.dont_merge_tandems: 
             all_alignment_data.merge_opposite_tandem_mutants(merge_cassette_chromosomes = options.merge_in_cassette, 
                                                       merge_other_chromosomes = (not options.dont_merge_in_other_chrom), 
-                                                      OUTPUT = OUTFILE)
+                                                      OUTPUT = MERGEFILE)
         all_alignment_data.count_adjacent_mutants(adjacent_max_distance = options.merge_max_distance, 
                                                   count_cassette_chromosomes = options.merge_in_cassette, 
                                                   count_other_chromosomes = (not options.dont_merge_in_other_chrom), 
-                                                  OUTPUT = OUTFILE)
+                                                  OUTPUT = MERGEFILE)
     ### optionally remove mutants based on another dataset
     if options.remove_mutants_from_file:
         other_dataset = mutant_analysis_classes.Insertional_mutant_pool_dataset(infile=options.remove_mutants_from_file)
@@ -330,6 +330,8 @@ def main(infiles, outfile, options):
         all_alignment_data.print_data(OUTPUT=OUTFILE, sort_data_by=options.sort_data_key, 
                                       N_sequences=options.N_sequences_per_group, 
                                       header_line=True, header_prefix='# ')
+        with open(pickled_outfile,'w') as PICKLEFILE:
+            pickle.dump(all_alignment_data, PICKLEFILE, 0)
 
 
 if __name__ == "__main__":

@@ -400,6 +400,17 @@ def find_gene_by_pos(insertion_pos, chromosome_GFF_record, detailed_features=Fal
 
 ############################### Main classes describing the mutants and mutant sets #####################################
 
+# help functions returning "blank" mutants for defaultdicts (can't use lambdas because pickle doesn't like them)
+def blank_readcount_only_mutant():
+    return Insertional_mutant(readcount_related_only=True)
+def blank_full_single_mutant():
+    return Insertional_mutant(multi_dataset=False,readcount_related_only=False)
+def blank_single_mutant_with_pos(pos):
+    return Insertional_mutant(insertion_position=pos, multi_dataset=False, readcount_related_only=False)
+def blank_multi_mutant_with_pos(pos):
+    return Insertional_mutant(insertion_position=pos, multi_dataset=True, readcount_related_only=False)
+
+
 class Insertional_mutant():
     """ Data regarding a particular insertional mutant: insertion position, gene, read numbers/sequences, etc.
 
@@ -461,7 +472,7 @@ class Insertional_mutant():
         if not multi_dataset:
             self._set_readcount_related_data_to_zero()
         else:
-            self.by_dataset = defaultdict(lambda: Insertional_mutant(readcount_related_only=True))
+            self.by_dataset = defaultdict(blank_readcount_only_mutant)
 
     def get_readcount_by_dataset(self, dataset=None, strict=False):
         """ Help function to get the total readcount for either a single-dataset or multi-dataset mutant. 
@@ -488,7 +499,7 @@ class Insertional_mutant():
         self.total_read_count      = 0
         self.perfect_read_count    = 0
         self.unique_sequence_count = 0
-        self.sequences_and_counts  = defaultdict(lambda: 0)
+        self.sequences_and_counts  = defaultdict(int)
 
     def _check_consistent_multi_dataset_args(self, dataset_name, function_name='<some_func>', multi_noname_allowed=False):
         """ Make sure dataset_name is consistent with single-/multi-dataset status of mutant; raise MutantError if not.
@@ -714,7 +725,7 @@ class Insertional_mutant():
             else:
                 raise MutantError("Can't run convert_to_multi_dataset - mutant is already multi-dataset!")
         # generate new by-dataset dictionary of all the readcount-related data separately for each dataset
-        self.by_dataset = defaultdict(lambda: Insertional_mutant(readcount_related_only=True))
+        self.by_dataset = defaultdict(blank_readcount_only_mutant)
         self.multi_dataset = True
         # if current_dataset_name isn't None, copy the old readcount-related data values from self 
         #  to the new dictionaries using the add_other_mutant_as_dataset with self as other_mutant
@@ -781,7 +792,7 @@ class Insertional_mutant():
         """
         if not self.multi_dataset:
             raise MutantError("This mutant is not multi-dataset, can't run give_all_single_dataset_mutants!")
-        mutant_dictionary = defaultdict(lambda: Insertional_mutant(multi_dataset=False,readcount_related_only=False))
+        mutant_dictionary = defaultdict(blank_full_single_mutant)
         for dataset_name in self.by_dataset.iterkeys():
             mutant_dictionary[dataset_name] = self.give_single_dataset_mutant(dataset_name)
         return mutant_dictionary
@@ -805,13 +816,13 @@ class Dataset_summary_data():
         #  But we do need to keep count of per-strand readcount totals rather than generating the values on the fly, or we'll end up with 'both'-strand reads after tandem-merging, which I think we don't want, right?  Unless we keep track of read-strand for each sequence, separately from mutant-strand...
         # read count information
         self.discarded_read_count = 'unknown'
-        self.ignored_region_read_counts = defaultdict(lambda: 0)
+        self.ignored_region_read_counts = defaultdict(int)
         self.aligned_read_count, self.unaligned_read_count, self.perfect_read_count = 0,0,0
-        self.strand_read_counts = defaultdict(lambda: 0)
+        self.strand_read_counts = defaultdict(int)
         # mutant count information
         self.mutants_in_genes, self.mutants_not_in_genes, self.mutants_undetermined = 0,0,0
-        self.mutant_counts_by_orientation = defaultdict(lambda: 0)
-        self.mutant_counts_by_feature = defaultdict(lambda: 0)
+        self.mutant_counts_by_orientation = defaultdict(int)
+        self.mutant_counts_by_feature = defaultdict(int)
         # mutant merging information
         NaN = float('NaN')
         self.adjacent_max_distance = None
@@ -858,7 +869,7 @@ class Dataset_summary_data():
         If merge_boundary_features==True, any locations containing '/' and no '??' will be listed as 'boundary'.
         The custom sort order (based on what seems sensible biologically) is: CDS, intron, UTR, other, boundary.
         """
-        merged_feature_count_dict = defaultdict(lambda: 0)
+        merged_feature_count_dict = defaultdict(int)
         for feature, count in self.mutant_counts_by_feature.items():
             # note that anything containing '??' AND '/' never gets merged as boundary
             if '??' in feature:
@@ -907,10 +918,11 @@ class Insertional_mutant_pool_dataset():
         # _mutants_by_position is the main data structure here, but it's also private:
         #      see "METHODS FOR EMULATING A CONTAINER TYPE" section below for proper ways to interact with mutants.
         #   the single mutants should be single-dataset by default, or multi-dataset if the containing dataset is.
-        self._mutants_by_position = keybased_defaultdict(lambda pos: Insertional_mutant(insertion_position=pos, 
-                                                                multi_dataset=multi_dataset, readcount_related_only=False))
+        if multi_dataset:   blank_mutant_function = blank_multi_mutant_with_pos
+        else:               blank_mutant_function = blank_single_mutant_with_pos
+        self._mutants_by_position = keybased_defaultdict(blank_mutant_function)
         # other arrangements of the same basic mutant set
-        self.mutants_by_gene = defaultdict(lambda: [])
+        self.mutants_by_gene = defaultdict(list)
         # various dataset summary data - single for a single dataset, a dictionary for a multi-dataset object.
         self.multi_dataset = multi_dataset
         if not multi_dataset:
@@ -1037,19 +1049,22 @@ class Insertional_mutant_pool_dataset():
                 summ.perfect_read_count += read_count
 
     def read_data_from_file(self, infile, assume_new_sequences=False):
-        """ Read data from a file generated by self.print_data, and add resulting mutants to dataset. Ignores some things. 
-        
-        Populates most of the dataset total read/mutant count values correctly, but ignores unaligned and discarded reads
-         and anything involving special regions.
+        """ Read data from a file made by self.print_data, add mutants to dataset. Ignores some things. DEPRECATED. 
+
+        Populates most of the dataset total read/mutant count values correctly, but ignores unaligned and discarded reads, 
+         anything involving special regions, mutant-merging information, and possibly other things.
+        Cannot deal with gene annotation fields.
         Ignores single sequence/count fields; the total number of sequence variants is unreliable if you add to preexisting
         data (if the data originally listed 1 unique sequence, and new data adds another 2 sequences, is the total 2 or 3 
          unique sequences?  If assume_new_sequences is True, the total is old+new; if it's False, it's max(old,new)). 
+
+        DEPRECATED: All datasets should now have pickled versions for easy reading into python - use those instead.  
+         This method will be kept around for reading old datasets without pickled versions, but will NOT BE UPDATED.
         """
-        # TODO instead of all this file-reading functionality, it'd probably make more sense to just use pickle to write the whole object in python-readable form and then read it in again!  In a separate file from the human-readable form.
-        # Would probably still need the read_data_from_file function around to read old datasets that don't have pickled versions, only text ones.
         if self.multi_dataset:  raise MutantError("read_data_from_file not implemented for multi-datasets!")
         for line in open(infile):
             # try to extract info from the comment lines that can't be reproduced from the data, ignore the rest
+            # NOTE: won't be adding any missing information - use pickled files instead, THIS IS DEPRECATED.
             if line.startswith('#'):                                        
                 line = line.strip('#').strip()
                 if line.startswith("Reads discarded in preprocessing"):
@@ -1071,11 +1086,6 @@ class Insertional_mutant_pool_dataset():
                     try:                data = int(data)
                     except ValueError:  pass
                     self.summary.total_genes_in_genome = data
-                # MAYBE-TODO what other information do we want?  Mutant-merging info?
-                # LATER-TODO add +/- strand readcounts to the information we read.  Normally they can be generated on the fly, but if opposite-strand mutants are merged, the strand is 'both' and the original +/- counts are lost. 
-                # MAYBE-TODO refactor this somehow so the line contents aren't just constants?
-                # TODO-TODO-TODO add reading mutant-merging info!
-                # TODO add this summary-reading stuff to unit-test!
                 continue
             # ignore special-comment and header lines, parse other tab-separated lines into values
             if line.startswith('<REGEX>#') or line.startswith('<IGNORE>'):  continue       
@@ -1101,7 +1111,6 @@ class Insertional_mutant_pool_dataset():
                     assert seq!=''
                     curr_mutant.sequences_and_counts[seq] += int(count)
             # add to dataset total read/mutant counts
-            # MAYBE-TODO Might just want to write a function that recalculates all of the total counts below, to be ran at the end of read_data_from_file and add_alignment_reader_to_data and I guess find_genes_for_mutants, instead of doing it this way
             summ = self.summary
             summ.aligned_read_count += total_reads
             summ.perfect_read_count += perfect_reads
@@ -1111,7 +1120,6 @@ class Insertional_mutant_pool_dataset():
             else:                                         summ.mutants_in_genes += 1
             if orientation not in ['?','-']:              summ.mutant_counts_by_orientation[orientation] += 1
             if gene_feature not in ['?','-']:             summ.mutant_counts_by_feature[gene_feature] += 1
-        # TODO update to deal with gene annotation fields?
     
     def add_discarded_reads(self, N, reset_count=False):
         """ Add N to self.discarded_read_count (or set self.discarded_read_count to N if reset_count is True). """
@@ -1516,7 +1524,7 @@ class Insertional_mutant_pool_dataset():
 
         # group all the mutants by chromosome, so that I can go over each chromosome in genefile separately
         #   instead of reading in all the data at once (which uses a lot of memory)
-        mutants_by_chromosome = defaultdict(lambda: set())
+        mutants_by_chromosome = defaultdict(set)
         for mutant in self:
             mutants_by_chromosome[mutant.position.chromosome].add(mutant)
 
@@ -1581,7 +1589,7 @@ class Insertional_mutant_pool_dataset():
         """ Fill the self.mutants_by_gene dictionary (gene_name:mutant_list) based on full list of dataset mutants; 
         real gene IDs only (ignore SPECIAL_GENE_CODES, i.e. mutants not in genes, and mutants with unknown gene status).
         """
-        self.mutants_by_gene = defaultdict(lambda: [])
+        self.mutants_by_gene = defaultdict(list)
         for mutant in self:
             if mutant.gene not in SPECIAL_GENE_CODES.all_codes:
                 self.mutants_by_gene[mutant.gene].append(mutant)
@@ -1593,7 +1601,7 @@ class Insertional_mutant_pool_dataset():
         If the object is multi-dataset, dataset name must be provided, otherwise it cannot.
         """
         self.make_by_gene_mutant_dict()
-        gene_by_mutantN = defaultdict(lambda: set())
+        gene_by_mutantN = defaultdict(set)
         for (gene,mutants) in self.mutants_by_gene.iteritems():
             gene_by_mutantN[len([m for m in mutants if m.get_readcount_by_dataset(dataset)])].add(gene)
         # check that the numbers add up to the total number of genes
@@ -2460,11 +2468,9 @@ class Testing_Insertional_mutant_pool_dataset(unittest.TestCase):
         pass
         # MAYBE-TODO implement based on stuff in test_data, like do_test_run in deepseq_count_alignments.py?
 
-    def test__read_data_from_file(self):
-        ## 1. input file with no gene information but more variation in other features
-        input_file = 'test_data/count-aln__cassette-end-5prime.txt'
-        data = Insertional_mutant_pool_dataset()
-        data.read_data_from_file(input_file)
+    def _check_infile1(self, data):
+        """ Check that data is as expected in test_data/count-aln__cassette-end-5prime.txt. """
+        # summary
         assert data.summary.processed_read_count == 40
         assert data.summary.aligned_read_count == 30
         assert data.summary.unaligned_read_count == 10
@@ -2500,22 +2506,12 @@ class Testing_Insertional_mutant_pool_dataset(unittest.TestCase):
         assert mutant.total_read_count == 1
         assert mutant.perfect_read_count == 1
         assert mutant.unique_sequence_count == 1
-        ## 2. adding more data to a file that already has some...
-        data.read_data_from_file(input_file, assume_new_sequences=False)
-        mutant = data.get_mutant('reads_2_seqs_1','+',position_before=204)
-        assert mutant.position.chromosome == 'reads_2_seqs_1'
-        assert mutant.position.min_position == 204
-        assert mutant.total_read_count == 4
-        assert mutant.perfect_read_count == 4
-        # how mutant.unique_sequence_count should act in this case depends on the value of assume_new_sequences
-        assert mutant.unique_sequence_count == 1
-        data.read_data_from_file(input_file, assume_new_sequences=True)
-        assert mutant.unique_sequence_count == 2
-        ## 3. input file with gene information
-        input_file2 = 'test_data/count-aln__with-gene-info_merged.txt'
-        data2 = Insertional_mutant_pool_dataset()
-        data2.read_data_from_file(input_file2)
-        assert data2.summary.processed_read_count == data2.summary.aligned_read_count == data2.summary.perfect_read_count == 40
+
+    def _check_infile2(self, data2):
+        """ Check that data is as expected in test_data/count-aln__cassette-end-5prime.txt. """
+        # summary
+        assert data2.summary.processed_read_count == data2.summary.aligned_read_count\
+                == data2.summary.perfect_read_count == 40
         assert data2.summary.unaligned_read_count == 0
         assert data2.summary.strand_read_counts == {'+':38, '-':2}
         assert len(data2) == 40
@@ -2526,6 +2522,7 @@ class Testing_Insertional_mutant_pool_dataset(unittest.TestCase):
         assert data2.summary.mutant_counts_by_feature['CDS'] == 6
         assert data2.summary.mutant_counts_by_feature['??'] == 2
         assert data2.summary.mutant_counts_by_feature['CDS/three_prime_UTR'] == 1
+        # mutant spot-checks
         mutant = data2.get_mutant('chromosome_A','+',position_before=20)
         assert mutant.position.chromosome == 'chromosome_A'
         assert mutant.position.min_position == 20
@@ -2545,6 +2542,51 @@ class Testing_Insertional_mutant_pool_dataset(unittest.TestCase):
         assert mutant.gene == "test.geneA0_proper_plus"
         assert mutant.orientation == 'sense'
         assert mutant.gene_feature == 'five_prime_UTR'
+
+    def test__read_data_from_file(self):
+        """ uses _check_infile1 and _check_infile2 functions for detail. """
+        ## 1. input file with no gene information but more variation in other features
+        input_file = 'test_data/count-aln__cassette-end-5prime.txt'
+        data = Insertional_mutant_pool_dataset()
+        data.read_data_from_file(input_file)
+        self._check_infile1(data)
+        ## 2. input file with gene information
+        input_file2 = 'test_data/count-aln__with-gene-info_merged.txt'
+        data2 = Insertional_mutant_pool_dataset()
+        data2.read_data_from_file(input_file2)
+        self._check_infile2(data2)
+        ## 3. adding more data to a file that already has some...
+        data.read_data_from_file(input_file, assume_new_sequences=False)
+        mutant = data.get_mutant('reads_2_seqs_1','+',position_before=204)
+        assert mutant.position.chromosome == 'reads_2_seqs_1'
+        assert mutant.position.min_position == 204
+        assert mutant.total_read_count == 4
+        assert mutant.perfect_read_count == 4
+        # how mutant.unique_sequence_count should act in this case depends on the value of assume_new_sequences
+        assert mutant.unique_sequence_count == 1
+        data.read_data_from_file(input_file, assume_new_sequences=True)
+        assert mutant.unique_sequence_count == 2
+
+    def test__pickle_unpickle(self):
+        """ uses _check_infile1 and _check_infile2 functions for detail. """
+        import pickle, os
+        picklefile = 'test.pickle'
+        ## 1. input file with no gene information but more variation in other features
+        input_file = 'test_data/count-aln__cassette-end-5prime.txt'
+        data = Insertional_mutant_pool_dataset(infile=input_file)
+        self._check_infile1(data)
+        with open(picklefile, 'w') as PICKLE:    pickle.dump(data, PICKLE)
+        with open(picklefile) as PICKLE:         data_new = pickle.load(PICKLE)
+        self._check_infile1(data_new)
+        os.unlink(picklefile)
+        ## 2. input file with gene information
+        input_file2 = 'test_data/count-aln__with-gene-info_merged.txt'
+        data2 = Insertional_mutant_pool_dataset(infile=input_file2)
+        self._check_infile2(data2)
+        with open(picklefile, 'w') as PICKLE:    pickle.dump(data2, PICKLE)
+        with open(picklefile) as PICKLE:         data2_new = pickle.load(PICKLE)
+        self._check_infile2(data2_new)
+        os.unlink(picklefile)
 
 
 if __name__ == "__main__":
