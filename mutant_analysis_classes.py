@@ -603,6 +603,8 @@ class Insertional_mutant():
             self.sequences_and_counts[seq] += count
         self.unique_sequence_count = len(self.sequences_and_counts)
         # LATER-TODO may want to keep more data about sequences! Like exact position and strand and number of mutations - may want to store a list of HTSeq.alignment objects instead of just sequences+counts, really
+        # TODO for merged opposite-tandems, should keep info about merging in the mutant itself, and keep keep track of original +/- strand counts!
+        # MAYBE-TODO for merged adjacent mutants, keep track of merging info too?
         other._set_readcount_related_data_to_zero()
 
     # MAYBE-TODO should there also be an add_mutant function that adds mutant readcounts together and optionally makes sure the positions are the same, or should that be the same as merge_mutant?  There are two separate use cases: one where we're merging two adjacent mutants from one dataset, one where we're adding the counts for two mutants from two different datasets. But the mechanics are similar...
@@ -1461,10 +1463,11 @@ class Insertional_mutant_pool_dataset():
             # same position, opposite strands
             if pos1.min_position==pos2.min_position:
                 assert pos1.strand != pos2.strand, "Two mutants with same position and strand shouldn't happen!"
+                assert 'both' not in (pos1.strand,pos2.strand), "A both-strand mutant can't be same-position to another!"
                 same_position_opposite_strands += 1
                 OUTPUT.write("  opposite-strand same-position tandem mutants: %s and %s.\n"%(pos1,pos2))
-            # adjacent positions, same strand
-            elif pos1.strand == pos2.strand: 
+            # adjacent positions, same strand - remember that both-strand mutants are same-strand with everything!
+            elif pos1.strand == pos2.strand or 'both' in (pos1.strand,pos2.strand): 
                 assert pos1.min_position!=pos2.min_position, "Two mutants with same position and strand shouldn't happen!"
                 adjacent_same_strand += 1
                 mutant1_readcount = self.get_mutant(pos1).total_read_count
@@ -1473,10 +1476,11 @@ class Insertional_mutant_pool_dataset():
                                                                                      mutant1_readcount, mutant2_readcount))
             # adjacent positions, opposite strands
             else:
-                assert pos1.min_position != pos2.min_position and pos1.strand != pos2.strand, "Fell through if/elif!"
+                assert pos1.min_position != pos2.min_position and pos1.strand != pos2.strand, "Not adjacent-opposite!"
+                assert 'both' not in (pos1.strand,pos2.strand), "A both-strand mutant can't be opposite-strand to another!"
                 #  ?-X is -strand, X-? is +strand.  
                 # away  =  100-? and ?-103  =  +strand has a lower position than -strand;  toward  =  other way around
-                first_pos = sorted([pos1, pos2])[0]
+                first_pos = min([pos1, pos2])
                 if first_pos.strand == '+':
                     OUTPUT.write('  adjacent opposite-strand "away-facing" mutants: %s and %s.\n'%(pos1,pos2))
                     adjacent_opposite_strands_away += 1
