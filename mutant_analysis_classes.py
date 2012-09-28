@@ -880,14 +880,11 @@ class Insertional_mutant_pool_dataset():
         self._mutants_by_position = keybased_defaultdict(blank_mutant_function)
         # various dataset summary data - single for a single dataset, a dictionary for a multi-dataset object.
         self.multi_dataset = multi_dataset
-        if not multi_dataset:
-            self.summary = Dataset_summary_data(cassette_end, reads_are_reverse)
-        else:
-            self.summary = {}
+        if not multi_dataset:   self.summary = Dataset_summary_data(cassette_end, reads_are_reverse)
+        else:                   self.summary = {}
         # data that's NOT related to a particular dataset
         # TODO should probably merge self.gene_annotation_header with summary in some sensible way, or something, hmm...
         self.gene_annotation_header = []
-        self._dataset_order = None      # there's a self.dataset_order property for this
         # optionally read mutant data from infile
         if infile is not None:
             self.read_data_from_file(infile)
@@ -1195,7 +1192,7 @@ class Insertional_mutant_pool_dataset():
         return sum(1 for m in self if m.get_readcount_by_dataset(dataset_name) and m.position.chromosome==chromosome)
         # TODO unit-test
 
-    # TODO TODO TODO dammit, now all this is not working for multi-dataset mutants again, in print_summary specifically...  How to deal with that??  I guess change them to non-properties with an optional dataset_name arg?
+    # TODO TODO TODO dammit, now all this is not working for multi-dataset mutants again, in print_summary specifically...  How to deal with that??  I guess change them to non-properties with an optional dataset_name arg?  ONE IDEA - all these methods could go into a new Summary class, and for multi-datasets we'd have a dictionary of summaries, like in a multi-mutant...  If each Summary knew its dataset name and had a reference to the dataset, it could grab the right mutant-info from the mutants... Might require changing the Mutant class a bit too?  TODO So if I do that, should that be merged with the Extra_data class, or kept separate?  
 
     @property
     def mutants_in_genes(self):
@@ -1329,8 +1326,8 @@ class Insertional_mutant_pool_dataset():
     def dataset_order(self):
         """ A specific order of datasets, for printing - can be set directly, defaults to alphabetical sort. """
         self._check_dataset_consistency()
-        if self._dataset_order is None: return sorted(self.summary.keys())
-        else:                           return self._dataset_order
+        try:                    return self._dataset_order
+        except AttributeError:  return sorted(self.summary.keys())
 
     @dataset_order.setter
     def dataset_order(self, order):
