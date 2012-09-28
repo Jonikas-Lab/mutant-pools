@@ -835,6 +835,50 @@ class Dataset_summary_data():
         self.cassette_end = cassette_end
         self.reads_are_reverse = reads_are_reverse
 
+    def add_discarded_reads(self, N_all_discarded, N_wrong_start, N_no_cassette, replace=False):
+        """ Add not-None arg values to discarded_read_count, discarded_wrong_start and discarded_no_cassette (or replace). 
+        
+        If the original values are 'unknown', or replace is True, replace instead of adding.
+        If any of the args is None, don't modify the original value, unles replace is True, then set to 'unknown'.
+        """
+        if N_all_discarded is not None:
+            if replace or self.discarded_read_count=='unknown': self.discarded_read_count = int(N_all_discarded)
+            else:                                               self.discarded_read_count += int(N_all_discarded)
+        elif replace:                                           self.discarded_read_count = 'unknown'
+        if N_wrong_start is not None:
+            if replace or self.discarded_wrong_start=='unknown': self.discarded_wrong_start = int(N_wrong_start)
+            else:                                                self.discarded_wrong_start += int(N_wrong_start)
+        elif replace:                                            self.discarded_wrong_start = 'unknown'
+        if N_no_cassette is not None:
+            if replace or self.discarded_no_cassette=='unknown': self.discarded_no_cassette = int(N_no_cassette)
+            else:                                                self.discarded_no_cassette += int(N_no_cassette)
+        elif replace:                                            self.discarded_no_cassette = 'unknown'
+        # special case for when we don't know the specific discarded categories, but we know total discarded is 0, 
+        #  so the specific categories must be 0 too:
+        if self.discarded_read_count == 0:   self.discarded_wrong_start, self.discarded_no_cassette = 0, 0
+
+    def add_nonaligned_reads(self, N_all_non_aligned, N_unaligned, N_multiple_aligned, replace=False):
+        """ Add not-None arg values to non_aligned_read_count, unaligned and multiple_aligned (or replace them).
+        
+        If the original values are 'unknown', or replace is True, replace instead of adding.
+        If any of the args is None, don't modify the original value, unles replace is True, then set to 'unknown'.
+        """
+        if N_all_non_aligned is not None:
+            if replace or self.unaligned=='unknown': self.non_aligned_read_count = int(N_all_non_aligned)
+            else:                                    self.non_aligned_read_count += int(N_all_non_aligned)
+        elif replace:                                self.non_aligned_read_count = 'unknown'
+        if N_unaligned is not None:
+            if replace or self.unaligned=='unknown': self.unaligned = int(N_unaligned)
+            else:                                    self.unaligned += int(N_unaligned)
+        elif replace:                                self.unaligned = 'unknown'
+        if N_multiple_aligned is not None:
+            if replace or self.multiple_aligned=='unknown': self.multiple_aligned = int(N_multiple_aligned)
+            else:                                           self.multiple_aligned += int(N_multiple_aligned)
+        elif replace:                                       self.multiple_aligned = 'unknown'
+        # special case for when we don't know the specific unaligned categories, but we know total non-aligned is 0, 
+        #  so the specific categories must be 0 too:
+        if self.non_aligned_read_count==0:  self.unaligned, self.multiple_aligned = 0, 0
+
 
 class Insertional_mutant_pool_dataset():
     """ A dataset of insertional mutants - contains an iterable of Insertional_mutant objects, and a lot of extra data.
@@ -994,54 +1038,6 @@ class Insertional_mutant_pool_dataset():
             # grab the right mutant based on the position, and add the reads to it; 
             curr_mutant = self.get_mutant(position)
             curr_mutant.add_read(aln, read_count, treat_unknown_as_match=treat_unknown_as_match)
-        # special case for when we don't know the specific unaligned categories, but we know total non-aligned is 0, 
-        #  so the specific categories must be 0 too:
-        if summ.non_aligned_read_count==0:  summ.unaligned, summ.multiple_aligned = 0, 0
-
-    def add_discarded_reads(self, N_all_discarded, N_wrong_start, N_no_cassette, reset_count=False):
-        """ Add not-None args to summary attributes discarded_read_count, discarded_wrong_start and discarded_no_cassette. 
-        
-        If the original values are 'unknown', or reset_count is True, replace instead of adding.
-        If any of the args is None, don't modify the original value, unles reset_count is True, then set to 'unknown'.
-        """
-        if self.multi_dataset:  raise MutantError("add_discarded_reads not implemented for multi-datasets!")
-        summ = self.summary
-        if N_all_discarded is not None:
-            if reset_count or summ.discarded_read_count=='unknown': summ.discarded_read_count = int(N_all_discarded)
-            else:                                                   summ.discarded_read_count += int(N_all_discarded)
-        elif reset_count:                                           summ.discarded_read_count = 'unknown'
-        if N_wrong_start is not None:
-            if reset_count or summ.discarded_wrong_start=='unknown': summ.discarded_wrong_start = int(N_wrong_start)
-            else:                                                    summ.discarded_wrong_start += int(N_wrong_start)
-        elif reset_count:                                            summ.discarded_wrong_start = 'unknown'
-        if N_no_cassette is not None:
-            if reset_count or summ.discarded_no_cassette=='unknown': summ.discarded_no_cassette = int(N_no_cassette)
-            else:                                                    summ.discarded_no_cassette += int(N_no_cassette)
-        elif reset_count:                                            summ.discarded_no_cassette = 'unknown'
-        # special case for when we don't know the specific discarded categories, but we know total discarded is 0, 
-        #  so the specific categories must be 0 too:
-        if summ.discarded_read_count == 0:   summ.discarded_wrong_start, summ.discarded_no_cassette = 0, 0
-
-    def add_nonaligned_reads(self, N_all_non_aligned, N_unaligned, N_multiple_aligned, reset_count=False):
-        """ Add not-None args to summary attributes non_aligned_read_count, unaligned and multiple_aligned.
-        
-        If the original values are 'unknown', or reset_count is True, replace instead of adding.
-        If any of the args is None, don't modify the original value, unles reset_count is True, then set to 'unknown'.
-        """
-        if self.multi_dataset:  raise MutantError("add_nonaligned_reads not implemented for multi-datasets!")
-        summ = self.summary
-        if N_all_non_aligned is not None:
-            if reset_count or summ.unaligned=='unknown': summ.non_aligned_read_count = int(N_all_non_aligned)
-            else:                                        summ.non_aligned_read_count += int(N_all_non_aligned)
-        elif reset_count:                                summ.non_aligned_read_count = 'unknown'
-        if N_unaligned is not None:
-            if reset_count or summ.unaligned=='unknown': summ.unaligned = int(N_unaligned)
-            else:                                        summ.unaligned += int(N_unaligned)
-        elif reset_count:                                summ.unaligned = 'unknown'
-        if N_multiple_aligned is not None:
-            if reset_count or summ.multiple_aligned=='unknown': summ.multiple_aligned = int(N_multiple_aligned)
-            else:                                               summ.multiple_aligned += int(N_multiple_aligned)
-        elif reset_count:                                       summ.multiple_aligned = 'unknown'
         # special case for when we don't know the specific unaligned categories, but we know total non-aligned is 0, 
         #  so the specific categories must be 0 too:
         if summ.non_aligned_read_count==0:  summ.unaligned, summ.multiple_aligned = 0, 0

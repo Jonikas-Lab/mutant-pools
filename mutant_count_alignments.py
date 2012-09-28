@@ -360,9 +360,9 @@ def main(infiles, outfile, options):
                         get_info_from_metadata_files(infiles, options.input_metadata_file, options.verbosity_level)
     if N_wrong_start is not None and N_no_cassette is not None:
         assert N_discarded == N_wrong_start+N_no_cassette, "Wrong-start and no-cassette totals don't add up to discarded!"
-    all_alignment_data.add_discarded_reads(N_discarded, N_wrong_start, N_no_cassette)
+    all_alignment_data.summary.add_discarded_reads(N_discarded, N_wrong_start, N_no_cassette)
     if N_unaligned is not None or N_multiple is not None:
-        all_alignment_data.add_nonaligned_reads(N_non_aligned, N_unaligned, N_multiple)
+        all_alignment_data.summary.add_nonaligned_reads(N_non_aligned, N_unaligned, N_multiple)
 
     # MAYBE-TODO also get the final total number of reads from the metadata infile and make sure it's the same 
     #   as the number of processed reads I get from all_alignment_data.print_summary()?
