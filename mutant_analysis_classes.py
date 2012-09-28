@@ -1003,7 +1003,6 @@ class Insertional_mutant_pool_dataset():
         #  so the specific categories must be 0 too:
         if summ.non_aligned_read_count==0:  summ.unaligned, summ.multiple_aligned = 0, 0
 
-
     def read_data_from_file(self, infile, assume_new_sequences=False):
         """ Read data from a file made by self.print_data, add mutants to dataset. Ignores some things. DEPRECATED. 
 
@@ -1258,6 +1257,39 @@ class Insertional_mutant_pool_dataset():
             else:                                             merged_feature_count_dict[feature] += count
         return merged_feature_count_dict
         # TODO unit-test
+
+    def make_by_gene_mutant_dict(self):
+        """ Fill the self.mutants_by_gene dictionary (gene_name:mutant_list) based on full list of dataset mutants; 
+        real gene IDs only (ignore SPECIAL_GENE_CODES, i.e. mutants not in genes, and mutants with unknown gene status).
+        """
+        self.mutants_by_gene = defaultdict(list)
+        for mutant in self:
+            if mutant.gene not in SPECIAL_GENE_CODES.all_codes:
+                self.mutants_by_gene[mutant.gene].append(mutant)
+        # LATER-TODO add unit-test
+
+    def get_gene_dict_by_mutant_number(self, dataset=None):
+        """ Return mutant_count:gene_ID_set dict (genes with 1/2/etc mutants - in a particular dataset, if multi-dataset). 
+        
+        If the object is multi-dataset, dataset name must be provided, otherwise it cannot.
+        """
+        self.make_by_gene_mutant_dict()
+        gene_by_mutantN = defaultdict(set)
+        for (gene,mutants) in self.mutants_by_gene.iteritems():
+            gene_by_mutantN[len([m for m in mutants if m.get_readcount_by_dataset(dataset)])].add(gene)
+        # check that the numbers add up to the total number of genes
+        all_genes = set([mutant.gene for mutant in self]) - set(SPECIAL_GENE_CODES.all_codes)
+        assert sum([len(geneset) for geneset in gene_by_mutantN.itervalues()]) == len(all_genes)
+        return gene_by_mutantN
+        #LATER-TODO add unit-test
+
+    def find_most_common_mutants(self, dataset=None):
+        """ Return list of mutants with the most total reads (in dataset if multi-dataset)."""
+        highest_readcount = max([mutant.get_readcount_by_dataset(dataset) for mutant in self])
+        highest_readcount_mutants = [mutant for mutant in self 
+                                     if mutant.get_readcount_by_dataset(dataset)==highest_readcount]
+        return highest_readcount_mutants
+
 
 
     ######### MULTI-DATASET METHODS
@@ -1669,39 +1701,6 @@ class Insertional_mutant_pool_dataset():
             try:                mutant.gene_annotation = gene_annotation_dict[mutant.gene]
             except KeyError:    mutant.gene_annotation = []
         # LATER-TODO add this to the gene-info run-test case!
-
-    def make_by_gene_mutant_dict(self):
-        """ Fill the self.mutants_by_gene dictionary (gene_name:mutant_list) based on full list of dataset mutants; 
-        real gene IDs only (ignore SPECIAL_GENE_CODES, i.e. mutants not in genes, and mutants with unknown gene status).
-        """
-        self.mutants_by_gene = defaultdict(list)
-        for mutant in self:
-            if mutant.gene not in SPECIAL_GENE_CODES.all_codes:
-                self.mutants_by_gene[mutant.gene].append(mutant)
-        # LATER-TODO add unit-test
-
-    def get_gene_dict_by_mutant_number(self, dataset=None):
-        """ Return mutant_count:gene_ID_set dict (genes with 1/2/etc mutants - in a particular dataset, if multi-dataset). 
-        
-        If the object is multi-dataset, dataset name must be provided, otherwise it cannot.
-        """
-        self.make_by_gene_mutant_dict()
-        gene_by_mutantN = defaultdict(set)
-        for (gene,mutants) in self.mutants_by_gene.iteritems():
-            gene_by_mutantN[len([m for m in mutants if m.get_readcount_by_dataset(dataset)])].add(gene)
-        # check that the numbers add up to the total number of genes
-        all_genes = set([mutant.gene for mutant in self]) - set(SPECIAL_GENE_CODES.all_codes)
-        assert sum([len(geneset) for geneset in gene_by_mutantN.itervalues()]) == len(all_genes)
-        return gene_by_mutantN
-        #LATER-TODO add unit-test
-
-    def find_most_common_mutants(self, dataset=None):
-        """ Return list of mutants with the most total reads (in dataset if multi-dataset)."""
-        highest_readcount = max([mutant.get_readcount_by_dataset(dataset) for mutant in self])
-        highest_readcount_mutants = [mutant for mutant in self 
-                                     if mutant.get_readcount_by_dataset(dataset)==highest_readcount]
-        return highest_readcount_mutants
-
 
     ######### WRITING DATA TO FILES
 
