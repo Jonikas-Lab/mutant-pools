@@ -416,30 +416,30 @@ class Insertional_mutant():
 
     Mutants have the following attributes (data):
      1) Position/gene attributes (except readcount-related-only mutants, which don't have those):
-        - position - an Insertion_position instance giving the insertion chromosome/strand/position
-        - gene, orientation, gene feature - what gene the insertion is in (or one of the SPECIAL_GENE_CODES if unknown), 
-                whether it's in the sense or antisense orientation vs the gene, what feature (exon/intron/UTR) it's in.
+       - position - an Insertion_position instance giving the insertion chromosome/strand/position
+       - gene, orientation, gene feature - what gene the insertion is in (or one of the SPECIAL_GENE_CODES if unknown), 
+                   whether it's in the sense or antisense orientation vs the gene, what feature (exon/intron/UTR) it's in.
      2) Readcount-related attributes (multi-dataset mutants don't have those on the top-level):
-        - total_read_count, perfect_read_count - number of all and perfectly aligned deepseq reads
-        - unique_sequence_count, sequences_and_counts - number of unique read sequences, and a seq:count dictionary
+       - total_read_count, perfect_read_count - number of all and perfectly aligned deepseq reads
+       - unique_sequence_count, sequences_and_counts - number of unique read sequences, and a seq:count dictionary
      3) Attributes related to multi-dataset mutants:
-        - multi_dataset - a True/False flag specifying whether a mutant is multi-dataset or not
-        - by_dataset - a dataset_name:readcount_data_object dictionary which multi-dataset mutants contain 
-            instead of top-level readcount-related attributes. See "Types of mutants" section for more info/examples.
+       - multi_dataset - a True/False flag specifying whether a mutant is multi-dataset or not
+       - by_dataset - a dataset_name:readcount_data_object dictionary which multi-dataset mutants contain 
+           instead of top-level readcount-related attributes. See "Types of mutants" section for more info/examples.
 
     Types of mutants (with corresponding flags to the __init__ function):
-        - normal or readcount-related-only - readcount-related-only mutants have no position/gene attributes, 
-            only readcount-related attributes. Used as parts of a multi-dataset mutants to store per-dataset data.
-        - single-dataset or multi-dataset - the multi_dataset attribute is True if multi-dataset, false otherwise.
-            Both versions have one copy of position/gene attributes. A single-dataset mutant also has just one copy of 
-             all readcount-related attributes (and doesn't store the dataset name for them); a multi-dataset mutant has 
-             a by_dataset dataset_name:readcount_only_mutant dictionary instead of top-level readcount-related attributes; 
-              the dictionary contains a separate readcount-related-only mutant for each dataset, 
-               which stores all the readcount-related attributes for that dataset.
-             For example to get total_read_count from a single-dataset mutant, you use mutant.total_read_count; 
-              to get it for dataset d1 from a multi-dataset mutant, you use mutant.by_dataset['d1'].total_read_count.
-            A single-dataset mutant can be converted to a multi-dataset one in place using ____; 
-            a new single-dataset mutant can be extracted from a multi-dataset one using _____. 
+       - normal or readcount-related-only - readcount-related-only mutants have no position/gene attributes, 
+           only readcount-related attributes. Used as parts of a multi-dataset mutants to store per-dataset data.
+       - single-dataset or multi-dataset - the multi_dataset attribute is True if multi-dataset, false otherwise.
+         Both versions have one copy of position/gene attributes. A single-dataset mutant also has just one copy of 
+          all readcount-related attributes (and doesn't store the dataset name for them); a multi-dataset mutant has 
+          a by_dataset dataset_name:readcount_only_mutant dictionary instead of top-level readcount-related attributes; 
+           the dictionary contains a separate readcount-related-only mutant for each dataset, 
+            which stores all the readcount-related attributes for that dataset.
+          For example to get total_read_count from a single-dataset mutant, you use mutant.total_read_count; 
+           to get it for dataset d1 from a multi-dataset mutant, you use mutant.by_dataset['d1'].total_read_count.
+         A single-dataset mutant can be converted to a multi-dataset one in place using ____; 
+         a new single-dataset mutant can be extracted from a multi-dataset one using _____. 
 
     Methods (functions) of mutant objects:
         For detailed information on mutant methods, see method docstrings.
@@ -809,13 +809,13 @@ class Dataset_summary_data():
 
     def __init__(self, cassette_end, reads_are_reverse):
         """ Initialize everything to 0/empty/unknown. """
+        # TODO really this class should be renamed from summary to metadata or extra_data or something...
          # make sure the arguments are valid values
         if not cassette_end in SEQ_ENDS+['?']: 
             raise ValueError("The cassette_end variable must be one of %s or '?'!"%SEQ_ENDS)
         if not reads_are_reverse in [True,False,'?']: 
             raise ValueError("The reads_are_reverse variable must be True, False, or '?'!")
-        # TODO really this class should be renamed from summary to metadata or extra_data or something...
-        # read count information
+        # information on reads that aren't included in the dataset mutants
         self.discarded_read_count, self.discarded_wrong_start, self.discarded_no_cassette = 'unknown', 'unknown', 'unknown'
         self.non_aligned_read_count, self.unaligned, self.multiple_aligned = 0, 'unknown', 'unknown'
         self.ignored_region_read_counts = defaultdict(int)
