@@ -451,6 +451,7 @@ class Insertional_mutant():
           specifying a dataset - they'll give the result for all datasets added together.
          Some methods may not have multi-dataset functionality implemented, if I didn't think it would be useful.
     """
+    # MAYBE-TODO rewrite this with subclassing, so that multi-dataset mutants don't HAVE some methods (only the read-related sub-mutants have these methods, etc?  Instead of adding a dataset arg to each method to make it work on both multi and single, just require the caller to call mutant.read_info(dataset).method for multi-mutants, for read-related methods.
 
     def __init__(self, insertion_position=None, multi_dataset=False, readcount_related_only=False):
         """ Set self.position based on argument; initialize read/sequence counts to 0 and gene-info to unknown. 
@@ -474,28 +475,29 @@ class Insertional_mutant():
         else:
             self.by_dataset = defaultdict(blank_readcount_only_mutant)
 
-    def get_readcount_by_dataset(self, dataset=None, strict=False):
-        """ Help function to get the total readcount for either a single-dataset or multi-dataset mutant. 
-        Provide dataset name for multi-dataset, or None for single-dataset.
-        If dataset is not present for this mutant, just return 0, unless strict is True, then raise error.
+    def read_info(self, dataset=None):
+        """ Help function to get read-info-containing object for both multi-dataset and single (dataset=None) mutants.
+
+        For single-dataset (dataset=None), return self.
+        For multi-dataset, return self.by_dataset[dataset].
         """
         if dataset is None and self.multi_dataset:  
             raise MutantError("This is a multi-dataset mutant - must provide dataset arg!")
         if dataset is not None and not self.multi_dataset:  
             raise MutantError("This is not a multi-dataset mutant - cannot provide dataset arg!")
-        if self.multi_dataset and dataset not in self.by_dataset and strict:
+        if self.multi_dataset and dataset not in self.by_dataset:
             raise MutantError("No dataset %s in this multi-dataset mutant! Present datasets are %s"%(dataset, 
                                                                                                  self.by_dataset.keys()))
-        if self.multi_dataset:  
-            try:                return self.by_dataset[dataset].total_read_count
-            except KeyError:    return 0
-        else:                   return self.total_read_count
+        if self.multi_dataset:  return self.by_dataset[dataset]
+        else:                   return self
         # TODO unit-tests?
 
     # MAYBE-TODO give each mutant some kind of unique ID at some point in the process?  Or is genomic location sufficient?  If we end up using per-mutant barcodes (in addition to the flanking sequences), we could use that, probably, or that plus genomic location.
 
     def _set_readcount_related_data_to_zero(self):
         """ Set all readcount-related data to 0/empty."""
+        if self.multi_dataset:
+            raise MutantError("This is a multi-dataset mutant - no top-level readcount data!")
         self.total_read_count      = 0
         self.perfect_read_count    = 0
         self.unique_sequence_count = 0
@@ -1155,7 +1157,7 @@ class Insertional_mutant_pool_dataset():
 
     def reads_in_chromosome(self, chromosome, dataset_name=None):
         """ Return total number of reads in given chromosome."""
-        return sum(m.get_readcount_by_dataset(dataset_name) for m in self if m.position.chromosome==chromosome)
+        return sum(m.read_info(dataset_name).total_read_count for m in self if m.position.chromosome==chromosome)
         # TODO unit-test
 
     @property
@@ -1184,7 +1186,7 @@ class Insertional_mutant_pool_dataset():
 
     def mutants_in_chromosome(self, chromosome, dataset_name=None):
         """ Return total number of mutants in given chromosome."""
-        return sum(1 for m in self if m.get_readcount_by_dataset(dataset_name) and m.position.chromosome==chromosome)
+        return sum(1 for m in self if m.read_info(dataset_name).total_read_count and m.position.chromosome==chromosome)
         # TODO unit-test
 
     # TODO TODO TODO dammit, now all this is not working for multi-dataset mutants again, in print_summary specifically...  How to deal with that??  I guess change them to non-properties with an optional dataset_name arg?  ONE IDEA - all these methods could go into a new Summary class, and for multi-datasets we'd have a dictionary of summaries, like in a multi-mutant...  If each Summary knew its dataset name and had a reference to the dataset, it could grab the right mutant-info from the mutants... Might require changing the Mutant class a bit too?  TODO So if I do that, should that be merged with the Extra_data class, or kept separate?  
@@ -1251,7 +1253,7 @@ class Insertional_mutant_pool_dataset():
         """
         gene_by_mutantN = defaultdict(set)
         for (gene,mutants) in self.mutants_by_gene.iteritems():
-            gene_by_mutantN[len([m for m in mutants if m.get_readcount_by_dataset(dataset)])].add(gene)
+            gene_by_mutantN[len([m for m in mutants if m.read_info(dataset).total_read_count])].add(gene)
         # check that the numbers add up to the total number of genes
         all_genes = set([mutant.gene for mutant in self]) - set(SPECIAL_GENE_CODES.all_codes)
         assert sum([len(geneset) for geneset in gene_by_mutantN.itervalues()]) == len(all_genes)
@@ -1260,9 +1262,9 @@ class Insertional_mutant_pool_dataset():
 
     def find_most_common_mutants(self, dataset=None):
         """ Return list of mutants with the most total reads (in dataset if multi-dataset)."""
-        highest_readcount = max([mutant.get_readcount_by_dataset(dataset) for mutant in self])
+        highest_readcount = max([mutant.read_info(dataset).total_read_count for mutant in self])
         highest_readcount_mutants = [mutant for mutant in self 
-                                     if mutant.get_readcount_by_dataset(dataset)==highest_readcount]
+                                     if mutant.read_info(dataset).total_read_count==highest_readcount]
         return highest_readcount_mutants
 
 
@@ -1703,10 +1705,10 @@ class Insertional_mutant_pool_dataset():
         most_common_mutants = self.find_most_common_mutants(dataset)
         m = most_common_mutants[0]
         # calculate the fraction of total reads per mutant, assuming each mutant has the same readcount
-        assert len(set([m.get_readcount_by_dataset(dataset) for m in most_common_mutants])) == 1
+        assert len(set([m.read_info(dataset).total_read_count for m in most_common_mutants])) == 1
         if dataset is None:     summ = self.summary
         else:                   summ = self.summary[dataset]
-        readcount_info = value_and_percentages(m.get_readcount_by_dataset(dataset), [self.aligned_read_count])
+        readcount_info = value_and_percentages(m.read_info(dataset).total_read_count, [self.aligned_read_count])
         if len(most_common_mutants) == 1:   return "%s (%s)"%(readcount_info, m.position)
         else:                               return "%s (%s mutants)"%(readcount_info, len(most_common_mutants))
 
@@ -1832,7 +1834,7 @@ class Insertional_mutant_pool_dataset():
                                                 {'?': '?', True: 'reverse', False: 'forward'}[summ.reads_are_reverse]) ))
         DVG.append((line_prefix+"(average and median reads per mutant):", 
                     lambda summ,mutants,dataset: "(%d, %d)"%(round((self.aligned_read_count)/len(mutants)), 
-                                                 round(median([m.get_readcount_by_dataset(dataset) for m in mutants]))) ))
+                                             round(median([m.read_info(dataset).total_read_count for m in mutants]))) ))
 
         DVG.append((line_prefix+"Most common mutant(s): reads (% of aligned) (position or count):",
                     lambda summ,mutants,dataset: self._most_common_mutants_info(dataset) ))
