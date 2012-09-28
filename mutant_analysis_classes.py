@@ -955,6 +955,7 @@ class Insertional_mutant_pool_dataset():
                 kwargs['immutable'] = True
             return Insertion_position(*args,**kwargs)
 
+
     ######### READING BASIC DATA INTO DATASET
 
     def add_alignment_reader_to_data(self, HTSeq_alignment_reader, uncollapse_read_counts=False, 
@@ -1001,7 +1002,55 @@ class Insertional_mutant_pool_dataset():
         #  so the specific categories must be 0 too:
         if summ.non_aligned_read_count==0:  summ.unaligned, summ.multiple_aligned = 0, 0
 
-    def read_data_from_file(self, infile, assume_new_sequences=False):
+    def add_discarded_reads(self, N_all_discarded, N_wrong_start, N_no_cassette, reset_count=False):
+        """ Add not-None args to summary attributes discarded_read_count, discarded_wrong_start and discarded_no_cassette. 
+        
+        If the original values are 'unknown', or reset_count is True, replace instead of adding.
+        If any of the args is None, don't modify the original value, unles reset_count is True, then set to 'unknown'.
+        """
+        if self.multi_dataset:  raise MutantError("add_discarded_reads not implemented for multi-datasets!")
+        summ = self.summary
+        if N_all_discarded is not None:
+            if reset_count or summ.discarded_read_count=='unknown': summ.discarded_read_count = int(N_all_discarded)
+            else:                                                   summ.discarded_read_count += int(N_all_discarded)
+        elif reset_count:                                           summ.discarded_read_count = 'unknown'
+        if N_wrong_start is not None:
+            if reset_count or summ.discarded_wrong_start=='unknown': summ.discarded_wrong_start = int(N_wrong_start)
+            else:                                                    summ.discarded_wrong_start += int(N_wrong_start)
+        elif reset_count:                                            summ.discarded_wrong_start = 'unknown'
+        if N_no_cassette is not None:
+            if reset_count or summ.discarded_no_cassette=='unknown': summ.discarded_no_cassette = int(N_no_cassette)
+            else:                                                    summ.discarded_no_cassette += int(N_no_cassette)
+        elif reset_count:                                            summ.discarded_no_cassette = 'unknown'
+        # special case for when we don't know the specific discarded categories, but we know total discarded is 0, 
+        #  so the specific categories must be 0 too:
+        if summ.discarded_read_count == 0:   summ.discarded_wrong_start, summ.discarded_no_cassette = 0, 0
+
+    def add_nonaligned_reads(self, N_all_non_aligned, N_unaligned, N_multiple_aligned, reset_count=False):
+        """ Add not-None args to summary attributes non_aligned_read_count, unaligned and multiple_aligned.
+        
+        If the original values are 'unknown', or reset_count is True, replace instead of adding.
+        If any of the args is None, don't modify the original value, unles reset_count is True, then set to 'unknown'.
+        """
+        if self.multi_dataset:  raise MutantError("add_nonaligned_reads not implemented for multi-datasets!")
+        summ = self.summary
+        if N_all_non_aligned is not None:
+            if reset_count or summ.unaligned=='unknown': summ.non_aligned_read_count = int(N_all_non_aligned)
+            else:                                        summ.non_aligned_read_count += int(N_all_non_aligned)
+        elif reset_count:                                summ.non_aligned_read_count = 'unknown'
+        if N_unaligned is not None:
+            if reset_count or summ.unaligned=='unknown': summ.unaligned = int(N_unaligned)
+            else:                                        summ.unaligned += int(N_unaligned)
+        elif reset_count:                                summ.unaligned = 'unknown'
+        if N_multiple_aligned is not None:
+            if reset_count or summ.multiple_aligned=='unknown': summ.multiple_aligned = int(N_multiple_aligned)
+            else:                                               summ.multiple_aligned += int(N_multiple_aligned)
+        elif reset_count:                                       summ.multiple_aligned = 'unknown'
+        # special case for when we don't know the specific unaligned categories, but we know total non-aligned is 0, 
+        #  so the specific categories must be 0 too:
+        if summ.non_aligned_read_count==0:  summ.unaligned, summ.multiple_aligned = 0, 0
+
+    def read_data_from_file(self, infile, assume_new_sequences=False):  # DEPRECATED!
         """ Read data from a file made by self.print_data, add mutants to dataset. Ignores some things. DEPRECATED. 
 
         Populates most of the dataset total read/mutant count values correctly, but ignores unaligned and discarded reads, 
@@ -1069,69 +1118,6 @@ class Insertional_mutant_pool_dataset():
             # add to dataset total read/mutant counts
             summ = self.summary
     
-    def add_discarded_reads(self, N_all_discarded, N_wrong_start, N_no_cassette, reset_count=False):
-        """ Add not-None args to summary attributes discarded_read_count, discarded_wrong_start and discarded_no_cassette. 
-        
-        If the original values are 'unknown', or reset_count is True, replace instead of adding.
-        If any of the args is None, don't modify the original value, unles reset_count is True, then set to 'unknown'.
-        """
-        if self.multi_dataset:  raise MutantError("add_discarded_reads not implemented for multi-datasets!")
-        summ = self.summary
-        if N_all_discarded is not None:
-            if reset_count or summ.discarded_read_count=='unknown': summ.discarded_read_count = int(N_all_discarded)
-            else:                                                   summ.discarded_read_count += int(N_all_discarded)
-        elif reset_count:                                           summ.discarded_read_count = 'unknown'
-        if N_wrong_start is not None:
-            if reset_count or summ.discarded_wrong_start=='unknown': summ.discarded_wrong_start = int(N_wrong_start)
-            else:                                                    summ.discarded_wrong_start += int(N_wrong_start)
-        elif reset_count:                                            summ.discarded_wrong_start = 'unknown'
-        if N_no_cassette is not None:
-            if reset_count or summ.discarded_no_cassette=='unknown': summ.discarded_no_cassette = int(N_no_cassette)
-            else:                                                    summ.discarded_no_cassette += int(N_no_cassette)
-        elif reset_count:                                            summ.discarded_no_cassette = 'unknown'
-        # special case for when we don't know the specific discarded categories, but we know total discarded is 0, 
-        #  so the specific categories must be 0 too:
-        if summ.discarded_read_count == 0:   summ.discarded_wrong_start, summ.discarded_no_cassette = 0, 0
-
-    def add_nonaligned_reads(self, N_all_non_aligned, N_unaligned, N_multiple_aligned, reset_count=False):
-        """ Add not-None args to summary attributes non_aligned_read_count, unaligned and multiple_aligned.
-        
-        If the original values are 'unknown', or reset_count is True, replace instead of adding.
-        If any of the args is None, don't modify the original value, unles reset_count is True, then set to 'unknown'.
-        """
-        if self.multi_dataset:  raise MutantError("add_nonaligned_reads not implemented for multi-datasets!")
-        summ = self.summary
-        if N_all_non_aligned is not None:
-            if reset_count or summ.unaligned=='unknown': summ.non_aligned_read_count = int(N_all_non_aligned)
-            else:                                        summ.non_aligned_read_count += int(N_all_non_aligned)
-        elif reset_count:                                summ.non_aligned_read_count = 'unknown'
-        if N_unaligned is not None:
-            if reset_count or summ.unaligned=='unknown': summ.unaligned = int(N_unaligned)
-            else:                                        summ.unaligned += int(N_unaligned)
-        elif reset_count:                                summ.unaligned = 'unknown'
-        if N_multiple_aligned is not None:
-            if reset_count or summ.multiple_aligned=='unknown': summ.multiple_aligned = int(N_multiple_aligned)
-            else:                                               summ.multiple_aligned += int(N_multiple_aligned)
-        elif reset_count:                                       summ.multiple_aligned = 'unknown'
-        # special case for when we don't know the specific unaligned categories, but we know total non-aligned is 0, 
-        #  so the specific categories must be 0 too:
-        if summ.non_aligned_read_count==0:  summ.unaligned, summ.multiple_aligned = 0, 0
-
-    def remove_mutants_based_on_other_dataset(self, other_dataset, readcount_min=1, perfect_reads=False):
-        """ Remove any mutants with at least readcount_min reads in other_dataset (or perfect reads, if perfect_reads=True)
-
-        This is based on EXACT position equality: a ?-101 mutant won't be removed due to a 100-? or 100-101 or 100-102 one.
-        """
-        # TODO do I want this to be based on non-exact position equality instead?
-        if perfect_reads:   get_readcount = lambda m: m.perfect_read_count
-        else:               get_readcount = lambda m: m.total_read_count
-        # go over all mutants in self; need to convert the iterator to a list to make a separate copy, 
-        #  otherwise we'd be modifying the iterator while iterating through it, which isn't allowed.
-        for mutant in list(iter(self)):
-            if get_readcount(other_dataset.get_mutant(mutant.position)) >= readcount_min:
-                self.remove_mutant(mutant.position)
-        # TODO really I shouldn't be removing mutants outright, just noting them as removed or something...  In that case should they or should they not show up in "for m in self"?  Probably not - they should have a separate dictionary?
-        # TODO should I keep track of removed reads, and print in summary?  PROBABLY.
 
     ######### SUMMARY INFORMATION
 
@@ -1258,8 +1244,7 @@ class Insertional_mutant_pool_dataset():
 
     @property
     def mutants_by_gene(self):
-        """ Return gene_name:mutant_list dict based on full list of dataset mutants; ignore SPECIAL_GENE_CODES)
-        """
+        """ Return gene_name:mutant_list dict based on full list of dataset mutants; ignore SPECIAL_GENE_CODES) """
         mutants_by_gene = defaultdict(list)
         for mutant in self:
             if mutant.gene not in SPECIAL_GENE_CODES.all_codes:
@@ -1287,7 +1272,6 @@ class Insertional_mutant_pool_dataset():
         highest_readcount_mutants = [mutant for mutant in self 
                                      if mutant.get_readcount_by_dataset(dataset)==highest_readcount]
         return highest_readcount_mutants
-
 
 
     ######### MULTI-DATASET METHODS
@@ -1355,6 +1339,93 @@ class Insertional_mutant_pool_dataset():
 
 
     ######### PROCESSING/MODIFYING DATASET
+
+    def remove_mutants_based_on_other_dataset(self, other_dataset, readcount_min=1, perfect_reads=False):
+        """ Remove any mutants with at least readcount_min reads in other_dataset (or perfect reads, if perfect_reads=True)
+
+        This is based on EXACT position equality: a ?-101 mutant won't be removed due to a 100-? or 100-101 or 100-102 one.
+        """
+        # TODO do I want this to be based on non-exact position equality instead?
+        if perfect_reads:   get_readcount = lambda m: m.perfect_read_count
+        else:               get_readcount = lambda m: m.total_read_count
+        # go over all mutants in self; need to convert the iterator to a list to make a separate copy, 
+        #  otherwise we'd be modifying the iterator while iterating through it, which isn't allowed.
+        for mutant in list(iter(self)):
+            if get_readcount(other_dataset.get_mutant(mutant.position)) >= readcount_min:
+                self.remove_mutant(mutant.position)
+        # TODO really I shouldn't be removing mutants outright, just noting them as removed or something...  In that case should they or should they not show up in "for m in self"?  Probably not - they should have a separate dictionary?
+        # TODO should I keep track of removed reads, and print in summary?  PROBABLY.
+
+    def find_genes_for_mutants(self, genefile, detailed_features=False, N_run_groups=3, verbosity_level=1):
+        """ To each mutant in the dataset, add the gene it's in (look up gene positions for each mutant using genefile).
+
+        If detailed_features is True, also look up whether the mutant is in an exon/intron/UTR (NOT IMPLEMENTED); 
+        Read the file in N_run_groups passes to avoid using up too much memory/CPU.
+        """ 
+        if self.multi_dataset:  raise MutantError("find_genes_for_mutants not implemented for multi-datasets!")
+        # MAYBE-TODO implement for multi-datasets?  The actual gene-finding would be easy, since it'd just work on 
+        #  multi-dataset mutants instead of single-dataset ones; adding stuff to summary would be harder.
+
+        # group all the mutants by chromosome, so that I can go over each chromosome in genefile separately
+        #   instead of reading in all the data at once (which uses a lot of memory)
+        mutants_by_chromosome = defaultdict(set)
+        for mutant in self:
+            mutants_by_chromosome[mutant.position.chromosome].add(mutant)
+
+        # First get the list of all chromosomes in the file, WITHOUT reading it all into memory
+        with open(genefile) as GENEFILE:
+            GFF_limit_data = GFF.GFFExaminer().available_limits(GENEFILE)
+            chromosomes_and_counts = dict([(c,n) for ((c,),n) in GFF_limit_data['gff_id'].iteritems()])
+            all_reference_chromosomes = set(chromosomes_and_counts.keys())
+
+        # Now lump the chromosomes into N_run_groups sets with the feature counts balanced between sets, 
+        #  to avoid using too much memory (by reading the whole file at once), 
+        #   or using too much time (by reading the whole file for each chromosome/scaffold)
+        chromosome_sets = split_into_N_sets_by_counts(chromosomes_and_counts, N_run_groups)
+
+        ### go over all mutants on each chromosome, figure out which gene they're in (if any), keep track of totals
+        # keep track of all the mutant and reference chromosomes to catch chromosomes that are absent in reference
+        summ = self.summary
+        summ.total_genes_in_genome = 0
+        for chromosome_set in chromosome_sets:
+            genefile_parsing_limits = {'gff_id': list(chromosome_set)}
+            if not detailed_features: 
+                genefile_parsing_limits['gff_type'] = ['gene']
+            with open(genefile) as GENEFILE:
+                for chromosome_record in GFF.parse(GENEFILE, limit_info=genefile_parsing_limits):
+                    if verbosity_level>1:   print "    parsing %s for mutant gene locations..."%chromosome_record.id
+                    summ.total_genes_in_genome += len(chromosome_record.features)
+                    for mutant in mutants_by_chromosome[chromosome_record.id]:
+                        gene_ID, orientation, feature = find_gene_by_pos(mutant.position, chromosome_record, 
+                                                                         detailed_features, quiet=(verbosity_level==0))
+                        mutant.gene, mutant.orientation, mutant.gene_feature = gene_ID, orientation, feature
+                    if verbosity_level>1:   print "    ...found total %s genes."%(len(chromosome_record.features))
+        if verbosity_level>1:   print "    found total %s genes in full genome."%(summ.total_genes_in_genome)
+
+        # for mutants in chromosomes that weren't listed in the genefile, use special values
+        for chromosome in set(mutants_by_chromosome.keys())-set(all_reference_chromosomes):
+            if not is_cassette_chromosome(chromosome):
+                print 'Warning: chromosome "%s" not found in genefile data!'%(chromosome)
+            for mutant in mutants_by_chromosome[chromosome]:
+                mutant.gene,mutant.orientation,mutant.gene_feature = SPECIAL_GENE_CODES.chromosome_not_in_reference,'-','-'
+
+    def add_gene_annotation(self, annotation_file, if_standard_Cre_file=False, custom_header=None, print_info=False):
+        """ Add gene annotation to each mutant, based on annotation_file. See parse_gene_annotation_file doc for detail."""
+        from parse_annotation_file import parse_gene_annotation_file
+        gene_annotation_dict, gene_annotation_header = parse_gene_annotation_file(annotation_file, 
+                     standard_Cre_file=if_standard_Cre_file, header_fields=custom_header, verbosity_level=int(print_info))
+        # store the annotation header in self.summary, for printing
+        if gene_annotation_header:  self.gene_annotation_header = gene_annotation_header
+        else:                       self.gene_annotation_header = 'GENE_ANNOTATION_DATA'
+        # add the annotation info to each mutant (or nothing, if gene has no annotation)
+        # MAYBE-TODO should I even store gene annotation in each mutant, or just keep a separate per-gene dictionary?
+        for mutant in self:
+            try:                mutant.gene_annotation = gene_annotation_dict[mutant.gene]
+            except KeyError:    mutant.gene_annotation = []
+        # LATER-TODO add this to the gene-info run-test case!
+
+
+    ######### MUTANT-MERGING AND ADJACENT-COUNTING
 
     def _possibly_adjacent_positions(self, max_distance, same_strand_only=False, include_cassette_chromosomes=True, 
                                      include_other_chromosomes=False):
@@ -1632,73 +1703,6 @@ class Insertional_mutant_pool_dataset():
         if not different_parameters:
             self.summary.merging_which_chromosomes = (count_cassette_chromosomes, count_other_chromosomes)
 
-    def find_genes_for_mutants(self, genefile, detailed_features=False, N_run_groups=3, verbosity_level=1):
-        """ To each mutant in the dataset, add the gene it's in (look up gene positions for each mutant using genefile).
-
-        If detailed_features is True, also look up whether the mutant is in an exon/intron/UTR (NOT IMPLEMENTED); 
-        Read the file in N_run_groups passes to avoid using up too much memory/CPU.
-        """ 
-        if self.multi_dataset:  raise MutantError("find_genes_for_mutants not implemented for multi-datasets!")
-        # MAYBE-TODO implement for multi-datasets?  The actual gene-finding would be easy, since it'd just work on 
-        #  multi-dataset mutants instead of single-dataset ones; adding stuff to summary would be harder.
-
-        # group all the mutants by chromosome, so that I can go over each chromosome in genefile separately
-        #   instead of reading in all the data at once (which uses a lot of memory)
-        mutants_by_chromosome = defaultdict(set)
-        for mutant in self:
-            mutants_by_chromosome[mutant.position.chromosome].add(mutant)
-
-        # First get the list of all chromosomes in the file, WITHOUT reading it all into memory
-        with open(genefile) as GENEFILE:
-            GFF_limit_data = GFF.GFFExaminer().available_limits(GENEFILE)
-            chromosomes_and_counts = dict([(c,n) for ((c,),n) in GFF_limit_data['gff_id'].iteritems()])
-            all_reference_chromosomes = set(chromosomes_and_counts.keys())
-
-        # Now lump the chromosomes into N_run_groups sets with the feature counts balanced between sets, 
-        #  to avoid using too much memory (by reading the whole file at once), 
-        #   or using too much time (by reading the whole file for each chromosome/scaffold)
-        chromosome_sets = split_into_N_sets_by_counts(chromosomes_and_counts, N_run_groups)
-
-        ### go over all mutants on each chromosome, figure out which gene they're in (if any), keep track of totals
-        # keep track of all the mutant and reference chromosomes to catch chromosomes that are absent in reference
-        summ = self.summary
-        summ.total_genes_in_genome = 0
-        for chromosome_set in chromosome_sets:
-            genefile_parsing_limits = {'gff_id': list(chromosome_set)}
-            if not detailed_features: 
-                genefile_parsing_limits['gff_type'] = ['gene']
-            with open(genefile) as GENEFILE:
-                for chromosome_record in GFF.parse(GENEFILE, limit_info=genefile_parsing_limits):
-                    if verbosity_level>1:   print "    parsing %s for mutant gene locations..."%chromosome_record.id
-                    summ.total_genes_in_genome += len(chromosome_record.features)
-                    for mutant in mutants_by_chromosome[chromosome_record.id]:
-                        gene_ID, orientation, feature = find_gene_by_pos(mutant.position, chromosome_record, 
-                                                                         detailed_features, quiet=(verbosity_level==0))
-                        mutant.gene, mutant.orientation, mutant.gene_feature = gene_ID, orientation, feature
-                    if verbosity_level>1:   print "    ...found total %s genes."%(len(chromosome_record.features))
-        if verbosity_level>1:   print "    found total %s genes in full genome."%(summ.total_genes_in_genome)
-
-        # for mutants in chromosomes that weren't listed in the genefile, use special values
-        for chromosome in set(mutants_by_chromosome.keys())-set(all_reference_chromosomes):
-            if not is_cassette_chromosome(chromosome):
-                print 'Warning: chromosome "%s" not found in genefile data!'%(chromosome)
-            for mutant in mutants_by_chromosome[chromosome]:
-                mutant.gene,mutant.orientation,mutant.gene_feature = SPECIAL_GENE_CODES.chromosome_not_in_reference,'-','-'
-
-    def add_gene_annotation(self, annotation_file, if_standard_Cre_file=False, custom_header=None, print_info=False):
-        """ Add gene annotation to each mutant, based on annotation_file. See parse_gene_annotation_file doc for detail."""
-        from parse_annotation_file import parse_gene_annotation_file
-        gene_annotation_dict, gene_annotation_header = parse_gene_annotation_file(annotation_file, 
-                     standard_Cre_file=if_standard_Cre_file, header_fields=custom_header, verbosity_level=int(print_info))
-        # store the annotation header in self.summary, for printing
-        if gene_annotation_header:  self.gene_annotation_header = gene_annotation_header
-        else:                       self.gene_annotation_header = 'GENE_ANNOTATION_DATA'
-        # add the annotation info to each mutant (or nothing, if gene has no annotation)
-        # MAYBE-TODO should I even store gene annotation in each mutant, or just keep a separate per-gene dictionary?
-        for mutant in self:
-            try:                mutant.gene_annotation = gene_annotation_dict[mutant.gene]
-            except KeyError:    mutant.gene_annotation = []
-        # LATER-TODO add this to the gene-info run-test case!
 
     ######### WRITING DATA TO FILES
 
