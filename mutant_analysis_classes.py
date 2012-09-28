@@ -834,8 +834,6 @@ class Dataset_summary_data():
         # MAYBE-TODO should cassette_end and reads_are_reverse be specified for the whole dataset, or just for each set of data added, in add_alignment_reader_to_data? The only real issue with this would be that then I wouldn't be able to print this information in the summary - or I'd have to keep track of what the value was for each alignment reader added and print that in the summary if it's a single value, or 'varied' if it's different values. Might also want to keep track of how many alignment readers were involved, and print THAT in the summary!  Or even print each (infile_name, cassette_end, reads_are_reverse) tuple as a separate line in the header.
         self.cassette_end = cassette_end
         self.reads_are_reverse = reads_are_reverse
-        # annotation-related information - LATER-TODO should this even be here, or somewhere else?
-        self.total_genes_in_genome = 0
 
 
 class Insertional_mutant_pool_dataset():
@@ -883,8 +881,9 @@ class Insertional_mutant_pool_dataset():
         if not multi_dataset:   self.summary = Dataset_summary_data(cassette_end, reads_are_reverse)
         else:                   self.summary = {}
         # data that's NOT related to a particular dataset
-        # TODO should probably merge self.gene_annotation_header with summary in some sensible way, or something, hmm...
+        # gene/annotation-related information - LATER-TODO should this even be here, or somewhere else?
         self.gene_annotation_header = []
+        self.total_genes_in_genome = 0
         # optionally read mutant data from infile
         if infile is not None:
             self.read_data_from_file(infile)
@@ -1087,7 +1086,7 @@ class Insertional_mutant_pool_dataset():
                     data = line.split('\t')[-1].strip('()')
                     try:                data = int(data)
                     except ValueError:  pass
-                    self.summary.total_genes_in_genome = data
+                    self.total_genes_in_genome = data
                 continue
             # ignore special-comment and header lines, parse other tab-separated lines into values
             if line.startswith('<REGEX>#') or line.startswith('<IGNORE>'):  continue       
@@ -1383,7 +1382,7 @@ class Insertional_mutant_pool_dataset():
         ### go over all mutants on each chromosome, figure out which gene they're in (if any), keep track of totals
         # keep track of all the mutant and reference chromosomes to catch chromosomes that are absent in reference
         summ = self.summary
-        summ.total_genes_in_genome = 0
+        self.total_genes_in_genome = 0
         for chromosome_set in chromosome_sets:
             genefile_parsing_limits = {'gff_id': list(chromosome_set)}
             if not detailed_features: 
@@ -1391,13 +1390,13 @@ class Insertional_mutant_pool_dataset():
             with open(genefile) as GENEFILE:
                 for chromosome_record in GFF.parse(GENEFILE, limit_info=genefile_parsing_limits):
                     if verbosity_level>1:   print "    parsing %s for mutant gene locations..."%chromosome_record.id
-                    summ.total_genes_in_genome += len(chromosome_record.features)
+                    self.total_genes_in_genome += len(chromosome_record.features)
                     for mutant in mutants_by_chromosome[chromosome_record.id]:
                         gene_ID, orientation, feature = find_gene_by_pos(mutant.position, chromosome_record, 
                                                                          detailed_features, quiet=(verbosity_level==0))
                         mutant.gene, mutant.orientation, mutant.gene_feature = gene_ID, orientation, feature
                     if verbosity_level>1:   print "    ...found total %s genes."%(len(chromosome_record.features))
-        if verbosity_level>1:   print "    found total %s genes in full genome."%(summ.total_genes_in_genome)
+        if verbosity_level>1:   print "    found total %s genes in full genome."%(self.total_genes_in_genome)
 
         # for mutants in chromosomes that weren't listed in the genefile, use special values
         for chromosome in set(mutants_by_chromosome.keys())-set(all_reference_chromosomes):
@@ -1880,18 +1879,18 @@ class Insertional_mutant_pool_dataset():
                                                in self.get_gene_dict_by_mutant_number(dataset).items() if N_mutants>1])
             DVG.append((header_prefix+"Genes containing a mutant (% of all genes):", 
                         lambda summ,mutants,dataset: value_and_percentages(_N_all_genes(dataset), 
-                                                                           [summ.total_genes_in_genome]) ))
+                                                                           [self.total_genes_in_genome]) ))
             DVG.append((line_prefix+"Genes containing at least two mutants (% of all genes):", 
                         lambda summ,mutants,dataset: value_and_percentages(_N_genes_in_multiple_mutants(dataset), 
-                                                                           [summ.total_genes_in_genome]) ))
+                                                                           [self.total_genes_in_genome]) ))
             DVG.append((line_prefix+"  (total genes in genome annotation data):", 
-                        lambda summ,mutants,dataset: "(%s)"%summ.total_genes_in_genome ))
+                        lambda summ,mutants,dataset: "(%s)"%self.total_genes_in_genome ))
             # MAYBE-TODO put some kind of maximum on this or collapse into ranges rather than listing all the numbers?
             for mutantN in sorted(set.union(*[set(self.get_gene_dict_by_mutant_number(dataset)) for dataset in datasets])):
                 DVG.append((line_prefix+"Genes with %s mutants (%% of all genes):"%mutantN, 
                             lambda summ,mutants,dataset,N=mutantN: value_and_percentages(
                                                                      len(self.get_gene_dict_by_mutant_number(dataset)[N]), 
-                                                                      [summ.total_genes_in_genome]) ))
+                                                                      [self.total_genes_in_genome]) ))
                 DVG.append((line_prefix+"  (some gene names):",
                             lambda summ,mutants,dataset,N=mutantN: self._make_genelist_str(
                                                     self.get_gene_dict_by_mutant_number(dataset)[N], N_genes_to_print) ))
