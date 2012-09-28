@@ -1,13 +1,38 @@
-## other text
-# other text
-
-other text
-
-## final "bad" reads (in _wrong-start and/or _no-cassette files) (% of total):	5 (10%)
 
 ## other text
 # other text
 
 other text
 
+
+### FINAL ALIGNMENT CATEGORY COUNTS
+# total reads:  ___
+# cassette:  ___ (___%)
+# genomic-unique:  ___ (__%)
+# multiple-genomic:  4 (__%)
+# unaligned:  6 (__%)
+
+
+
+## other text
+# other text
+
+other text
+
+
+
+### Final read count info 
+# starting total read count:	___
+# "good" read count after start trimming (% of total):	___ (__%)
+#  "bad" read count (wrong-start) (% of total):	1 (__%)
+# "good" read count after cassette stripping (% of total, % of trimmed):	___ (__%, __%)
+#  "bad" read count (no-cassette) (% of total, % of trimmed):	4 (__%, __%)
+## final "good" reads (in main output file) (% of total):	___ (__%)
+## final "bad" reads (in _wrong-start and/or _no-cassette files) (% of total):	5 (__%)
+
+
+## other text
+# other text
+
+other text
 

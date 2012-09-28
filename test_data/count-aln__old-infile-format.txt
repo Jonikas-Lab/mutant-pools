@@ -5,13 +5,13 @@
 ### SUMMARY:
 ## Total reads in sample:	45
 ## Reads discarded in preprocessing (% of total):	5 (11%)
-#  discarded due to wrong start (% of total):	1 (2.2%)
-#  discarded due to no cassette (% of total):	4 (8.9%)
+#  discarded due to wrong start (% of total):	unknown (unknown)
+#  discarded due to no cassette (% of total):	unknown (unknown)
 ## Reads without a unique alignment (% of total, % of post-preprocessing):	10 (22%, 25%)
-#  unaligned reads (% of total, % of post-preprocessing):	6 (13%, 15%)
-#  multiply aligned reads (% of total, % of post-preprocessing):	4 (8.9%, 10%)
+#  unaligned reads (% of total, % of post-preprocessing):	unknown (unknown)
+#  multiply aligned reads (% of total, % of post-preprocessing):	unknown (unknown)
 ## Uniquely aligned reads (% of total, % of post-preprocessing):	30 (67%, 75%)
-#  Perfectly aligned reads, no mismatches (% of aligned):	24 (80%)
+#  Perfectly aligned reads, no mismatches (% of aligned):	22 (73%)
 #  Reads with cassette direction matching chromosome + strand (% of aligned):	27 (90%)
 #  Reads with cassette direction matching chromosome - strand (% of aligned):	3 (10%)
 #  Reads aligned to insertion_cassette_X (% of aligned):	1 (3.3%)
@@ -38,7 +38,7 @@ min_position_+_5'_108_3'_104	+	108	108-?	gene_unknown	?	?	1	1	1	AAAA	1		0		0
 min_position_+_5'_110_3'_104	+	110	110-?	gene_unknown	?	?	1	1	1	AAAAAA	1		0		0
 min_position_-_5'_100_3'_104	-	100	?-101	gene_unknown	?	?	1	1	1	TTTT	1		0		0
 min_position_-_5'_104_3'_108	-	104	?-105	gene_unknown	?	?	1	1	1	TTTT	1		0		0
-mutation_ifU	+	204	204-?	gene_unknown	?	?	2	2	1	AAAA	2		0		0
+mutation_ifU	+	204	204-?	gene_unknown	?	?	2	0	1	AAAA	2		0		0
 mutation_none	+	104	104-?	gene_unknown	?	?	2	2	1	AAAA	2		0		0
 mutation_yes	+	204	204-?	gene_unknown	?	?	6	0	1	AAAA	6		0		0
 reads_1_seqs_1	+	104	104-?	gene_unknown	?	?	1	1	1	AAAA	1		0		0

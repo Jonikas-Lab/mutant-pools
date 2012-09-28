@@ -3,13 +3,17 @@
 <REGEX># Date: .*
 <REGEX># Full options: {.*}
 ### SUMMARY:
-## Total reads processed:	40+unknown
-#  Reads discarded in preprocessing (% of total):	unknown (unknown)
-#  Unaligned reads (% of total, % of post-preprocessing):	0 (0%, 0%)
-#  Aligned reads (% of total, % of post-preprocessing):	40 (100%, 100%)
-#  Perfectly aligned reads, no mismatches (% of aligned):	40 (100%)
-#  Reads with cassette direction matching chromosome + strand (% of aligned):	38 (95%)
-#  Reads with cassette direction matching chromosome - strand (% of aligned):	2 (5%)
+## Total reads in sample:	39
+## Reads discarded in preprocessing (% of total):	0 (0%)
+#  discarded due to wrong start (% of total):	0 (0%)
+#  discarded due to no cassette (% of total):	0 (0%)
+## Reads without a unique alignment (% of total, % of post-preprocessing):	0 (0%, 0%)
+#  unaligned reads (% of total, % of post-preprocessing):	0 (0%, 0%)
+#  multiply aligned reads (% of total, % of post-preprocessing):	0 (0%, 0%)
+## Uniquely aligned reads (% of total, % of post-preprocessing):	39 (100%, 100%)
+#  Perfectly aligned reads, no mismatches (% of aligned):	39 (100%)
+#  Reads with cassette direction matching chromosome + strand (% of aligned):	37 (95%)
+#  Reads with cassette direction matching chromosome - strand (% of aligned):	2 (5.1%)
 ## Mutant merging/counts (deciding when different-position reads should be one mutant)	
 #   (adjacent-merging/counting max distance):	(1)
 #   (if we're including mutants in cassette and in non-nuclear chromosomes):	(False, True)
@@ -22,7 +26,7 @@
 ## Distinct mutants (read groups) by cassette insertion position:	39
 #  (read location with respect to cassette: which end, which direction):	(5prime, forward)
 #  (average and median reads per mutant):	(1, 1)
-#  Most common mutant(s): reads (% of aligned) (position or count):	1 (2.5%) (39 mutants)
+#  Most common mutant(s): reads (% of aligned) (position or count):	1 (2.6%) (39 mutants)
 ### HEADER AND DATA:
 # chromosome	strand	min_position	full_position	gene	orientation	feature	total_reads	perfect_reads	N_sequence_variants
 chromosome_A	+	20	20-?	gene_unknown	?	?	1	1	1

@@ -3,10 +3,14 @@
 <REGEX># Date: .*
 <REGEX># Full options: {.*}
 ### SUMMARY:
-## Total reads processed:	80+unknown
-#  Reads discarded in preprocessing (% of total):	unknown (unknown)
-#  Unaligned reads (% of total, % of post-preprocessing):	10 (12%, 12%)
-#  Aligned reads (% of total, % of post-preprocessing):	70 (88%, 88%)
+## Total reads in sample:	75
+## Reads discarded in preprocessing (% of total):	5 (6.7%)
+#  discarded due to wrong start (% of total):	unknown (unknown)
+#  discarded due to no cassette (% of total):	unknown (unknown)
+## Reads without a unique alignment (% of total, % of post-preprocessing):	0 (0%, 0%)
+#  unaligned reads (% of total, % of post-preprocessing):	0 (0%, 0%)
+#  multiply aligned reads (% of total, % of post-preprocessing):	0 (0%, 0%)
+## Uniquely aligned reads (% of total, % of post-preprocessing):	70 (93%, 100%)
 #  Perfectly aligned reads, no mismatches (% of aligned):	62 (89%)
 #  Reads with cassette direction matching chromosome + strand (% of aligned):	65 (93%)
 #  Reads with cassette direction matching chromosome - strand (% of aligned):	5 (7.1%)

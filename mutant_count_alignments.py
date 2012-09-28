@@ -28,13 +28,15 @@ import mutant_analysis_classes
 def do_test_run():
     """ Test run: run script on test infile, compare output to reference file."""
     test_folder = "test_data"
-    aln_infile1 = "test_data/INPUT_alignment1.sam"
+    aln_infile0 = "test_data/INPUT_alignment0_old-format.sam"
+    aln_infile1 = "test_data/INPUT_alignment1_genomic-unique.sam"
     aln_infile2 = "test_data/INPUT_alignment2_for-genes.sam"
     aln_infile3 = "test_data/INPUT_alignment3_for-merging.sam"
     gff_genefile = "test_data/INPUT_gene-data.gff3"
     dataset_to_remove = "test_data/INPUT_mutants_to_remove.txt"
 
-    test_runs = [('cassette-end-5prime', "-e 5prime -r forward -U -n3 -L", [aln_infile1]),
+    test_runs = [
+                 ('cassette-end-5prime', "-e 5prime -r forward -U -n3 -L", [aln_infile1]),
                  ('cassette-end-3prime', "-e 3prime -r forward -U -n3 -L", [aln_infile1]),
                  ('read-direction-reverse', "-r reverse -e 5prime -U -n3 -L", [aln_infile1]),
                  ('u_unknown-not-as-match', "-u -e 5prime -r forward -n3 -L", [aln_infile1]),
@@ -52,6 +54,7 @@ def do_test_run():
                  ('remove-from-other-all', "-Q -X %s -n0"%dataset_to_remove, [aln_infile2]), 
                  ('remove-from-other-min4', "-Q -X %s -z4 -n0"%dataset_to_remove, [aln_infile2]), 
                  ('remove-from-other-perfect', "-Q -X %s -Z -z4 -n0"%dataset_to_remove, [aln_infile2]),
+                 ('old-infile-format', "-e 5prime -r forward -U -n3 -L", [aln_infile0]),
                 ]
     # MAYBE-TODO change all the expected files to merge tandems, so I can remove -Q from all test runs except dont-merge-tandems?
     # MAYBE-TODO add run-test for --gene_annotation_file?
@@ -187,57 +190,152 @@ def define_option_parser():
     return parser
 
 
-def add_discarded_reads_from_metadata_file(infiles, input_metadata_file, verbosity_level):
-    """ Parse metadata files to get total discarded read count; return None if it cannot be determined. 
+def get_info_from_metadata_files(infiles, input_metadata_file, verbosity_level):
+    """ Parse metadata files to get wrong-format and unaligned/multiple read counts; return None if cannot be determined. 
+
+    Returns a tuple of the following counts: discarded, wrong_start, no_cassette, non_aligned, unaligned, multiple_aligned.
+    Any of them can be None, meaning it could not be determined. 
+    It looks for the information in the metadata file for each infile; if it can't find or parse the metadata file for 
+     any infile, the final count is None.
+    Special treatment for the non_aligned value for old-format files, in which that count is not in metadata at all.
     """
     # if the option specified no metadata files, total discarded readcount cannot be determined
     if input_metadata_file == 'NONE':
-        return None
+        return None, None, None, None, None, None
     # make sure the -m option has a value that will work with the number of infiles
     if len(infiles)>1 and not input_metadata_file=='AUTO':
         print "Warning: when multiple input files are given, the -m option must be NONE or AUTO - ignoring other value."
-        return None
-    # get the discarded read count for each infile; only return the total at the end, if all values are found
-    discarded_counts = []
+        return None, None, None, None, None, None
+
+    # get the read counts for each infile; only return the total at the end, if all values are found
+    counts_per_file = {'discarded':[], 'wrong_start':[], 'no_cassette':[], 'unaligned':[], 'multiple_aligned':[]}
+    file_formats = []
+
     for infile in infiles:
+        file_format = '?'
         # take the actual input_metadata_file value as the file name, or infer it from the infile name if 'AUTO'
         if input_metadata_file == 'AUTO':
-            curr_input_metadata_file = os.path.splitext(infile)[0] + '_info.txt'
+            infile_base = os.path.splitext(infile)[0]
+            if infile_base.endswith('_genomic-unique'):     infile_base = infile_base[:-len('_genomic-unique')]
+            curr_input_metadata_file = infile_base + '_info.txt'
             if verbosity_level>1:  
                 print 'Automatically determining metadata input file name: %s'%curr_input_metadata_file
         else:
             curr_input_metadata_file = input_metadata_file
             if verbosity_level>1:  
                 print 'Metadata input file name provided in options: %s'%curr_input_metadata_file
-        # if file is missing, total discarded readcount cannot be determined
+        # if file is missing, readcounts cannot be determined
         if not os.path.exists(curr_input_metadata_file):
             if verbosity_level>0:
                 print 'Warning: metadata input file %s not found! Proceeding without it.'%curr_input_metadata_file
-            return None
-        # go through the metadata file to find the line with the discarded read count; 
-        #  if the line isn't found, total discarded readcount cannot be determined
-        # Note that there are two possible formats of that line, old and new
+            counts_per_file['discarded'].append(None)
+            counts_per_file['wrong_start'].append(None)
+            counts_per_file['no_cassette'].append(None)
+            counts_per_file['unaligned'].append(None)
+            counts_per_file['multiple_aligned'].append(None)
+            file_formats.append(file_format)
+            continue
+
+        # go through the metadata file to find the lines with various pieces of useful information
+        #  (if the line isn't found, the related readcount cannot be determined)
+
+        ### total discarded read count (there are two possible formats of that line, old and new)
         for line in open(curr_input_metadata_file):
-            if line.startswith('## final "bad" reads'):       # new discarded-read line format
-                discarded_counts.append(int(line.split(':\t')[1].split(' (')[0]))
+            if line.startswith('## final "bad" reads'):         # new discarded-read line format
+                counts_per_file['discarded'].append(int(line.split(':\t')[1].split(' (')[0]))
+                file_format = 'new'
                 break
             if line.startswith('## reads removed: '):           # old discarded-read line format
-                discarded_counts.append(int(line.split()[3]))
+                counts_per_file['discarded'].append(int(line.split()[3]))
+                file_format = 'old'
                 break
-            # TODO include the separate "bad" read counts from start-trimming and cassette-trimming?  And probably other categories later if I add any... (like the cassette-end special cases)
         else:   # in a for-else loop the else is executed if the for wasn't ended with break, i.e. the line wasn't found
             if verbosity_level>0:
                 print("Warning: metadata input file %s didn't contain discarded read count line! "%curr_input_metadata_file
                       +"Proceeding without it.")
-            return None
-    # if some metadata files were missing the discarded counts line, total discarded readcount cannot be determined
-    if len(discarded_counts)<len(infiles):
-        if verbosity_level>0:
-            print "Warning: discarded read count not found for some files! Ignoring all values, keeping 'unknown'."
-        return None
-    # if the discarded read counts for all infiles were found, return the sum as the total discarded read count
-    return sum(discarded_counts)
+            counts_per_file['discarded'].append(None)
+
+        file_formats.append(file_format)
+        ### all the other information only shows up in new-format files - in old-format just assume None
+        if file_format=='old':
+                counts_per_file['wrong_start'].append(None)
+                counts_per_file['no_cassette'].append(None)
+                counts_per_file['unaligned'].append(None)
+                counts_per_file['multiple_aligned'].append(None)
     
+        else:
+            ### wrong-start discarded read count (new-format only)
+            for line in open(curr_input_metadata_file):
+                if line.startswith('#  "bad" read count (wrong-start)'):
+                    counts_per_file['wrong_start'].append(int(line.split(':\t')[1].split(' (')[0]))
+                    break
+            else:
+                if verbosity_level>0:
+                    print("Warning: metadata file %s didn't contain wrong-start readcount line! "%curr_input_metadata_file
+                          +"Proceeding without it.")
+                counts_per_file['wrong_start'].append(None)
+
+            ### wrong-start discarded read count (new-format only)
+            for line in open(curr_input_metadata_file):
+                if line.startswith('#  "bad" read count (no-cassette)'):
+                    counts_per_file['no_cassette'].append(int(line.split(':\t')[1].split(' (')[0]))
+                    break
+            else:
+                if verbosity_level>0:
+                    print("Warning: metadata file %s didn't contain no-cassette readcount line! "%curr_input_metadata_file
+                          +"Proceeding without it.")
+                counts_per_file['no_cassette'].append(None)
+
+            ### unaligned read count (new-format only)
+            for line in open(curr_input_metadata_file):
+                if line.startswith('# unaligned:  '):
+                    counts_per_file['unaligned'].append(int(line.split(':  ')[1].split(' (')[0]))
+                    break
+            else:
+                if verbosity_level>0:
+                    print("Warning: metadata file %s didn't contain unaligned readcount line! "%curr_input_metadata_file
+                          +"Proceeding without it.")
+                counts_per_file['unaligned'].append(None)
+
+            ### multiple-aligned read count (new-format only)
+            for line in open(curr_input_metadata_file):
+                if line.startswith('# multiple-genomic:  '):
+                    counts_per_file['multiple_aligned'].append(int(line.split(':  ')[1].split(' (')[0]))
+                    break
+            else:
+                if verbosity_level>0:
+                    print("Warning: metadata file %s "%curr_input_metadata_file 
+                          +"didn't contain genomic-multiple readcount line! Proceeding without it.")
+                counts_per_file['multiple_aligned'].append(None)
+
+    # The calculation for total non-aligned is a bit complicated, because:
+    #  for new-format files that information comes from the metadata (and split into unaligned/multiple subcategories), 
+    #  but for the old-format files it comes from the data infile itself (without the category split. 
+    # So for each old-format file, the general nonaligned count can be assumed to be 0 (and the real number will be 
+    #  (added during actual infile processing), but the unaligned/multiple counts stay None (i.e. unknown).
+    counts_per_file['total_non_aligned'] = []
+    for file_format, unaligned_count, multiple_count in zip(file_formats, counts_per_file['unaligned'], 
+                                                            counts_per_file['multiple_aligned']):
+        if file_format=='old':                                  counts_per_file['total_non_aligned'].append(0)
+        elif unaligned_count is None or multiple_count is None: counts_per_file['total_non_aligned'].append(None)
+        else:                                                   counts_per_file['total_non_aligned'].append(\
+                                                                                        unaligned_count+multiple_count)
+
+    # do sums for each count category: of the length of the list is wrong or None is on the list, return None/unknown:
+    #  if some metadata files were missing the discarded counts line, total discarded readcount cannot be determined
+    #  if the discarded read counts for all infiles were found, return the sum as the total discarded read count
+    total_counts = {}
+    for key, list_of_counts in counts_per_file.iteritems():
+        if len(list_of_counts)<len(infiles) or None in list_of_counts:
+            if verbosity_level>0:
+                print "Warning: %s read count not found for some files! Ignoring all values, keeping 'unknown'."%key
+            total_counts[key] = None
+        else:
+            total_counts[key] = sum(list_of_counts)
+
+    return (total_counts['discarded'], total_counts['wrong_start'], total_counts['no_cassette'], 
+            total_counts['total_non_aligned'], total_counts['unaligned'], total_counts['multiple_aligned'])
+
 
 def main(infiles, outfile, options):
     """ Run the main functionality of the module (see module docstring for more information), excluding testing.
@@ -256,23 +354,37 @@ def main(infiles, outfile, options):
     all_alignment_data = mutant_analysis_classes.Insertional_mutant_pool_dataset(options.read_cassette_end, 
                                                                                  options.read_direction=='reverse')
 
-    ### parse preprocessing/alignment metadata file to get discarded read count, pass it to all_alignment_data
-    #   (all_alignment_data initializes it to 'unkown', so if file is not given or can't be found, no need to do anything)
-    N_discarded = add_discarded_reads_from_metadata_file(infiles, options.input_metadata_file, options.verbosity_level)
-    if N_discarded is not None:     all_alignment_data.add_discarded_reads(N_discarded)
+    ### parse preprocessing/alignment metadata file to get discarded/not-aligned/etc readcounts, pass to all_alignment_data
+    #   (all_alignment_data initializes them to 'unkown', so if file is not given or can't be found/parsed, do nothing)
+    N_discarded, N_wrong_start, N_no_cassette, N_non_aligned, N_unaligned, N_multiple = \
+                        get_info_from_metadata_files(infiles, options.input_metadata_file, options.verbosity_level)
+    if N_wrong_start is not None and N_no_cassette is not None:
+        assert N_discarded == N_wrong_start+N_no_cassette, "Wrong-start and no-cassette totals don't add up to discarded!"
+    all_alignment_data.add_discarded_reads(N_discarded, N_wrong_start, N_no_cassette)
+    if N_unaligned is not None or N_multiple is not None:
+        all_alignment_data.add_nonaligned_reads(N_non_aligned, N_unaligned, N_multiple)
+
     # MAYBE-TODO also get the final total number of reads from the metadata infile and make sure it's the same 
     #   as the number of processed reads I get from all_alignment_data.print_summary()?
     
     ### parse input file and store data - the add_alignment_reader_to_data function here does pretty much all the work!
     for infile in infiles:
-        # initialize a parser for the SAM infile
-        if options.verbosity_level>1: print "parsing input file %s - time %s."%(infile, time.ctime())
-        infile_reader = HTSeq.SAM_Reader(infile)
-        # fill the new alignment set object with data from the infile parser
-        all_alignment_data.add_alignment_reader_to_data(infile_reader, 
-                                                        uncollapse_read_counts = options.input_collapsed_to_unique, 
-                                                        treat_unknown_as_match = options.treat_unknown_as_match, 
-                                                        ignore_cassette = options.ignore_cassette)
+        # if this is a new-style *_genomic-unique.sam file and has a matching *_cassette.sam file, parse that file too
+        part_infiles = [infile]
+        if infile.endswith('_genomic-unique.sam'):
+            cassette_file = infile[:-len('_genomic-unique.sam')] + '_cassette.sam'
+            if os.path.exists(cassette_file):
+                part_infiles.append(cassette_file)
+        for part_infile in part_infiles:
+            # initialize a parser for the SAM infile
+            if options.verbosity_level>1: 
+                print "parsing input file %s - time %s."%(part_infile, time.ctime())
+            infile_reader = HTSeq.SAM_Reader(part_infile)
+            # fill the new alignment set object with data from the infile parser
+            all_alignment_data.add_alignment_reader_to_data(infile_reader, 
+                                                            uncollapse_read_counts = options.input_collapsed_to_unique, 
+                                                            treat_unknown_as_match = options.treat_unknown_as_match, 
+                                                            ignore_cassette = options.ignore_cassette)
 
     ### optionally merge adjacent mutants (since they're probably just artifacts of indels during deepseq)
     with open(mutant_merging_outfile, 'w') as MERGEFILE:

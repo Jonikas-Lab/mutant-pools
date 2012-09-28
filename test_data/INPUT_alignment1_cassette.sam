@@ -1,0 +1,2 @@
+@@@ testing special treatment of cassette chromosomes (counting in summary, ignoring) (-b/-B options)
+TEST:2:1:8790:931#0/1	0	insertion_cassette_X	101	255	4M	*	0	0	AAAA	____	XA:i:0	MD:Z:4	NM:i:0
