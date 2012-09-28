@@ -878,8 +878,6 @@ class Insertional_mutant_pool_dataset():
         if multi_dataset:   blank_mutant_function = blank_multi_mutant_with_pos
         else:               blank_mutant_function = blank_single_mutant_with_pos
         self._mutants_by_position = keybased_defaultdict(blank_mutant_function)
-        # other arrangements of the same basic mutant set
-        self.mutants_by_gene = defaultdict(list)
         # various dataset summary data - single for a single dataset, a dictionary for a multi-dataset object.
         self.multi_dataset = multi_dataset
         if not multi_dataset:
@@ -1258,14 +1256,15 @@ class Insertional_mutant_pool_dataset():
         return merged_feature_count_dict
         # TODO unit-test
 
-    def make_by_gene_mutant_dict(self):
-        """ Fill the self.mutants_by_gene dictionary (gene_name:mutant_list) based on full list of dataset mutants; 
-        real gene IDs only (ignore SPECIAL_GENE_CODES, i.e. mutants not in genes, and mutants with unknown gene status).
+    @property
+    def mutants_by_gene(self):
+        """ Return gene_name:mutant_list dict based on full list of dataset mutants; ignore SPECIAL_GENE_CODES)
         """
-        self.mutants_by_gene = defaultdict(list)
+        mutants_by_gene = defaultdict(list)
         for mutant in self:
             if mutant.gene not in SPECIAL_GENE_CODES.all_codes:
-                self.mutants_by_gene[mutant.gene].append(mutant)
+                mutants_by_gene[mutant.gene].append(mutant)
+        return mutants_by_gene
         # LATER-TODO add unit-test
 
     def get_gene_dict_by_mutant_number(self, dataset=None):
@@ -1273,7 +1272,6 @@ class Insertional_mutant_pool_dataset():
         
         If the object is multi-dataset, dataset name must be provided, otherwise it cannot.
         """
-        self.make_by_gene_mutant_dict()
         gene_by_mutantN = defaultdict(set)
         for (gene,mutants) in self.mutants_by_gene.iteritems():
             gene_by_mutantN[len([m for m in mutants if m.get_readcount_by_dataset(dataset)])].add(gene)
