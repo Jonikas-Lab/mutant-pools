@@ -476,20 +476,23 @@ class Insertional_mutant():
         else:
             self.by_dataset = defaultdict(blank_readcount_only_mutant)
 
-    def read_info(self, dataset=None):
+    def read_info(self, dataset=None, strict=False):
         """ Help function to get read-info-containing object for both multi-dataset and single (dataset=None) mutants.
 
         For single-dataset (dataset=None), return self.
-        For multi-dataset, return self.by_dataset[dataset].
+        For multi-dataset, return self.by_dataset[dataset] if present - if not present, raises an exception if strict, 
+         otherwise returns an empty read-info object.
         """
         if dataset is None and self.multi_dataset:  
             raise MutantError("This is a multi-dataset mutant - must provide dataset arg!")
         if dataset is not None and not self.multi_dataset:  
             raise MutantError("This is not a multi-dataset mutant - cannot provide dataset arg!")
-        if self.multi_dataset and dataset not in self.by_dataset:
+        if self.multi_dataset and dataset not in self.by_dataset and strict:
             raise MutantError("No dataset %s in this multi-dataset mutant! Present datasets are %s"%(dataset, 
                                                                                                  self.by_dataset.keys()))
-        if self.multi_dataset:  return self.by_dataset[dataset]
+        if self.multi_dataset:  
+            try:                return self.by_dataset[dataset]
+            except KeyError:    return blank_readcount_only_mutant()
         else:                   return self
         # TODO unit-tests?
 
@@ -812,7 +815,6 @@ class Dataset_summary_data():
 
     def __init__(self, dataset, cassette_end, reads_are_reverse, dataset_name=None):
         """ Initialize everything to 0/empty/unknown. """
-        # TODO really this class should be renamed from summary to metadata or extra_data or something...
          # make sure the arguments are valid values
         if not cassette_end in SEQ_ENDS+['?']: 
             raise ValueError("The cassette_end variable must be one of %s or '?'!"%SEQ_ENDS)
@@ -841,6 +843,8 @@ class Dataset_summary_data():
         # MAYBE-TODO should cassette_end and reads_are_reverse be specified for the whole dataset, or just for each set of data added, in add_alignment_reader_to_data? The only real issue with this would be that then I wouldn't be able to print this information in the summary - or I'd have to keep track of what the value was for each alignment reader added and print that in the summary if it's a single value, or 'varied' if it's different values. Might also want to keep track of how many alignment readers were involved, and print THAT in the summary!  Or even print each (infile_name, cassette_end, reads_are_reverse) tuple as a separate line in the header.
         self.cassette_end = cassette_end
         self.reads_are_reverse = reads_are_reverse
+
+    # TODO unit-test all these methods!
 
     def add_discarded_reads(self, N_all_discarded, N_wrong_start, N_no_cassette, replace=False):
         """ Add not-None arg values to discarded_read_count, discarded_wrong_start and discarded_no_cassette (or replace). 
@@ -939,7 +943,6 @@ class Dataset_summary_data():
         """ Return total number of reads in given chromosome."""
         return sum(m.read_info(self.dataset_name).read_info(self.dataset_name).total_read_count 
                    for m in self.dataset if m.position.chromosome==chromosome)
-        # TODO unit-test
 
     @property
     def all_chromosomes(self):
@@ -984,7 +987,6 @@ class Dataset_summary_data():
         """ Return total number of mutants in given chromosome."""
         return sum(1 for m in self.dataset 
                    if m.read_info(self.dataset_name).total_read_count and m.position.chromosome==chromosome)
-        # TODO unit-test
 
     def merged_gene_feature_counts(self, merge_boundary_features=True, merge_confusing_features=False):
         """ Return (gene_feature,count) list, biologically sorted, optionally with all "boundary" features counted as one.
@@ -1003,7 +1005,6 @@ class Dataset_summary_data():
             elif '/' in feature and merge_boundary_features:  merged_feature_count_dict['boundary'] += count
             else:                                             merged_feature_count_dict[feature] += count
         return merged_feature_count_dict
-        # TODO unit-test
 
     @property
     def most_common_mutants(self):
@@ -1721,7 +1722,7 @@ class Insertional_mutant_pool_dataset():
         m = most_common_mutants[0]
         # calculate the fraction of total reads per mutant, assuming each mutant has the same readcount
         assert len(set([m.read_info(dataset).total_read_count for m in most_common_mutants])) == 1
-        readcount_info = value_and_percentages(m.read_info(dataset).total_read_count, [self.summary.aligned_read_count])
+        readcount_info = value_and_percentages(m.read_info(dataset).total_read_count, [summ.aligned_read_count])
         if len(most_common_mutants) == 1:   return "%s (%s)"%(readcount_info, m.position)
         else:                               return "%s (%s mutants)"%(readcount_info, len(most_common_mutants))
 
