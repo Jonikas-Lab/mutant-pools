@@ -1763,149 +1763,144 @@ class Insertional_mutant_pool_dataset():
         descriptions_and_value_getters = DVG = []
 
         DVG.append((header_prefix+"Total reads in sample:", 
-                    lambda summ,mutants,dataset: "%s"%(summ.full_read_count_str) ))
+                    lambda summ,mutants: "%s"%(summ.full_read_count_str) ))
         def _fraction_or_unknown(value, totals):
             try:                return value_and_percentages(value, totals)
             except TypeError:   return "%s (unknown)"%value
         DVG.append((header_prefix+"Reads discarded in preprocessing (% of total):", 
-                lambda summ,mutants,dataset: _fraction_or_unknown(summ.discarded_read_count, [summ.full_read_count])))
+                   lambda summ,mutants: _fraction_or_unknown(summ.discarded_read_count, [summ.full_read_count])))
         DVG.append((line_prefix+"discarded due to wrong start (% of total):", 
-                lambda summ,mutants,dataset: _fraction_or_unknown(summ.discarded_wrong_start, [summ.full_read_count])))
+                   lambda summ,mutants: _fraction_or_unknown(summ.discarded_wrong_start, [summ.full_read_count])))
         DVG.append((line_prefix+"discarded due to no cassette (% of total):", 
-                lambda summ,mutants,dataset: _fraction_or_unknown(summ.discarded_no_cassette, [summ.full_read_count])))
+                   lambda summ,mutants: _fraction_or_unknown(summ.discarded_no_cassette, [summ.full_read_count])))
 
         DVG.append((header_prefix+"Reads without a unique alignment (% of total, % of post-preprocessing):", 
-                    lambda summ,mutants,dataset: _fraction_or_unknown(summ.non_aligned_read_count, 
-                                                               [summ.full_read_count, summ.processed_read_count]) ))
+                    lambda summ,mutants: _fraction_or_unknown(summ.non_aligned_read_count, 
+                                                              [summ.full_read_count, summ.processed_read_count]) ))
         DVG.append((line_prefix+"unaligned reads (% of total, % of post-preprocessing):", 
-                    lambda summ,mutants,dataset: _fraction_or_unknown(summ.unaligned, 
-                                                               [summ.full_read_count, summ.processed_read_count]) ))
+                    lambda summ,mutants: _fraction_or_unknown(summ.unaligned, 
+                                                              [summ.full_read_count, summ.processed_read_count]) ))
         DVG.append((line_prefix+"multiply aligned reads (% of total, % of post-preprocessing):", 
-                    lambda summ,mutants,dataset: _fraction_or_unknown(summ.multiple_aligned, 
-                                                               [summ.full_read_count, summ.processed_read_count]) ))
+                    lambda summ,mutants: _fraction_or_unknown(summ.multiple_aligned, 
+                                                              [summ.full_read_count, summ.processed_read_count]) ))
 
         DVG.append((header_prefix+"Uniquely aligned reads (% of total, % of post-preprocessing):",
-                    lambda summ,mutants,dataset: value_and_percentages(summ.aligned_incl_removed, 
+                    lambda summ,mutants: value_and_percentages(summ.aligned_incl_removed, 
                                                                [summ.full_read_count, summ.processed_read_count]) ))
 
         all_ignored_regions = set.union(*[set(summ.ignored_region_read_counts) for summ in summaries])
         for region in sorted(all_ignored_regions):
             DVG.append((line_prefix+"Removed reads aligned to %s (%% of total, %% of post-preprocessing):"%region, 
-                        lambda summ,mutants,dataset,region=region: value_and_percentages(
-                                                                summ.ignored_region_read_counts[region], 
-                                                                [summ.full_read_count, summ.processed_read_count]) ))
+                        lambda summ,mutants,region=region: value_and_percentages( summ.ignored_region_read_counts[region], 
+                                                                    [summ.full_read_count, summ.processed_read_count]) ))
         if all_ignored_regions:
             DVG.append((header_prefix+"Remaining aligned reads (% of total, % of post-preprocessing):", 
-                        lambda summ,mutants,dataset: value_and_percentages(summ.aligned_read_count, 
-                                                               [summ.full_read_count, summ.processed_read_count]) ))
+                        lambda summ,mutants: value_and_percentages(summ.aligned_read_count, 
+                                                                   [summ.full_read_count, summ.processed_read_count]) ))
 
         DVG.append((line_prefix+"Perfectly aligned reads, no mismatches (% of aligned):", 
-                    lambda summ,mutants,dataset: value_and_percentages(summ.perfect_read_count, 
-                                                                       [summ.aligned_read_count]) ))
+                    lambda summ,mutants: value_and_percentages(summ.perfect_read_count, [summ.aligned_read_count]) ))
 
         for strand in sorted(set.union(*[set(summ.strand_read_counts) for summ in summaries])):
             DVG.append((line_prefix+"Reads with cassette direction matching chromosome %s strand (%% of aligned):"%strand,
-                        lambda summ,mutants,dataset,strand=strand: value_and_percentages(summ.strand_read_counts[strand], 
-                                                                                         [summ.aligned_read_count]) ))
+                        lambda summ,mutants,strand=strand: value_and_percentages(summ.strand_read_counts[strand], 
+                                                                                 [summ.aligned_read_count]) ))
 
         special_chromosomes = []
-        if count_cassette:
-            special_chromosomes += sorted(summ.cassette_chromosomes)
-        if count_other:
-            special_chromosomes += sorted(summ.other_chromosomes)
+        if count_cassette:  special_chromosomes += sorted(summ.cassette_chromosomes)
+        if count_other:     special_chromosomes += sorted(summ.other_chromosomes)
 
         for chromosome in special_chromosomes:
             DVG.append((line_prefix+"Reads aligned to %s (%% of aligned):"%chromosome, 
-                        lambda summ,mutants,dataset,chromosome=chromosome: value_and_percentages(
-                                                                              summ.reads_in_chromosome(chromosome),
-                                                                              [summ.aligned_read_count]) ))
+                        lambda summ,mutants,chromosome=chromosome: value_and_percentages(
+                                                                                  summ.reads_in_chromosome(chromosome),
+                                                                                  [summ.aligned_read_count]) ))
         
         DVG.append((header_prefix+"Mutant merging/counts (deciding when different-position reads should be one mutant)", 
-                    lambda summ,mutants,dataset: '' ))
+                    lambda summ,mutants: '' ))
         DVG.append((line_prefix+" (adjacent-merging/counting max distance):", 
-                    lambda summ,mutants,dataset: "(%s)"%summ.adjacent_max_distance ))
+                    lambda summ,mutants: "(%s)"%summ.adjacent_max_distance ))
         DVG.append((line_prefix+" (if we're including mutants in cassette and in non-nuclear chromosomes):", 
-                    lambda summ,mutants,dataset: "(%s, %s)"%summ.merging_which_chromosomes )) 
+                    lambda summ,mutants: "(%s, %s)"%summ.merging_which_chromosomes )) 
         DVG.append((line_prefix+"merged same-strand adjacent mutant pairs and opposite-strand tandem pairs:", 
-                    lambda summ,mutants,dataset: "%s, %s"%(summ.merged_adjacent_pairs, summ.merged_opposite_tandems) ))
+                    lambda summ,mutants: "%s, %s"%(summ.merged_adjacent_pairs, summ.merged_opposite_tandems) ))
         DVG.append((line_prefix+" (adjacent-merging min count ratio - None if no adjacent-merging):", 
-                    lambda summ,mutants,dataset: "(%s)"%(summ.adjacent_merging_count_ratio) ))
+                    lambda summ,mutants: "(%s)"%(summ.adjacent_merging_count_ratio) ))
         DVG.append((line_prefix+"remaining same-position opposite-strand pairs (if not merged as tandems):", 
-                    lambda summ,mutants,dataset: "%s"%summ.same_position_opposite )) 
+                    lambda summ,mutants: "%s"%summ.same_position_opposite )) 
         DVG.append((line_prefix+'remaining adjacent opposite-strand "toward-facing" pairs (those are definitely real):', 
-                    lambda summ,mutants,dataset: "%s"%summ.adjacent_opposite_toward )) 
+                    lambda summ,mutants: "%s"%summ.adjacent_opposite_toward )) 
         DVG.append((line_prefix+'remaining adjacent opposite-strand "away-facing" pairs (% of toward-facing):', 
-                    lambda summ,mutants,dataset: value_and_percentages(summ.adjacent_opposite_away, 
+                    lambda summ,mutants: value_and_percentages(summ.adjacent_opposite_away, 
                                                        [summ.adjacent_opposite_toward], percentage_format_str='%.0f') )) 
         DVG.append((line_prefix+'remaining adjacent same-strand unmerged pairs (% of 2*toward-facing):', 
-                    lambda summ,mutants,dataset: value_and_percentages(summ.adjacent_same_strand, 
+                    lambda summ,mutants: value_and_percentages(summ.adjacent_same_strand, 
                                                        [2*summ.adjacent_opposite_toward], percentage_format_str='%.0f') )) 
 
         DVG.append((header_prefix+"Distinct mutants (read groups) by cassette insertion position:", 
-                    lambda summ,mutants,dataset: "%s"%len(mutants) ))
+                    lambda summ,mutants: "%s"%len(mutants) ))
         DVG.append((line_prefix+"(read location with respect to cassette: which end, which direction):", 
-                    lambda summ,mutants,dataset: "(%s, %s)"%(summ.cassette_end, 
+                    lambda summ,mutants: "(%s, %s)"%(summ.cassette_end, 
                                                 {'?': '?', True: 'reverse', False: 'forward'}[summ.reads_are_reverse]) ))
         DVG.append((line_prefix+"(average and median reads per mutant):", 
-                    lambda summ,mutants,dataset: "(%d, %d)"%(round((summ.aligned_read_count)/len(mutants)), 
-                                             round(median([m.read_info(dataset).total_read_count for m in mutants]))) ))
+                    lambda summ,mutants: "(%d, %d)"%(round((summ.aligned_read_count)/len(mutants)), 
+                                     round(median([m.read_info(summ.dataset_name).total_read_count for m in mutants]))) ))
 
         DVG.append((line_prefix+"Most common mutant(s): reads (% of aligned) (position or count):",
-                    lambda summ,mutants,dataset: self._most_common_mutants_info(dataset) ))
+                    lambda summ,mutants: self._most_common_mutants_info(summ.dataset_name) ))
         # MAYBE-TODO may also be a good idea to keep track of the most common SEQUENCE, not just mutant...
 
         for chromosome in special_chromosomes:
             DVG.append((line_prefix+"Mutant cassettes in %s (%% of total):"%chromosome, 
-                        lambda summ,mutants,dataset,chromosome=chromosome: value_and_percentages(
-                                                                            summ.mutants_in_chromosome(chromosome),
-                                                                            [len(mutants)]) ))
+                        lambda summ,mutants,chromosome=chromosome: value_and_percentages(
+                                                                                summ.mutants_in_chromosome(chromosome),
+                                                                                [len(mutants)]) ))
 
         # print the gene annotation info, but only if there is any
         if any([summ.mutants_in_genes+summ.mutants_not_in_genes+summ.mutants_undetermined for summ in summaries]):
             DVG.append((line_prefix+"Mutant cassettes with unknown gene info (probably cassette-mapped) (% of total):", 
-                        lambda summ,mutants,dataset: value_and_percentages(summ.mutants_undetermined, [len(mutants)]) ))
+                        lambda summ,mutants: value_and_percentages(summ.mutants_undetermined, [len(mutants)]) ))
             DVG.append((line_prefix+"Mutant cassettes in intergenic spaces (% of total, % of known):", 
-                        lambda summ,mutants,dataset: value_and_percentages(summ.mutants_not_in_genes, 
-                                               [len(mutants), summ.mutants_not_in_genes+summ.mutants_in_genes]) ))
+                        lambda summ,mutants: value_and_percentages(summ.mutants_not_in_genes, 
+                                                   [len(mutants), summ.mutants_not_in_genes+summ.mutants_in_genes]) ))
             DVG.append((header_prefix+"Mutant cassettes inside genes (% of total, % of known):", 
-                        lambda summ,mutants,dataset: value_and_percentages(summ.mutants_in_genes, 
-                                               [len(mutants), summ.mutants_not_in_genes+summ.mutants_in_genes]) ))
+                        lambda summ,mutants: value_and_percentages(summ.mutants_in_genes, 
+                                                   [len(mutants), summ.mutants_not_in_genes+summ.mutants_in_genes]) ))
             for orientation in sorted(set.union(*[set(summ.mutant_counts_by_orientation) for summ in summaries]), 
                                       reverse=True):
                 DVG.append((line_prefix+"Mutant cassettes in %s orientation to gene (%% of ones in genes):"%orientation, 
-                            lambda summ,mutants,dataset,o=orientation: value_and_percentages(
-                                                                                summ.mutant_counts_by_orientation[o], 
-                                                                                [summ.mutants_in_genes]) ))
+                            lambda summ,mutants,o=orientation: value_and_percentages(summ.mutant_counts_by_orientation[o], 
+                                                                                     [summ.mutants_in_genes]) ))
             # custom order for features to make it easier to read: CDS, intron, UTRs, everything else alphabetically after
             # MAYBE-TODO also give print_summary an option for merge_confusing_features arg to merged_gene_feature_counts?
             for feature in self._sort_feature_list(set.union(
                                 *[set(summ.merged_gene_feature_counts(merge_boundary_features)) for summ in summaries])):
                 DVG.append((line_prefix+"Mutant cassettes in gene feature %s (%% of ones in genes):"%feature, 
-                            lambda summ,mutants,dataset,feature=feature: value_and_percentages(
-                                                    summ.merged_gene_feature_counts(merge_boundary_features)[feature], 
-                                                    [summ.mutants_in_genes]) ))
+                            lambda summ,mutants,feature=feature: value_and_percentages(
+                                                        summ.merged_gene_feature_counts(merge_boundary_features)[feature], 
+                                                        [summ.mutants_in_genes]) ))
 
             _N_all_genes = lambda dataset: sum([len(genes) for N_mutants,genes 
                                                in self.get_gene_dict_by_mutant_number(dataset).items() if N_mutants>0])
             _N_genes_in_multiple_mutants = lambda dataset: sum([len(genes) for N_mutants,genes 
                                                in self.get_gene_dict_by_mutant_number(dataset).items() if N_mutants>1])
             DVG.append((header_prefix+"Genes containing a mutant (% of all genes):", 
-                        lambda summ,mutants,dataset: value_and_percentages(_N_all_genes(dataset), 
-                                                                           [self.total_genes_in_genome]) ))
+                        lambda summ,mutants: value_and_percentages(_N_all_genes(summ.dataset_name), 
+                                                                   [self.total_genes_in_genome]) ))
             DVG.append((line_prefix+"Genes containing at least two mutants (% of all genes):", 
-                        lambda summ,mutants,dataset: value_and_percentages(_N_genes_in_multiple_mutants(dataset), 
-                                                                           [self.total_genes_in_genome]) ))
+                        lambda summ,mutants: value_and_percentages(_N_genes_in_multiple_mutants(summ.dataset_name),
+                                                                   [self.total_genes_in_genome]) ))
             DVG.append((line_prefix+"  (total genes in genome annotation data):", 
-                        lambda summ,mutants,dataset: "(%s)"%self.total_genes_in_genome ))
+                        lambda summ,mutants: "(%s)"%self.total_genes_in_genome ))
             # MAYBE-TODO put some kind of maximum on this or collapse into ranges rather than listing all the numbers?
             for mutantN in sorted(set.union(*[set(self.get_gene_dict_by_mutant_number(dataset)) for dataset in datasets])):
                 DVG.append((line_prefix+"Genes with %s mutants (%% of all genes):"%mutantN, 
-                            lambda summ,mutants,dataset,N=mutantN: value_and_percentages(
-                                                                     len(self.get_gene_dict_by_mutant_number(dataset)[N]), 
-                                                                      [self.total_genes_in_genome]) ))
+                            lambda summ,mutants,N=mutantN: value_and_percentages(
+                                                            len(self.get_gene_dict_by_mutant_number(summ.dataset_name)[N]),
+                                                            [self.total_genes_in_genome]) ))
                 DVG.append((line_prefix+"  (some gene names):",
-                            lambda summ,mutants,dataset,N=mutantN: self._make_genelist_str(
-                                                    self.get_gene_dict_by_mutant_number(dataset)[N], N_genes_to_print) ))
+                            lambda summ,mutants,N=mutantN: self._make_genelist_str(
+                                            self.get_gene_dict_by_mutant_number(summ.dataset_name)[N], N_genes_to_print) ))
             # LATER-TODO Add some measure of mutations, like how many mutants have <50% perfect reads (or something - the number should probably be a command-line option).  Maybe how many mutants have <20%, 20-80%, and >80% perfect reads (or 10 and 90, or make that a variable...)
         
         ### print the data: line description and tab-separated list of values for each dataset.
@@ -1917,7 +1912,7 @@ class Insertional_mutant_pool_dataset():
             for summ,dataset in summaries_and_datasets:
                 # TODO is this self.mutants_in_dataset thing actually needed?...
                 mutants = list(self.mutants_in_dataset(dataset))
-                OUTPUT.write('\t' + line_value_getter(summ,mutants,dataset))
+                OUTPUT.write('\t' + line_value_getter(summ,mutants))
             OUTPUT.write('\n')
 
 
