@@ -932,21 +932,25 @@ class Dataset_summary_data():
     def strand_read_counts(self):
         strand_dict = {'+': 0, '-': 0}
         for m in self.dataset:
-            if m.position.strand == 'both':
-                for strand,count in m.original_strand_readcounts.items():
-                    strand_dict[strand] += count
-            else:
+            try:
                 strand_dict[m.position.strand] += m.read_info(self.dataset_name).total_read_count
+            except KeyError:
+                # special case for both-strand mutants - they have a original_strand_readcounts attribute
+                if m.position.strand == 'both':
+                    for strand,count in m.original_strand_readcounts.items():
+                        strand_dict[strand] += count
+                else:
+                    raise Exception("Unknown strand %s! %s"%m.position.strand)
         return strand_dict
 
     def reads_in_chromosome(self, chromosome):
         """ Return total number of reads in given chromosome."""
-        return sum(m.read_info(self.dataset_name).read_info(self.dataset_name).total_read_count 
+        return sum(m.read_info(self.dataset_name).total_read_count 
                    for m in self.dataset if m.position.chromosome==chromosome)
 
     @property
     def all_chromosomes(self):
-        return set(mutant.position.chromosome for mutant in self.dataset)
+        return set(m.position.chromosome for m in self.dataset if m.read_info(self.dataset_name).total_read_count)
     @property
     def cassette_chromosomes(self):
         return set(chrom for chrom in self.all_chromosomes if is_cassette_chromosome(chrom))
@@ -959,18 +963,22 @@ class Dataset_summary_data():
 
     @property
     def mutants_in_genes(self):
-        return len([1 for m in self.dataset if m.gene not in SPECIAL_GENE_CODES.all_codes])
+        return len([1 for m in self.dataset if m.read_info(self.dataset_name).total_read_count 
+                    and m.gene not in SPECIAL_GENE_CODES.all_codes])
     @property
     def mutants_not_in_genes(self):
-        return len([1 for m in self.dataset if m.gene==SPECIAL_GENE_CODES.not_found])
+        return len([1 for m in self.dataset if m.read_info(self.dataset_name).total_read_count 
+                    and m.gene==SPECIAL_GENE_CODES.not_found])
     @property
     def mutants_undetermined(self):
-        return len([1 for m in self.dataset if m.gene==SPECIAL_GENE_CODES.chromosome_not_in_reference])
+        return len([1 for m in self.dataset if m.read_info(self.dataset_name).total_read_count 
+                    and m.gene in (SPECIAL_GENE_CODES.chromosome_not_in_reference, SPECIAL_GENE_CODES.not_determined)])
     @property
     def mutant_counts_by_orientation(self):
         orientation_dict = defaultdict(int)
         for m in self.dataset:
-            orientation_dict[m.orientation] += 1
+            if m.read_info(self.dataset_name).total_read_count:
+                orientation_dict[m.orientation] += 1
         if '?' in orientation_dict:     del orientation_dict['?']
         if '-' in orientation_dict:     del orientation_dict['-']
         return orientation_dict
@@ -978,15 +986,16 @@ class Dataset_summary_data():
     def mutant_counts_by_feature(self):
         feature_dict = defaultdict(int)
         for m in self.dataset:
-            feature_dict[m.gene_feature] += 1
+            if m.read_info(self.dataset_name).total_read_count:
+                feature_dict[m.gene_feature] += 1
         if '?' in feature_dict:  del feature_dict['?']
         if '-' in feature_dict:  del feature_dict['-']
         return feature_dict
 
     def mutants_in_chromosome(self, chromosome):
         """ Return total number of mutants in given chromosome."""
-        return sum(1 for m in self.dataset 
-                   if m.read_info(self.dataset_name).total_read_count and m.position.chromosome==chromosome)
+        return sum(1 for m in self.dataset if m.read_info(self.dataset_name).total_read_count 
+                   and m.position.chromosome==chromosome)
 
     def merged_gene_feature_counts(self, merge_boundary_features=True, merge_confusing_features=False):
         """ Return (gene_feature,count) list, biologically sorted, optionally with all "boundary" features counted as one.
@@ -1857,7 +1866,7 @@ class Insertional_mutant_pool_dataset():
                                                                                 [len(mutants)]) ))
 
         # print the gene annotation info, but only if there is any
-        if any([summ.mutants_in_genes+summ.mutants_not_in_genes+summ.mutants_undetermined for summ in summaries]):
+        if any([summ.mutants_in_genes+summ.mutants_not_in_genes for summ in summaries]):
             DVG.append((line_prefix+"Mutant cassettes with unknown gene info (probably cassette-mapped) (% of total):", 
                         lambda summ,mutants: value_and_percentages(summ.mutants_undetermined, [len(mutants)]) ))
             DVG.append((line_prefix+"Mutant cassettes in intergenic spaces (% of total, % of known):", 
