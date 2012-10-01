@@ -11,7 +11,7 @@ import sys, os, time
 from collections import defaultdict
 import unittest
 # my modules
-from general_utilities import write_header_data
+from general_utilities import write_header_data, unpickle
 import mutant_analysis_classes
 from testing_utilities import run_functional_tests
 
@@ -26,6 +26,7 @@ def do_test_run():
              ("join-datasets__with-names", "-D dataset1,dataset2 -o position %s %s -q"%(dataset1, dataset2)),
              ("join-datasets__other-order", "-D dataset2,dataset1 -o position %s %s -q"%(dataset2, dataset1)),
             ]
+    # TODO add run-test for pickled infiles!
     # MAYBE-TODO add run test for -A/-a option? 
     # MAYBE-TODO add run-tests for -X, -z, -Z?
 
@@ -129,9 +130,12 @@ def main(infiles, outfile, options):
 
     for dataset_name,infile in zip(dataset_names,infiles):
         if options.verbosity_level>1:   print "parsing input file %s - time %s."%(infile, time.ctime())
-        current_dataset = mutant_analysis_classes.Insertional_mutant_pool_dataset(infile=infile)
-        current_dataset.count_adjacent_mutants(OUTPUT=None)
-        # TODO once read_data_from_file actually reads mutant-merging info, get the adjacent-max-distance from that and pass that to current_dataset.count_adjacent_mutants instead of using the default value
+        if infile.endswith('.pickle'):
+            current_dataset = unpickle(infile)
+        else:
+            current_dataset = mutant_analysis_classes.Insertional_mutant_pool_dataset(infile=infile)
+            current_dataset.count_adjacent_mutants(OUTPUT=None)
+            # note - read_data_from_file doesn't deal with merging/counting info, so that will be wrong/missing
         all_datasets[dataset_name] = current_dataset
         if options.verbosity_level>0:   print "%s mutants in dataset from input file %s"%(len(current_dataset), infile)
         elif options.verbosity_level>1: current_dataset.print_summary()
