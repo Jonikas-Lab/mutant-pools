@@ -398,10 +398,10 @@ def main(infiles, outfile, options):
             all_alignment_data.merge_opposite_tandem_mutants(merge_cassette_chromosomes = options.merge_in_cassette, 
                                                       merge_other_chromosomes = (not options.dont_merge_in_other_chrom), 
                                                       OUTPUT = MERGEFILE)
-        all_alignment_data.count_adjacent_mutants(adjacent_max_distance = options.merge_max_distance, 
-                                                  count_cassette_chromosomes = options.merge_in_cassette, 
-                                                  count_other_chromosomes = (not options.dont_merge_in_other_chrom), 
-                                                  OUTPUT = MERGEFILE)
+        all_alignment_data.count_adjacent_mutants(max_distance_to_print = options.merge_max_distance, 
+                                  max_distance_to_count = 10000, count_cassette_chromosomes = options.merge_in_cassette, 
+                                  count_other_chromosomes = (not options.dont_merge_in_other_chrom), OUTPUT = MERGEFILE)
+        # TODO make an option for max_distance_to_count!
     ### optionally remove mutants based on another dataset
     if options.remove_mutants_from_file:
         other_dataset = mutant_analysis_classes.Insertional_mutant_pool_dataset(infile=options.remove_mutants_from_file)
