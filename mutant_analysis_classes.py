@@ -832,8 +832,10 @@ class Dataset_summary_data():
         self.adjacent_max_distance = None
         self.adjacent_merging_count_ratio = None
         self.merging_which_chromosomes = (None, None)
-        self.merged_adjacent_pairs = 0
+        self.merged_adjacent_same_strand_dict = defaultdict(int)
+        self.merged_adjacent_same_strand_ratios_dict = defaultdict(list)
         self.merged_opposite_tandems = 0
+        self.merged_opposite_tandems_ratios = []
         # MAYBE-TODO should the adjacent-mutant-counts (same_position_opposite, adjacent_opposite_toward, adjacent_opposite_away, adjacent_same_strand) be constants or property values?  May want to keep them as constants, they're expensive to calculate...
         self.same_position_opposite = NaN
         self.adjacent_opposite_toward_dict = defaultdict(nan_func)
@@ -1034,6 +1036,9 @@ class Dataset_summary_data():
     def adjacent_same_strand(self):
         max_distance = self.adjacent_max_distance or 1
         return sum([self.adjacent_same_strand_dict[i] for i in range(1, max_distance+1)])
+    @property
+    def merged_adjacent_pairs(self):
+        return sum(self.merged_adjacent_same_strand_dict.values())
 
     def adjacent_mutant_summary(self, long_version=False, add_total_counts=True, max_distance=None):
         """ Return string giving adjacent-mutant counts by category. """
@@ -1544,7 +1549,6 @@ class Insertional_mutant_pool_dataset():
         Write details to OUTPUT (open filehandle; pass sys.stdout if desired, or None for no writing);
          Save information on merged counts to 
         """
-        # TODO this should probably keep track of the readcount ratios (by distance) and save them somewhere, similar to self.summary.adjacent_same_strand_ratios_dict in count_adjacent_mutants
         if self.multi_dataset:  raise MutantError("merge_adjacent_mutants not implemented for multi-datasets!")
         if merge_count_ratio < 1:  raise MutantError("merge_count_ratio must be at least 1!")
         if self.summary.adjacent_merging_count_ratio is not None:
@@ -1563,8 +1567,10 @@ class Insertional_mutant_pool_dataset():
         if any([mutant.position.strand=='both' for mutant in self]):
             raise MutantError("merge_adjacent_mutants should be run BEFORE merge_opposite_tandem_mutants "
                              +"- NOT IMPLEMENTED for both-stranded mutants!")
-            # LATER-TODO implement for both-stranded mutants too! In that case all strand-comparisons should be
-            #  rewritten so 'both' and either + or - would compare as the same, or something... 
+            # LATER-TODO implement for both-stranded mutants too? In that case all strand-comparisons should be
+            #   rewritten so 'both' and either + or - would compare as the same, or something, 
+            #  and then for the readcount ratios, for the both-strand mutant, only the same-strand readcount 
+            #   should be used! (from mutant.original_strand_readcounts)
         if OUTPUT is None: OUTPUT = FAKE_OUTFILE
         OUTPUT.write("# Merging adjacent mutants: max distance %s, min count ratio %s\n"%(merge_max_distance, 
                                                                                           merge_count_ratio))
@@ -1574,13 +1580,13 @@ class Insertional_mutant_pool_dataset():
                          "- the earlier position is used in that case.)\n")
         OUTPUT.write(" (%sincluding cassette chromosomes)"%('' if merge_cassette_chromosomes else 'not ')
                     +" (%sincluding non-nuclear chromosomes)\n"%('' if merge_other_chromosomes else 'not '))
-        merged_count = 0
         for pos1,pos2 in self._possibly_adjacent_positions(merge_max_distance, True, merge_cassette_chromosomes, 
                                                            merge_other_chromosomes):
             # if the two positions are on different chromosomes or strands or aren't adjacent, skip
-            if pos1.chromosome != pos2.chromosome:                              continue
-            if pos1.strand != pos2.strand:                                      continue
-            if abs(pos2.min_position-pos1.min_position) > merge_max_distance:   continue
+            if pos1.chromosome != pos2.chromosome:              continue
+            if pos1.strand != pos2.strand:                      continue
+            distance = abs(pos2.min_position-pos1.min_position)
+            if distance > merge_max_distance:                   continue
             # all other mutant pairs should be same-strand adjacent - up for merging depending on readcount ratio.
 
             # make sure these mutants still exist in the dataset (haven't been merged) (note: if they don't exist, 
@@ -1606,10 +1612,11 @@ class Insertional_mutant_pool_dataset():
             mutant1_readcount, mutant2_readcount = mutant1.total_read_count, mutant2.total_read_count
             readcount_ratio = self._readcount_ratio(mutant1, mutant2)
             if not readcount_ratio>=merge_count_ratio:  continue
-            merged_count += 1
+            assert pos1.strand==pos2.strand, "Mutants for adjacent-merging must be on same strand!"
             OUTPUT.write(" MERGING same-strand adjacent mutants: %s and %s, %s and %s reads.\n"%(pos1, pos2, 
                                                                                 mutant1_readcount, mutant2_readcount))
-            assert pos1.strand==pos2.strand, "Mutants for adjacent-merging must be on same strand!"
+            self.summary.merged_adjacent_same_strand_dict[distance] += 1
+            self.summary.merged_adjacent_same_strand_ratios_dict[distance].append(readcount_ratio)
             # make sure that mutant1.total_read_count >= mutant.total_read_count2 - switch if they're otherwise
             if mutant1_readcount < mutant2_readcount:
                 pos1, pos2 = pos2, pos1
@@ -1619,12 +1626,13 @@ class Insertional_mutant_pool_dataset():
             self._merge_two_mutants(pos1, pos2)
 
         # add overall counts to dataset summary
-        OUTPUT.write("# Finished merging adjacent mutants: %s pairs merged\n"%merged_count) 
+        OUTPUT.write("# Finished merging adjacent mutants: %s pairs merged\n"%self.summary.merged_adjacent_pairs) 
         self.summary.adjacent_max_distance = merge_max_distance
         self.summary.adjacent_merging_count_ratio = merge_count_ratio
         self.summary.merging_which_chromosomes = (merge_cassette_chromosomes, merge_other_chromosomes)
-        self.summary.merged_adjacent_pairs = merged_count
-        # TODO unit-test!
+        # sort the lists inside the ratios dict, since the order doesn't matter
+        self.summary.merged_adjacent_same_strand_ratios_dict = sort_lists_inside_dict(
+                                                                    self.summary.merged_adjacent_same_strand_ratios_dict)
 
     # TODO there was a bug here where mutants 1,2,3 all should be merged together and a warning gets printed!  See the warning in test_data/count-aln__merge-adjacent2-r3_merging-info.txt, which really shouldn't be there.  Research and hopefully fix that!  I'm not sure whether the problem is ONLY that is prints an unnecessary warning, or if there's also an actual issue with merging.
     # TODO was there some other bug when doing tandem-merging and adjacent-merging at once?  I think something weird came up in actual data analysis - see ../../1206_Ru-screen1_deepseq-data-early/notes.txt  "Mutants" section.
@@ -1644,7 +1652,6 @@ class Insertional_mutant_pool_dataset():
         Write details to OUTPUT (open filehandle; pass sys.stdout if desired, or None for no printing);
          save the number of merged cases to self.summary.
         """
-        # TODO this should probably keep track of the readcount ratios and save them somewhere, similar to self.summary.same_position_opposite_ratios in count_adjacent_mutants
         if self.multi_dataset:  raise MutantError("merge_opposite_tandem_mutants not implemented for multi-datasets!")
         if not self.summary.merging_which_chromosomes in [(merge_cassette_chromosomes,merge_other_chromosomes), 
                                                           (None,None)]:
@@ -1655,7 +1662,6 @@ class Insertional_mutant_pool_dataset():
                     +" (%sincluding cassette chromosomes)"%('' if merge_cassette_chromosomes else 'not ')
                     +" (%sincluding non-nuclear chromosomes)\n"%('' if merge_other_chromosomes else 'not '))
 
-        merged_tandem_count = 0
         all_positions = sorted([mutant.position for mutant in self])
         # same-position opposite-strand mutants will always be adjacent on the sorted position list, so only look at those
         for pos1,pos2 in zip(all_positions,all_positions[1:]):
@@ -1669,21 +1675,24 @@ class Insertional_mutant_pool_dataset():
             assert 'both' not in [pos1.strand, pos2.strand], "Two mutants in one position must be +/- strand, not both!"
 
             OUTPUT.write(" MERGING opposite-strand same-position tandem mutants: %s and %s.\n"%(pos1,pos2))
-            merged_tandem_count += 1
+            self.summary.merged_opposite_tandems += 1
+            self.summary.merged_opposite_tandems_ratios.append(self._readcount_ratio(pos1, pos2))
             self._merge_two_mutants(pos1, pos2)
 
         # add overall counts to dataset summary
-        OUTPUT.write("# Finished merging opposite-strand same-position mutants: %s pairs merged\n"%merged_tandem_count)
+        OUTPUT.write("# Finished merging opposite-strand same-position mutants: %s pairs merged\n"%\
+                     self.summary.merged_opposite_tandems)
         self.summary.merging_which_chromosomes = (merge_cassette_chromosomes, merge_other_chromosomes)
-        self.summary.merged_opposite_tandems = merged_tandem_count
-        # TODO unit-test!
+        # need to sort the ratio list, since the order doesn't matter
+        self.summary.merged_opposite_tandems_ratios.sort()
 
     def count_adjacent_mutants(self, max_distance_to_print=None, max_distance_to_count=10000, 
                                count_cassette_chromosomes=False, count_other_chromosomes=True, 
                                different_parameters=False, OUTPUT=None):
         """ Count various categories of adjacent mutants (as dist:count dictionaries); save data to self.summary. 
         
-        Specific cases counted are:
+        All mutant pairs with distance<=max_distance_to_count are counted, in a distance-keyed dictionary.
+        There are four categories, counted separately:
             - adjacent mutants on the same strand
             - same-position mutants on opposite strands (100-? and ?-101 - both have min_position 100)
             - adjacent mutants on opposite strands, facing away from each other (100-? and ?-103)
@@ -1691,16 +1700,21 @@ class Insertional_mutant_pool_dataset():
             (the reason for differentiating between the "away" and "toward" cases is that 
              the "away" case could be a tail-to-tail tandem with a genomic deletion in the middle, 
              but the "toward" case really HAS TO be random unrelated mutants (right?), so it can be used as a reference.)
+        For each category, two pieces of information are generated, and stored in self.summary:
+            - a distance:adjacent_pair_count dictionary
+            - a distance:list_of_pair_readcount_ratios dictionary
+            (except for the same-position opposite-strand mutants, which always have distance 0, 
+             so there's simply a single adjacent_pair_count and single list_of_pair_readcount_ratios.) 
+          self.summary provides properties/methods to deal with the data.
 
         If count_cassette_chromosomes or count_other_chromosomes is False, don't include in the count cassette chromosomes 
          and other non-nuclear chromosomes (chloroplast, mitochondrial, etc) respectively.
-        If different_parameters is True, check that adjacent_max_distance, count_cassette_chromosomes, 
-         and count_other_chromosomes match previously used merging settings.
+        If different_parameters is False, check that adjacent_max_distance, count_cassette_chromosomes, 
+         and count_other_chromosomes match previously used merging/counting settings as saved in self.summary.
 
-
-        Also write details to OUTPUT (open filehandle; pass sys.stdout if desired, or None for no printing).
+        Write details/totals to OUTPUT (should be an open filehandle; pass sys.stdout if desired, or None for no printing),
+         but ONLY for pairs with distance<=max_distance_to_print (for both single lines and total counts).
         """
-        # TODO update docstring
         if self.multi_dataset:  raise MutantError("count_adjacent_mutants not implemented for multi-datasets!")
 
         # set the two max_distance arg values, then make sure count < print
@@ -2680,6 +2694,78 @@ class Testing_Insertional_mutant_pool_dataset(unittest.TestCase):
         assert dataset._readcount_ratio(pos1, pos1) == dataset._readcount_ratio(pos2, pos2) == 1
         assert dataset._readcount_ratio(pos1, pos2) == dataset._readcount_ratio(pos2, pos1) == 2
 
+    @staticmethod
+    def _make_test_mutant_dataset(positions_and_readcounts_string):
+        dataset = Insertional_mutant_pool_dataset()
+        for string in positions_and_readcounts_string.split(', '):
+            raw_pos, readcount = string.split(' ')
+            readcount = int(readcount)
+            if '+' in raw_pos:      strand = '+'
+            elif '-' in raw_pos:    strand = '-'
+            else:                   raise Exception("Short-position %s has no strand!"%raw_pos)
+            chrom, pos = raw_pos.split(strand)
+            pos = int(pos)
+            if chrom:   chrom = 'chromosome_%s'%chrom
+            else:       chrom = 'chromosome_1'
+            full_pos = Insertion_position(chrom, strand, position_before=pos, immutable=True)
+            mutant = Insertional_mutant(insertion_position=full_pos)
+            mutant.total_read_count = readcount
+            dataset.add_mutant(mutant)
+        return dataset
+
+    def test__merge_adjacent_mutants(self):
+        # making a dataset with several different same-strand adjacent pairs (alternating strand between pairs):
+        #   1*100 - dist 1 ratio 5
+        #   1*200 - dist 1 ratio 5
+        #   1*300 - dist 1 ratio 2
+        #   1*400 - dist 1 ratio 1
+        #   2*100 - dist 2 ratio 5
+        #   5*100 - dist 5 ratio 5
+        #   5*200 - dist 5 ratio 2
+        positions_and_readcounts_raw = ("1+100 5, 1+101 1, 1-200 1, 1-201 5, 1-300 4, 1-301 2, 1+400 1, 1+401 1, "
+                                        "2-100 5, 2-102 1, "
+                                        "5+100 5, 5+105 1, 5+200 4, 5+205 2")
+        # adding negative cases - NO same-strand adjacent pairs, only different-chromosome or different-strand ones:
+        positions_and_readcounts_raw += ", A+100 5, B+101 1, C+200 5, C-200 1, C+300 5, C-301 1"
+        # test1 - max distance 1, min ratio 5
+        dataset = self._make_test_mutant_dataset(positions_and_readcounts_raw)
+        dataset.merge_adjacent_mutants(merge_max_distance=1, merge_count_ratio=5, OUTPUT=None)
+        assert dataset.summary.merged_adjacent_same_strand_dict == {1:2}
+        assert dataset.summary.merged_adjacent_same_strand_ratios_dict == {1:[5,5]}
+        # test2 - max distance 2, min ratio 5
+        dataset = self._make_test_mutant_dataset(positions_and_readcounts_raw)
+        dataset.merge_adjacent_mutants(merge_max_distance=2, merge_count_ratio=5, OUTPUT=None)
+        assert dataset.summary.merged_adjacent_same_strand_dict == {1:2, 2:1}
+        assert dataset.summary.merged_adjacent_same_strand_ratios_dict == {1:[5,5], 2:[5]}
+        # test3 - max distance 10, min ratio 5
+        dataset = self._make_test_mutant_dataset(positions_and_readcounts_raw)
+        dataset.merge_adjacent_mutants(merge_max_distance=10, merge_count_ratio=5, OUTPUT=None)
+        assert dataset.summary.merged_adjacent_same_strand_dict == {1:2, 2:1, 5:1}
+        assert dataset.summary.merged_adjacent_same_strand_ratios_dict == {1:[5,5], 2:[5], 5:[5]}
+        # test4 - max distance 10, min ratio 2
+        dataset = self._make_test_mutant_dataset(positions_and_readcounts_raw)
+        dataset.merge_adjacent_mutants(merge_max_distance=10, merge_count_ratio=2, OUTPUT=None)
+        assert dataset.summary.merged_adjacent_same_strand_dict == {1:3, 2:1, 5:2}
+        assert dataset.summary.merged_adjacent_same_strand_ratios_dict == {1:[2,5,5], 2:[5], 5:[2,5]}
+        # test5 - max distance 10, min ratio 1
+        dataset = self._make_test_mutant_dataset(positions_and_readcounts_raw)
+        dataset.merge_adjacent_mutants(merge_max_distance=10, merge_count_ratio=1, OUTPUT=None)
+        assert dataset.summary.merged_adjacent_same_strand_dict == {1:4, 2:1, 5:2}
+        assert dataset.summary.merged_adjacent_same_strand_ratios_dict == {1:[1,2,5,5], 2:[5], 5:[2,5]}
+        # TODO add tests with cases like three adjacent mutants!
+        # TODO add tests for merge_cassette_chromosomes and merge_other_chromosomes args
+
+    def test__merge_opposite_tandem_mutants(self):
+        # two same-position opposite-strand cases, with ratios 5 and 1
+        positions_and_readcounts_raw = "A+100 1, A-100 5, A+200 5, A-200 5"
+        # three cases that AREN'T same-position opposite-strand
+        positions_and_readcounts_raw += ", B+100 1, B+101 5, B+200 5, B-201 5, B-300 5, B+301 5"
+        dataset = self._make_test_mutant_dataset(positions_and_readcounts_raw)
+        dataset.merge_opposite_tandem_mutants(OUTPUT=None)
+        assert dataset.summary.merged_opposite_tandems == 2
+        assert dataset.summary.merged_opposite_tandems_ratios == [1,5]
+        # TODO test merge_cassette_chromosomes and merge_other_chromosomes args
+
     def test__count_adjacent_mutants(self):
         positions_and_readcounts_raw = '+100 10, -100 5, +101 5, -99 5, -101 5, +105 1'
         # so we have 6*5/2 = 15 pairs
@@ -2699,17 +2785,9 @@ class Testing_Insertional_mutant_pool_dataset(unittest.TestCase):
         #   -99 and -101  -- same-strand adj, dist 2, ratio 1
         #   -99 and +105  -- toward-facing, dist 6, ratio 5
         #   -101 and +105 -- toward-facing, dist 4, ratio 5
-        dataset = Insertional_mutant_pool_dataset()
-        for string in positions_and_readcounts_raw.split(', '):
-            raw_pos, readcount = string.split(' ')
-            readcount = int(readcount)
-            strand, pos = raw_pos[0], int(raw_pos[1:])
-            full_pos = Insertion_position('chromosome_1', strand, position_before=pos, immutable=True)
-            mutant = Insertional_mutant(insertion_position=full_pos)
-            mutant.total_read_count = readcount
-            dataset.add_mutant(mutant)
+        dataset = self._make_test_mutant_dataset(positions_and_readcounts_raw)
         dataset.count_adjacent_mutants(max_distance_to_count=None)
-        # just a category-sorted version of the above list;
+        # category-sorted version of the above list;
         #   -100 and -99  -- same-strand adj, dist 1, ratio 1
         #   -100 and -101 -- same-strand adj, dist 1, ratio 1
         #   +100 and +101 -- same-strand adj, dist 1, ratio 2
@@ -2743,6 +2821,8 @@ class Testing_Insertional_mutant_pool_dataset(unittest.TestCase):
         assert dataset.summary.adjacent_opposite_away_ratios_dict == {1:[2]}
         assert dataset.summary.adjacent_opposite_toward_dict == {1:2}
         assert dataset.summary.adjacent_opposite_toward_ratios_dict == {1:[1,2]}
+        # TODO test count_cassette_chromosomes and count_other_chromosomes args
+        # TODO test different_parameters arg?
 
     def _check_infile1(self, data):
         """ Check that data is as expected in test_data/count-aln__cassette-end-5prime.txt. """
