@@ -1401,11 +1401,29 @@ class Insertional_mutant_pool_dataset():
         else:               get_readcount = lambda m: m.total_read_count
         # go over all mutants in self; need to convert the iterator to a list to make a separate copy, 
         #  otherwise we'd be modifying the iterator while iterating through it, which isn't allowed.
-        for mutant in list(iter(self)):
+        for mutant in list(self):
             if get_readcount(other_dataset.get_mutant(mutant.position)) >= readcount_min:
                 self.remove_mutant(mutant.position)
         # TODO really I shouldn't be removing mutants outright, just noting them as removed or something...  In that case should they or should they not show up in "for m in self"?  Probably not - they should have a separate dictionary?
         # TODO should I keep track of removed reads, and print in summary?  PROBABLY.
+        # TODO unit-test!
+
+    def remove_mutants_below_readcount(self, min_readcount, perfect_reads=False):
+        """ Remove any mutants with below readcount_min reads (or perfect reads, if perfect_reads=True)
+        """
+        if perfect_reads:   get_readcount = lambda m: m.perfect_read_count
+        else:               get_readcount = lambda m: m.total_read_count
+        # go over all mutants in self; need to convert dataset to a list to make a separate copy, 
+        #  otherwise we'd be modifying the dataset while iterating through it, which isn't allowed.
+        for mutant in list(self):
+            if get_readcount(mutant) < min_readcount:
+                self.remove_mutant(mutant.position)
+        # now redo adjacent-mutant counting, with same parameters as before (most get auto-detected by default)
+        if self.summary.adjacent_max_distance is not None:
+            cassette,other = self.summary.merging_which_chromosomes
+            self.count_adjacent_mutants(count_cassette_chromosomes=cassette, count_other_chromosomes=other)
+        # TODO really I shouldn't be removing mutants outright, just noting them as removed or something...  In that case should they or should they not show up in "for m in self"?  Probably not - they should have a separate dictionary?
+        # TODO should I keep track of removed reads, and print in summary?  MAYBE.
 
     def find_genes_for_mutants(self, genefile, detailed_features=False, N_run_groups=3, verbosity_level=1):
         """ To each mutant in the dataset, add the gene it's in (look up gene positions for each mutant using genefile).
@@ -1769,6 +1787,7 @@ class Insertional_mutant_pool_dataset():
                               "Current values: %s and %s."%(max_distance_to_count, max_distance_to_print))
 
         # make sure the parameters are consistent with the ones already stored; if none are stored, save current ones.
+        # MAYBE-TODO set it so if count_cassette_chromosomes or count_other_chromosomes are None, they get set to the self.summary.merging_which_chromosomes values?
         if not different_parameters:
             if self.summary.merging_which_chromosomes == (None,None):
                 self.summary.merging_which_chromosomes = (count_cassette_chromosomes, count_other_chromosomes)
@@ -2683,6 +2702,41 @@ class Testing_Insertional_mutant(unittest.TestCase):
 class Testing_Insertional_mutant_pool_dataset(unittest.TestCase):
     """ Unit-tests for the Insertional_mutant_pool_dataset class and its methods. """
 
+    @staticmethod
+    def _make_test_mutant_dataset(positions_and_readcounts_string, raw_chrom_names=False):
+        """ Help method to quickly make a dataset based on a string of mutant positions/readcounts.
+
+        Comma-separated mutants, first word is position, second is readcount.  "+100 5, A-100 10/10, cassette+400 1"
+
+        Position is chromosome+strand+minpos, with chromosome optional and more complicated.  If raw_chrom_names, 
+         just take the chromosome name as given; otherwise prepend 'chromosome_' to what is given, or just use
+         'chromosome_1' if chromosome string is empty.
+
+        If readcount is a single number, it's the total read count; if it's two numbers, it's total/perfect.
+        """
+        dataset = Insertional_mutant_pool_dataset()
+        for string in positions_and_readcounts_string.split(', '):
+            raw_pos, readcount = string.split(' ')
+            if '/' in readcount:    readcount, perfect = [int(x) for x in readcount.split('/')]
+            else:                   readcount = perfect = int(readcount)
+            assert readcount >= perfect, "In mutant string %s, perfect readcount is over total - not allowed!"%string
+            if '+' in raw_pos:      strand = '+'
+            elif '-' in raw_pos:    strand = '-'
+            else:                   raise Exception("Short-position %s has no strand!"%raw_pos)
+            chrom, pos = raw_pos.split(strand)
+            pos = int(pos)
+            if not raw_chrom_names:
+                if chrom:   chrom = 'chromosome_%s'%chrom
+                else:       chrom = 'chromosome_1'
+            elif not chrom:
+                raise Exception("Short-position %s has no chromosome name - can't use with raw_chrom_names!")
+            full_pos = Insertion_position(chrom, strand, position_before=pos, immutable=True)
+            mutant = Insertional_mutant(insertion_position=full_pos)
+            mutant.total_read_count = readcount
+            mutant.perfect_read_count = perfect
+            dataset.add_mutant(mutant)
+        return dataset
+
     def test__init(self):
         for cassette_end in SEQ_ENDS+['?']:
             for reads_are_reverse in [True,False,'?']:
@@ -2711,6 +2765,19 @@ class Testing_Insertional_mutant_pool_dataset(unittest.TestCase):
         pass
         # MAYBE-TODO implement using a mock-up of HTSeq_alignment?  (see Testing_single_functions for how I did that)
         #   make sure it fails if self.cassette_end isn't defined...
+
+    def test__remove_mutants_below_readcount(self):
+        positions_and_readcounts_raw = "A+100 5/5, A-200 2/2, A+300 1/1, A-400 5/2, A+500 5/1"
+        dataset = self._make_test_mutant_dataset(positions_and_readcounts_raw, raw_chrom_names=True)
+        assert set([m.position.min_position for m in dataset]) == set([100,200,300,400,500])
+        dataset.remove_mutants_below_readcount(2, perfect_reads=False)
+        assert set([m.position.min_position for m in dataset]) == set([100,200,400,500])
+        dataset.remove_mutants_below_readcount(4, perfect_reads=False)
+        assert set([m.position.min_position for m in dataset]) == set([100,400,500])
+        dataset.remove_mutants_below_readcount(2, perfect_reads=True)
+        assert set([m.position.min_position for m in dataset]) == set([100,400])
+        dataset.remove_mutants_below_readcount(4, perfect_reads=True)
+        assert set([m.position.min_position for m in dataset]) == set([100])
 
     def test___readcounts_sorted(self):
         # if the two values are readcounts
@@ -2755,28 +2822,6 @@ class Testing_Insertional_mutant_pool_dataset(unittest.TestCase):
         dataset.add_mutant(mutant2)
         assert dataset._readcount_ratio(pos1, pos1) == dataset._readcount_ratio(pos2, pos2) == 1
         assert dataset._readcount_ratio(pos1, pos2) == dataset._readcount_ratio(pos2, pos1) == 2
-
-    @staticmethod
-    def _make_test_mutant_dataset(positions_and_readcounts_string, raw_chrom_names=False):
-        dataset = Insertional_mutant_pool_dataset()
-        for string in positions_and_readcounts_string.split(', '):
-            raw_pos, readcount = string.split(' ')
-            readcount = int(readcount)
-            if '+' in raw_pos:      strand = '+'
-            elif '-' in raw_pos:    strand = '-'
-            else:                   raise Exception("Short-position %s has no strand!"%raw_pos)
-            chrom, pos = raw_pos.split(strand)
-            pos = int(pos)
-            if not raw_chrom_names:
-                if chrom:   chrom = 'chromosome_%s'%chrom
-                else:       chrom = 'chromosome_1'
-            elif not chrom:
-                raise Exception("Short-position %s has no chromosome name - can't use with raw_chrom_names!")
-            full_pos = Insertion_position(chrom, strand, position_before=pos, immutable=True)
-            mutant = Insertional_mutant(insertion_position=full_pos)
-            mutant.total_read_count = readcount
-            dataset.add_mutant(mutant)
-        return dataset
 
     def test__merge_adjacent_mutants(self):
         ### basic tests
