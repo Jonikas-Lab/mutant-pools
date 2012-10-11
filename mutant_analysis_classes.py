@@ -1182,17 +1182,25 @@ class Insertional_mutant_pool_dataset():
     ######### READING BASIC DATA INTO DATASET
 
     def add_alignment_reader_to_data(self, HTSeq_alignment_reader, uncollapse_read_counts=False, 
-                                     treat_unknown_as_match=False, count_cassette=True, ignore_cassette=False):
+                                     ignore_cassette=False, cassette_only=False, treat_unknown_as_match=False):
         """ Adds all alignments from the reader to the mutant data; currently based only on position, but that may change. 
 
         Input must be a list/generator/etc of HTSeq.Alignment objects (usually an HTSeq.SAM_Reader).
+
         Set uncollapse_read_counts to True if the original deepseq data was collapsed to unique sequences using
          fastx_uncollapser before alignment, to get the correct original read counts.
+
         Treat_unknown_as_match governs whether alignments with no detailed information are treated as perfect or not.
-        If count_cassette=True, add total cassette read count to header; 
-         if ignore_cassette=True, ignore cassette reads in the data and list them as removed in the header.
+
+        Different ways of treating cassette reads:
+         - by default (if all *cassette* args are false) treat cassette reads normally
+         - if ignore_cassette==True, ignore cassette reads in the data and list them as removed in the header
+         - if cassette_only==True, ignore all OTHER reads and only include cassette reads!
         """
+        # LATER-TODO actually instead of cassette_only it might be good to just generate two separate mutant-sets, normal and cassette, with an option called separate_cassette or something, and print them to separate files - but that's more complicated, and right now I don't have the setup for a single dataset having multiple mutant-sets (although I guess I will have to eventually, for removed mutants etc). Right now I do it in mutant_count_alignments.py, which works but there's a lot of code repetition...
         if self.multi_dataset:  raise MutantError("add_alignment_reader_to_data not implemented for multi-datasets!")
+        if ignore_cassette and cassette_only:
+            raise MutantError("Only one of ignore_cassette and cassette_only arguments can be True - mutually exclusive!")
 
         summ = self.summary
         if summ.cassette_end == '?':
@@ -1217,7 +1225,10 @@ class Insertional_mutant_pool_dataset():
             if ignore_cassette and is_cassette_chromosome(position.chromosome):
                 summ.ignored_region_read_counts[position.chromosome] += read_count
                 continue
-            # MAYBE-TODO should summ.strand_read_counts just be generated from the data on the fly instead?
+            # or if we only want cassette reads, skip non-cassette ones!
+            elif cassette_only and not is_cassette_chromosome(position.chromosome):
+                summ.ignored_region_read_counts['NON-CASSETTE'] += read_count
+                continue
             # grab the right mutant based on the position, and add the reads to it; 
             curr_mutant = self.get_mutant(position)
             curr_mutant.add_read(aln, read_count, treat_unknown_as_match=treat_unknown_as_match)
@@ -1406,7 +1417,7 @@ class Insertional_mutant_pool_dataset():
                 self.remove_mutant(mutant.position)
         # TODO really I shouldn't be removing mutants outright, just noting them as removed or something...  In that case should they or should they not show up in "for m in self"?  Probably not - they should have a separate dictionary?
         # TODO should I keep track of removed reads, and print in summary?  PROBABLY.
-        # TODO unit-test!
+        # LATER-TODO unit-test - it does have run-tests though.
 
     def remove_mutants_below_readcount(self, min_readcount, perfect_reads=False):
         """ Remove any mutants with below readcount_min reads (or perfect reads, if perfect_reads=True)

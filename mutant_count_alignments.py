@@ -36,16 +36,17 @@ def do_test_run():
     dataset_to_remove = "test_data/INPUT_mutants_to_remove.txt"
 
     test_runs = [
-                 ('cassette-end-5prime', "-e 5prime -r forward -U -n3 -L", [aln_infile1]),
-                 ('cassette-end-3prime', "-e 3prime -r forward -U -n3 -L", [aln_infile1]),
-                 ('read-direction-reverse', "-r reverse -e 5prime -U -n3 -L", [aln_infile1]),
-                 ('u_unknown-not-as-match', "-u -e 5prime -r forward -n3 -L", [aln_infile1]),
-                 ('dont-count-cassette', "-I -e 5prime -r forward -U -n3 -L", [aln_infile1]),
-                 ('ignore-cassette', "-i -e 5prime -r forward -U -n3 -L", [aln_infile1]),
-                 ('sorted-by-count', "-o read_count -e 5prime -r forward -U -n3 -L", [aln_infile1]),
-                 ('with-gene-info_merged', "-Q -e 5prime -r forward -U -g %s -d -n0"%gff_genefile, [aln_infile2]),
+                 ('cassette-end-5prime', "-e 5prime -r forward -n3 -L", [aln_infile1]),
+                 ('cassette-end-3prime', "-e 3prime -r forward -n3 -L", [aln_infile1]),
+                 ('read-direction-reverse', "-r reverse -e 5prime -n3 -L", [aln_infile1]),
+                 ('unknown-as-match', "--treat_unknown_as_match -e 5prime -r forward -n3 -L", [aln_infile1]),
+                 ('dont-count-cassette', "-l -e 5prime -r forward -n3 -L", [aln_infile1]),
+                 ('ignore-cassette', "-c -e 5prime -r forward -n3 -L", [aln_infile1]),
+                 ('separate-cassette', "-C -e 5prime -r forward -n3 -L", [aln_infile1]),
+                 ('sorted-by-count', "-o read_count -e 5prime -r forward -n3 -L", [aln_infile1]),
+                 ('with-gene-info_merged', "-Q -e 5prime -r forward -g %s -d -n0"%gff_genefile, [aln_infile2]),
                  ('with-gene-info_unmerged', "-B -Q -e 5prime -r forward -g %s -d -n0"%gff_genefile, [aln_infile2]),
-                 ('multiple-infiles', "-Q -e 5prime -r forward -U -n0 -L", [aln_infile1,aln_infile2]),
+                 ('multiple-infiles', "-Q -e 5prime -r forward -n0 -L", [aln_infile1,aln_infile2]),
                  ('dont-merge-tandems', "-n0 -Q", [aln_infile3]),
                  ('merge-adjacent-none', "-n0", [aln_infile3]),
                  ('merge-adjacent1-r3', "-M --merge_max_distance=1 --merge_count_ratio=3 -n0", [aln_infile3]),
@@ -54,7 +55,7 @@ def do_test_run():
                  ('remove-from-other-all', "-Q -X %s -n0"%dataset_to_remove, [aln_infile2]), 
                  ('remove-from-other-min4', "-Q -X %s -z4 -n0"%dataset_to_remove, [aln_infile2]), 
                  ('remove-from-other-perfect', "-Q -X %s -Z -z4 -n0"%dataset_to_remove, [aln_infile2]),
-                 ('old-infile-format', "-e 5prime -r forward -U -n3 -L", [aln_infile0]),
+                 ('old-infile-format', "-e 5prime -r forward -n3 -L", [aln_infile0]),
                 ]
     # MAYBE-TODO change all the expected files to merge tandems, so I can remove -Q from all test runs except dont-merge-tandems?
     # MAYBE-TODO add run-test for --gene_annotation_file?
@@ -84,8 +85,8 @@ def define_option_parser():
     from optparse import OptionParser
     parser = OptionParser(__doc__)
 
-    # taken:     aAbBcCdDe---g-h-iIjJ---LmMn-o---qQr---tTuUvVwWxX-YzZ  
-    # free:      ---------EfF-G-H----kKl----N-OpP---RsS----------y---  
+    # taken:     aAbBcCdDe---g-h---jJ--lLmMn-o---qQr---tTuUvVwWxX-YzZ  
+    # free:      ---------EfF-G-HiI--kK-----N-OpP---RsS----------y---  
 
     ### test options
     parser.add_option('-t','--test_functionality', action='store_true', default=False, 
@@ -124,28 +125,30 @@ def define_option_parser():
     parser.add_option('-Z', '--remove_mutants_min_is_perfect', action='store_true', default=False,
                       help='When applying -X with -z M, compare M to perfect readcount, not total. (default %default).')
 
-    parser.add_option('-i', '--ignore_cassette', action='store_true', default=False,
+    parser.add_option('-c', '--ignore_cassette', action='store_true', default=False,
                       help="Ignore reads aligning to cassette (just print total count in the header as removed) "
-                          +"(default %default) (also see -E)")
-    parser.add_option('-I', '--dont_count_cassette', action='store_true', default=False, 
-                      help="Don't give separate cassette read/mutant totals in the header; (default %default) "
-                          +"(also see -i, -J)")
+                          +"(default %default)")
+    parser.add_option('-C', '--separate_cassette', action='store_true', default=False,
+                      help="Like -c, but also add a *_cassette.txt file with ONLY reads aligning to cassette "
+                          +"(and print total non-cassette count in the header of that file as removed) (default %default)")
+    parser.add_option('-l', '--dont_count_cassette', action='store_true', default=False, 
+                      help="Don't give separate cassette read/mutant totals in the header; (default %default)")
     parser.add_option('-L', '--dont_count_other', action='store_true', default=False, 
                       help="Don't give separate read/mutant totals in the header for 'strange' chromosomes "
-                          +"(not cassette and not named chromosome* or scaffold*; (default %default) (also see -I)")
+                          +"(not cassette and not named chromosome* or scaffold*; (default %default)")
 
     # extremely minor functionality options, do we even care??
-    parser.add_option('-u', '--treat_unknown_as_match', action="store_true", default=False, 
+    parser.add_option('--treat_unknown_as_match', action="store_true", default=False, 
                       help="When counting perfect reads, treat undefined alignment regions as matches (default %default)")
-    parser.add_option('-U', '--dont_treat_unknown_as_match', action="store_false", dest='treat_unknown_as_match',
+    parser.add_option('--dont_treat_unknown_as_match', action="store_false", dest='treat_unknown_as_match',
                       help="Turn -u off.")
     # MAYBE-TODO add user-provided mutation-count cutoffs like in old deepseq_count_alignments.py, instead of just all reads and perfet reads?   Currently useless, since we're only allowing one mutation in bowtie.  parser.add_option('-m', '--mutation_cutoffs', default="1,3,10", metavar="<comma-separated-int-list>")
 
     ### input options
-    parser.add_option('-c','--input_collapsed_to_unique', action='store_true', default=False, 
+    parser.add_option('-u','--input_collapsed_to_unique', action='store_true', default=False, 
                       help="Use to get correct original total read counts if the data was collapsed to unique sequences "
                           +"using fastx_collapser before alignment (default %default).")
-    parser.add_option('-C','--input_not_collapsed_to_unique', action='store_false', dest="input_collapsed_to_unique", 
+    parser.add_option('-U','--input_not_collapsed_to_unique', action='store_false', dest="input_collapsed_to_unique", 
                       help="Turn -c off.")
     parser.add_option('-m', '--input_metadata_file', default='AUTO', metavar='FILE', 
                       help="File containing preprocessing and alignment metadata (scripts/options used etc). "
@@ -342,6 +345,7 @@ def main(infiles, outfile, options):
     The options argument should be generated by an optparse parser.
     """
     ### parse/process/reformat some options
+    options.ignore_cassette |= options.separate_cassette
     options.count_cassette = not options.dont_count_cassette
     options.count_other = not options.dont_count_other
     options.merge_boundary_features = not options.dont_merge_boundary_features
@@ -349,10 +353,18 @@ def main(infiles, outfile, options):
     outfile_basename = os.path.splitext(outfile)[0]
     mutant_merging_outfile = outfile_basename + '_merging-info.txt'
     pickled_outfile = outfile_basename + '.pickle'
+    # MAYBE-TODO let -C take an optional argument to put the cassette files elsewhere?
+    cassette_outfile = outfile_basename + '_cassette.txt'
+    cassette_merging_outfile = outfile_basename + '_cassette_merging-info.txt'
+    cassette_pickled_outfile = outfile_basename + '_cassette.pickle'
 
     ### generate empty alignment set object with basic read position/orientation properties defined by options
     all_alignment_data = mutant_analysis_classes.Insertional_mutant_pool_dataset(options.read_cassette_end, 
                                                                                  options.read_direction=='reverse')
+    if options.separate_cassette:
+        cassette_alignment_data = mutant_analysis_classes.Insertional_mutant_pool_dataset(options.read_cassette_end, 
+                                                                                 options.read_direction=='reverse')
+    # MAYBE-TODO refactor the whole bunch of "if options.separate_cassette:" clauses to avoid code duplication?
 
     ### parse preprocessing/alignment metadata file to get discarded/not-aligned/etc readcounts, pass to all_alignment_data
     #   (all_alignment_data initializes them to 'unkown', so if file is not given or can't be found/parsed, do nothing)
@@ -361,12 +373,15 @@ def main(infiles, outfile, options):
     if N_wrong_start is not None and N_no_cassette is not None:
         assert N_discarded == N_wrong_start+N_no_cassette, "Wrong-start and no-cassette totals don't add up to discarded!"
     all_alignment_data.summary.add_discarded_reads(N_discarded, N_wrong_start, N_no_cassette)
+    if options.separate_cassette:
+        cassette_alignment_data.summary.add_discarded_reads(N_discarded, N_wrong_start, N_no_cassette)
     if N_unaligned is not None or N_multiple is not None:
         all_alignment_data.summary.add_nonaligned_reads(N_non_aligned, N_unaligned, N_multiple)
-
+        if options.separate_cassette:
+            cassette_alignment_data.summary.add_nonaligned_reads(N_non_aligned, N_unaligned, N_multiple)
     # MAYBE-TODO also get the final total number of reads from the metadata infile and make sure it's the same 
     #   as the number of processed reads I get from all_alignment_data.print_summary()?
-    
+
     ### parse input file and store data - the add_alignment_reader_to_data function here does pretty much all the work!
     for infile in infiles:
         # if this is a new-style *_genomic-unique.sam file and has a matching *_cassette.sam file, parse that file too
@@ -382,31 +397,57 @@ def main(infiles, outfile, options):
             infile_reader = HTSeq.SAM_Reader(part_infile)
             # fill the new alignment set object with data from the infile parser
             all_alignment_data.add_alignment_reader_to_data(infile_reader, 
-                                                            uncollapse_read_counts = options.input_collapsed_to_unique, 
-                                                            treat_unknown_as_match = options.treat_unknown_as_match, 
-                                                            ignore_cassette = options.ignore_cassette)
+                                        uncollapse_read_counts = options.input_collapsed_to_unique, 
+                                        ignore_cassette = options.ignore_cassette, cassette_only = False, 
+                                        treat_unknown_as_match = options.treat_unknown_as_match)
+            if options.separate_cassette:
+                cassette_alignment_data.add_alignment_reader_to_data(infile_reader, 
+                                        uncollapse_read_counts = options.input_collapsed_to_unique, 
+                                        ignore_cassette = False, cassette_only = True, 
+                                        treat_unknown_as_match = options.treat_unknown_as_match)
+
+    ### optionally remove mutants based on another dataset - BEFORE adjacent mutant counting/merging
+    if options.remove_mutants_from_file:
+        other_dataset = mutant_analysis_classes.Insertional_mutant_pool_dataset(infile=options.remove_mutants_from_file)
+        all_alignment_data.remove_mutants_based_on_other_dataset(other_dataset, 
+                 readcount_min=options.remove_mutants_readcount_min, perfect_reads=options.remove_mutants_min_is_perfect)
+        if options.separate_cassette:
+            cassette_alignment_data.remove_mutants_based_on_other_dataset(other_dataset, 
+                 readcount_min=options.remove_mutants_readcount_min, perfect_reads=options.remove_mutants_min_is_perfect)
 
     ### optionally merge adjacent mutants (since they're probably just artifacts of indels during deepseq)
     with open(mutant_merging_outfile, 'w') as MERGEFILE:
+      with open(cassette_merging_outfile, 'w') as CASSETTE_MERGEFILE:
         if options.merge_adjacent_mutants: 
             all_alignment_data.merge_adjacent_mutants(merge_max_distance = options.merge_max_distance, 
                                                       merge_count_ratio = options.merge_count_ratio, 
                                                       merge_cassette_chromosomes = options.merge_in_cassette, 
                                                       merge_other_chromosomes = (not options.dont_merge_in_other_chrom), 
                                                       OUTPUT = MERGEFILE)
+            if options.merge_in_cassette and options.separate_cassette:
+                cassette_alignment_data.merge_adjacent_mutants(merge_max_distance = options.merge_max_distance, 
+                                                      merge_count_ratio = options.merge_count_ratio, 
+                                                      merge_cassette_chromosomes = True, merge_other_chromosomes = False, 
+                                                      OUTPUT = CASSETTE_MERGEFILE)
         if not options.dont_merge_tandems: 
             all_alignment_data.merge_opposite_tandem_mutants(merge_cassette_chromosomes = options.merge_in_cassette, 
                                                       merge_other_chromosomes = (not options.dont_merge_in_other_chrom), 
                                                       OUTPUT = MERGEFILE)
+            if options.merge_in_cassette and options.separate_cassette:
+                cassette_alignment_data.merge_opposite_tandem_mutants(merge_cassette_chromosomes = True,
+                                                      merge_other_chromosomes = False,
+                                                      OUTPUT = CASSETTE_MERGEFILE)
         all_alignment_data.count_adjacent_mutants(max_distance_to_print = options.merge_max_distance, 
                                   max_distance_to_count = 10000, count_cassette_chromosomes = options.merge_in_cassette, 
                                   count_other_chromosomes = (not options.dont_merge_in_other_chrom), OUTPUT = MERGEFILE)
-        # TODO make an option for max_distance_to_count!
-    ### optionally remove mutants based on another dataset
-    if options.remove_mutants_from_file:
-        other_dataset = mutant_analysis_classes.Insertional_mutant_pool_dataset(infile=options.remove_mutants_from_file)
-        all_alignment_data.remove_mutants_based_on_other_dataset(other_dataset, 
-                 readcount_min=options.remove_mutants_readcount_min, perfect_reads=options.remove_mutants_min_is_perfect)
+        if options.separate_cassette:
+            cassette_alignment_data.count_adjacent_mutants(max_distance_to_print = options.merge_max_distance, 
+                                  max_distance_to_count = 10, count_cassette_chromosomes = True, 
+                                  count_other_chromosomes = False, OUTPUT = CASSETTE_MERGEFILE)
+        # TODO make an option for max_distance_to_count!  And I'm using a much lower one for cassette because it's so dense
+    # since there's no optional as/with statement, just remove the cassette_merging_outfile if unwanted
+    if not options.separate_cassette:
+        os.remove(cassette_merging_outfile)
 
     ### optionally parse gene position/info files and look up the genes for each mutant in the data
     if options.gene_position_reference_file is not None:
@@ -424,12 +465,13 @@ def main(infiles, outfile, options):
                        if_standard_Cre_file=options.annotation_file_is_standard, print_info=(options.verbosity_level >= 2))
 
     ### output
+    # TODO write some info about all the other files that go with this one (pickle, merging-info, *cassette*)
     # print summary info to stdout
     if options.verbosity_level>1: print "\nDATA SUMMARY:"
     if options.verbosity_level>0: all_alignment_data.print_summary(merge_boundary_features=options.merge_boundary_features,
                                                                    count_cassette=options.count_cassette, 
                                                                    count_other=options.count_other)
-    # print full data to outfile
+    ### print full data to outfile(s)
     if options.verbosity_level>1: print "printing output - time %s."%time.ctime()
     with open(outfile,'w') as OUTFILE:
         write_header_data(OUTFILE,options)
@@ -444,7 +486,20 @@ def main(infiles, outfile, options):
                                       header_line=True, header_prefix='# ')
         with open(pickled_outfile,'w') as PICKLEFILE:
             pickle.dump(all_alignment_data, PICKLEFILE, 0)
-
+    if options.separate_cassette:
+        with open(cassette_outfile,'w') as OUTFILE:
+            write_header_data(OUTFILE,options)
+            # TODO probably write some extra bit of info about this being the cassette-file to MAINFILENAME
+            OUTFILE.write("### SUMMARY:\n")
+            cassette_alignment_data.print_summary(OUTFILE, line_prefix="#  ", header_prefix="## ", 
+                                             merge_boundary_features=options.merge_boundary_features,
+                                             count_cassette = False, count_other=False)
+            OUTFILE.write("### HEADER AND DATA:\n")
+            cassette_alignment_data.print_data(OUTPUT=OUTFILE, sort_data_by=options.sort_data_key, 
+                                          N_sequences=options.N_sequences_per_group, 
+                                          header_line=True, header_prefix='# ')
+            with open(cassette_pickled_outfile,'w') as PICKLEFILE:
+                pickle.dump(cassette_alignment_data, PICKLEFILE, 0)
 
 if __name__ == "__main__":
     """ Allows both running and importing of this file. """
