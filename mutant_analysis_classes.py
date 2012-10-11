@@ -19,7 +19,7 @@ import copy
 import HTSeq
 from BCBio import GFF
 # my modules
-from general_utilities import split_into_N_sets_by_counts, add_dicts_of_ints, sort_lists_inside_dict, keybased_defaultdict, value_and_percentages, FAKE_OUTFILE, NaN, nan_func
+from general_utilities import split_into_N_sets_by_counts, add_dicts_of_ints, sort_lists_inside_dict, keybased_defaultdict, value_and_percentages, FAKE_OUTFILE, NaN, nan_func, merge_values_to_unique
 from DNA_basic_utilities import SEQ_ENDS, SEQ_STRANDS, SEQ_DIRECTIONS, SEQ_ORIENTATIONS, position_test_contains, position_test_overlap
 from seq_basic_utilities import get_seq_count_from_collapsed_header
 from deepseq_utilities import check_mutation_count_try_all_methods
@@ -1236,7 +1236,7 @@ class Insertional_mutant_pool_dataset():
         #  so the specific categories must be 0 too:
         if summ.non_aligned_read_count==0:  summ.unaligned, summ.multiple_aligned = 0, 0
 
-    def read_data_from_file(self, infile, assume_new_sequences=False):  # DEPRECATED!
+    def read_data_from_file(self, infile, assume_new_sequences=False):
         """ Read data from a file made by self.print_data, add mutants to dataset. Ignores some things. DEPRECATED. 
 
         Populates most of the dataset total read/mutant count values correctly, but ignores unaligned and discarded reads, 
@@ -1334,6 +1334,7 @@ class Insertional_mutant_pool_dataset():
 
     ######### MULTI-DATASET METHODS
 
+    @staticmethod
     def populate_multi_dataset(self, source_dataset_dict, overwrite=False, check_gene_data=True):
         """ Given a dataset_name:single_dataset_object dictionary, populate current multi-dataset with the data. 
 
@@ -1365,7 +1366,15 @@ class Insertional_mutant_pool_dataset():
                 curr_mutant = self.get_mutant(mutant.position)
                 curr_mutant.add_other_mutant_as_dataset(mutant, dataset_name, overwrite=overwrite, 
                                                         check_constant_data=check_gene_data)
-        # MAYBE-TODO add option to only include mutants with non-zero reads (total or perfect) in all datasets?  Or should that only happen during printing?  Or do we even care?  If I ever want to do that, there was code for it in the old version of mutant_join_datasets.py (before 2012-04-26)
+            # MAYBE-TODO add option to only include mutants with non-zero reads (total or perfect) in all datasets?  Or should that only happen during printing?  Or do we even care?  If I ever want to do that, there was code for it in the old version of mutant_join_datasets.py (before 2012-04-26)
+
+        # Merge any pieces of global information that's not per-dataset
+        gene_annotation_header_list = [d.gene_annotation_header for d in source_dataset_dict.values()] 
+        self.gene_annotation_header = merge_values_to_unique(gene_annotation_header_list, [], convert_for_set=tuple, 
+                                                value_name='gene_annotation_header', context='datasets in multi-dataset')
+        total_genes_in_genome_list = [d.total_genes_in_genome for d in source_dataset_dict.values()] 
+        self.total_genes_in_genome = merge_values_to_unique(total_genes_in_genome_list, 0, 
+                                                value_name='total_genes_in_genome', context='datasets in multi-dataset')
         # This has no unit-tests, but has a run-test in mutant_join_datasets.py
 
     def mutants_in_dataset(self, dataset_name=None):
