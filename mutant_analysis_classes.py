@@ -506,6 +506,7 @@ class Insertional_mutant():
         self.perfect_read_count    = 0
         self.unique_sequence_count = 0
         self.sequences_and_counts  = defaultdict(int)
+        self.original_strand_readcounts = {}
 
     def _check_consistent_multi_dataset_args(self, dataset_name, function_name='<some_func>', multi_noname_allowed=False):
         """ Make sure dataset_name is consistent with single-/multi-dataset status of mutant; raise MutantError if not.
@@ -719,6 +720,7 @@ class Insertional_mutant():
         self.unique_sequence_count = source_mutant.unique_sequence_count
         # using dict to make a COPY of the dict instead of just creating another name for the same value
         self.sequences_and_counts  = dict(source_mutant.sequences_and_counts)
+        self.original_strand_readcounts  = dict(source_mutant.original_strand_readcounts)
 
     def convert_to_multi_dataset(self, current_dataset_name=None, ignore_if_already_multi=False):
         """ Convert mutant from single-dataset to multi-dataset mutant; assign readcount-data to current_dataset_name.
@@ -938,10 +940,10 @@ class Dataset_summary_data():
             except KeyError:
                 # special case for both-strand mutants - they have a original_strand_readcounts attribute
                 if m.position.strand == 'both':
-                    for strand,count in m.original_strand_readcounts.items():
+                    for strand,count in m.read_info(self.dataset_name).original_strand_readcounts.items():
                         strand_dict[strand] += count
                 else:
-                    raise Exception("Unknown strand %s! %s"%m.position.strand)
+                    raise MutantError("Unknown strand %s! %s"%m.position.strand)
         return strand_dict
 
     def reads_in_chromosome(self, chromosome):
