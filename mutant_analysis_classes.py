@@ -1055,7 +1055,7 @@ class Dataset_summary_data():
                 string = "Dataset has %s mutants (with %s total reads). "%(len(self.dataset), 
                                                                            self.aligned_read_count) + string
         else:
-            string = "(max dist %s) %s adjacent same-strand pairs, %s opposite-tandem, %s adjacent-opposite toward-facing, %s away-facing"
+            string = "(max dist %s) %s adjacent same-strand pairs, %s opposite-tandem, %s adjacent-opposite away-facing, %s toward-facing"
             if add_total_counts:
                 string = "%s mutants (%s reads); "%(len(self.dataset), self.aligned_read_count) + string
         string = string%(self.adjacent_max_distance, self.adjacent_same_strand, 
