@@ -1336,7 +1336,6 @@ class Insertional_mutant_pool_dataset():
 
     ######### MULTI-DATASET METHODS
 
-    @staticmethod
     def populate_multi_dataset(self, source_dataset_dict, overwrite=False, check_gene_data=True):
         """ Given a dataset_name:single_dataset_object dictionary, populate current multi-dataset with the data. 
 
