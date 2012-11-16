@@ -12,7 +12,7 @@ USAGE: mutant_make_plots.py [options] infile
 import os
 from collections import defaultdict
 ### other packages
-from numpy import isnan, isinf, isneginf
+from numpy import isnan, isinf, isneginf, array, ndarray
 from numpy import corrcoef
 from scipy.stats.stats import spearmanr
 # TODO might want to import some of the bigger libraries only after the option-parsing works to save time...
@@ -40,13 +40,25 @@ def get_sample(dataset, all_mutants, replace_zeros = 0.1):
         sample_data.append(value)
     return sample_data
 
-def remove_nan_inf_from_two_samples(sample1, sample2, min_val=None):
-    """ Given two float lists, return two lists with any elements that are nan/inf in EITHER list removed from both. """
+def remove_nan_inf_from_two_samples(sample1, sample2, remove_only_if_both=False, min_val=None, min_val_allowed=True):
+    """ Remove elements that are nan/inf or below min_val in either/both lists from both lists (return new lists).
+
+    If remove_only_if_both is True, only remove the pair of elements if BOTH match the conditions; 
+     otherwise remove them if EITHER matches the conditions.
+    If min_val_allowed is True, only remove elements that are <min_val; if False, also remove elements ==min_val.
+    """
+    # TODO this may need refactoring, and/or moving to general_utilities...
     assert len(sample1)==len(sample2), "two samples aren't the same length! %s, %s."%(len(sample1),len(sample2))
     new_sample1, new_sample2 = [], []
+    check_functions = [isnan, isinf, isneginf]
+    if min_val is not None:
+        if min_val_allowed:     check_functions.append(lambda x: x<min_val)
+        else:                   check_functions.append(lambda x: x<=min_val)
     for x,y in zip(sample1,sample2):
-        if isnan(x) or isnan(y) or isinf(x) or isinf(y) or isneginf(x) or isneginf(y) or x<min_val or y<min_val:
-            continue
+        if_remove_x = any([check_fun(x) for check_fun in check_functions])
+        if_remove_y = any([check_fun(y) for check_fun in check_functions])
+        if remove_only_if_both and (if_remove_x and if_remove_y):        continue
+        if not remove_only_if_both and (if_remove_x or if_remove_y):     continue
         new_sample1.append(x)
         new_sample2.append(y)
     return new_sample1, new_sample2
@@ -258,12 +270,25 @@ def plot_all_correlations(all_data, plot_scale, figname, print_correlation=False
                 need_title = False
             # print Spearman or Pearson correlation coefficient on each graph (remove all nan/inf value positions first)
             if not print_correlation=='none':
-                # TODO don't take the (min_value,min_value) mutants into account for correlations!  Or probably the mutants that are below the cutoff to print, either...
-                if print_correlation=='spearman':   corr_coeff = spearmanr(sample_i,sample_j)[0]
-                elif print_correlation=='pearson':  corr_coeff = corrcoef(sample_i,sample_j)[0][1]
+                # mutants that are absent in both datasets (i.e. min_value,min_value) shouldn't be taken into account 
+                #  for correlation!  Otherwise the result will depend on what OTHER datasets were included in the plot and how many
+                #  mutants they have that aren't present in either of the current datasets, which makes no sense.
+                if min_value is None:   min_val_for_corr = 0
+                else:                   min_val_for_corr = min_value
+                clean_sample_i, clean_sample_j = remove_nan_inf_from_two_samples(sample_i, sample_j, min_val=min_val_for_corr, 
+                                                                                 min_val_allowed=False, remove_only_if_both=True)
+                if print_correlation=='spearman':   corr_coeff = spearmanr(clean_sample_i,clean_sample_j)[0]
+                elif print_correlation=='pearson':  corr_coeff = corrcoef(clean_sample_i,clean_sample_j)[0][1]
+                # if the result isn't a number (for instance an empty list/array/whatever), set it to NaN
+                #  (need to convert numpy arrays to lists first, because they act like numbers!)
+                if isinstance(corr_coeff, ndarray):     corr_coeff = list(corr_coeff)
+                try:                                    corr_coeff/2
+                except TypeError:                       corr_coeff = float('nan')
+                # MAYBE-TODO should mutants below min_val_to_plot be excluded too?
                 # the corr_coeff text color is based on value: <.25 black, .25-.50 blue, .50-.75 magenta, .75-1 red.
                 corr_coeff_colors = ['k','b','m','r','r']
-                color = corr_coeff_colors[int(abs(corr_coeff)*16)/ 4]
+                if isnan(corr_coeff):   color = 'k'
+                else:                   color = corr_coeff_colors[int(abs(corr_coeff)*16)/ 4]
                 mplt.text(text_pos_x, text_pos_y, 'corr %.2f'%corr_coeff, color=color, 
                           horizontalalignment='right',verticalalignment='top')
     # need a label for the last column, below the last plot
