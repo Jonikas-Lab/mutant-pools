@@ -205,6 +205,9 @@ def plot_all_correlations(all_data, plot_scale, figname, print_correlation=False
                     print "Warning: overwriting any colors set with -C/M/B/G/R options due to grey_out_min being set!"
                 colors = [('k' if x>=grey_out_min and y>=grey_out_min else '0.6') for x,y in zip(sample_i,sample_j)]
             # note: i is on the y axis, j on the x axis, to make it fit the label below
+            # MAYBE-TODO Apparently using scatter is a lot more resource-intensive than using plot, and it's only intended for cases
+            #  where each dot has a different color/size.  I do sometimes have groups of mutants with different colors, but they're
+            #  just a few groups, not a continuous variable, so it could be dealt with using a few plot calls instead.
             mplt.scatter(sample_j, sample_i, s=dotsize, c=colors, edgecolors='none')
             ### setting up the axis scale, ticks and tick labels - cosmetic stuff
             max_i = max(sample_i);  min_i = min(sample_i)
@@ -469,8 +472,10 @@ def define_option_parser():
                       help='interpret the numbers in infiles as growth rates (default: as deepseq read counts)')
     parser.add_option('-o', '--outfile_prefix', default='', help='the prefix to add to all output file names')
     parser.add_option('-d', '--outfile_directory', default='.', help='directory to create the output files in (default .)')
-    parser.add_option('-t', '--graph_type', choices=['dist','corr','both'], default='corr', metavar='[dist|corr|both]')
-    parser.add_option('-s', '--graph_scale', choices=['lin','log','both'], default='log', metavar='[lin|log|both]')
+    parser.add_option('-t', '--graph_type', choices=['dist','corr','both'], default='corr', metavar='[dist|corr|both]', 
+                      help='Make plot of readcount distribution, correlation, or both (default %default)')
+    parser.add_option('-s', '--graph_scale', choices=['lin','log','both'], default='log', metavar='[lin|log|both]',
+                      help='Make plots linear, log-scale, or both (default %default)')
     parser.add_option('-f', '--graph_format', default='png', metavar='FORMAT', 
                       help='Which formats work depends on matplotlib backend - try a few and see. Default %default.')
     parser.add_option('-c', '--print_correlations', choices=['none','pearson','spearman'], default='spearman', 

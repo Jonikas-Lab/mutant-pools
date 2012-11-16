@@ -174,6 +174,7 @@ def main(infiles, outfile, options):
             multi_dataset.print_summary(OUTPUT=OUTFILE, line_prefix="#  ", header_prefix="## ")
             OUTFILE.write("### HEADER AND DATA:\n")
             multi_dataset.print_data(OUTPUT=OUTFILE, sort_data_by=options.sort_data_key, header_line=True)
+        # TODO make a *.pickle outfile as well?
 
     return multi_dataset, dataset_names
 

@@ -278,7 +278,7 @@ def get_info_from_metadata_files(infiles, input_metadata_file, verbosity_level):
                           +"Proceeding without it.")
                 counts_per_file['wrong_start'].append(None)
 
-            ### wrong-start discarded read count (new-format only)
+            ### no-cassette discarded read count (new-format only)
             for line in open(curr_input_metadata_file):
                 if line.startswith('#  "bad" read count (no-cassette)'):
                     counts_per_file['no_cassette'].append(int(line.split(':\t')[1].split(' (')[0]))
@@ -288,6 +288,8 @@ def get_info_from_metadata_files(infiles, input_metadata_file, verbosity_level):
                     print("Warning: metadata file %s didn't contain no-cassette readcount line! "%curr_input_metadata_file
                           +"Proceeding without it.")
                 counts_per_file['no_cassette'].append(None)
+
+            ### TODO include checking for other-end removed reads in newest-format files!  Since we now have 5' and 3' reads in the same file and split up at preprocessing into multiple outfiles.
 
             ### unaligned read count (new-format only)
             for line in open(curr_input_metadata_file):
