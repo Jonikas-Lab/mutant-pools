@@ -720,7 +720,11 @@ class Insertional_mutant():
         self.unique_sequence_count = source_mutant.unique_sequence_count
         # using dict to make a COPY of the dict instead of just creating another name for the same value
         self.sequences_and_counts  = dict(source_mutant.sequences_and_counts)
-        self.original_strand_readcounts  = dict(source_mutant.original_strand_readcounts)
+        # the try/except is for dealing with merging older datasets that didn't have self.original_strand_readcounts
+        try:
+            self.original_strand_readcounts  = dict(source_mutant.original_strand_readcounts)
+        except AttributeError:
+            self.original_strand_readcounts = {}
 
     def convert_to_multi_dataset(self, current_dataset_name=None, ignore_if_already_multi=False):
         """ Convert mutant from single-dataset to multi-dataset mutant; assign readcount-data to current_dataset_name.
@@ -1371,10 +1375,13 @@ class Insertional_mutant_pool_dataset():
 
         # Merge any pieces of global information that's not per-dataset
         gene_annotation_header_list = [d.gene_annotation_header for d in source_dataset_dict.values()] 
-        self.gene_annotation_header = merge_values_to_unique(gene_annotation_header_list, [], convert_for_set=tuple, 
+        self.gene_annotation_header = merge_values_to_unique(gene_annotation_header_list, blank_value=[], convert_for_set=tuple, 
                                                 value_name='gene_annotation_header', context='datasets in multi-dataset')
-        total_genes_in_genome_list = [d.total_genes_in_genome for d in source_dataset_dict.values()] 
-        self.total_genes_in_genome = merge_values_to_unique(total_genes_in_genome_list, 0, 
+        # using getattr instead of just d.total_genes_in_genome because some older datasets don't HAVE the total_genes_in_genome
+        #  attribute, and getattr lets me give a default of 0 when the attribute isn't missing 
+        #  (and 0 is used as blank_value in the merge_values_to_unique call on the next line).
+        total_genes_in_genome_list = [getattr(d,'total_genes_in_genome',0) for d in source_dataset_dict.values()] 
+        self.total_genes_in_genome = merge_values_to_unique(total_genes_in_genome_list, blank_value=0, 
                                                 value_name='total_genes_in_genome', context='datasets in multi-dataset')
         # This has no unit-tests, but has a run-test in mutant_join_datasets.py
 
@@ -2172,9 +2179,12 @@ class Insertional_mutant_pool_dataset():
                     mutant_data += [mutant.by_dataset[dataset_name].total_read_count, 
                                     mutant.by_dataset[dataset_name].perfect_read_count]
             # add gene annotation, or a line with the right number of fields if gene annotation is missing
+            #  (or if the mutant has no such attribute at all - possible for older-format datasets)
             if self.gene_annotation_header:
-                if mutant.gene_annotation:  mutant_data += mutant.gene_annotation
-                else:                       mutant_data += missing_gene_annotation_data
+                try:
+                    if mutant.gene_annotation:  mutant_data += mutant.gene_annotation
+                    else:                       mutant_data += missing_gene_annotation_data
+                except AttributeError:          mutant_data += missing_gene_annotation_data
             OUTPUT.write('\t'.join([str(x) for x in mutant_data]))
             OUTPUT.write('\n')
 
