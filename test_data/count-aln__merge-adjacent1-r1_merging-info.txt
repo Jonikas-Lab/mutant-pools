@@ -5,7 +5,6 @@
  MERGING same-strand adjacent mutants: chromosome_A + 99-? into chromosome_A + 100-?, 1 and 5 reads.
  MERGING same-strand adjacent mutants: chromosome_A + 101-? into chromosome_A + 100-?, 1 and 6 reads.
  MERGING same-strand adjacent mutants: chromosome_A + 301-? into chromosome_A + 300-?, 1 and 1 reads.
-  (mutants have same readcount - merging both into earlier position, chromosome_A + 300-?)
 # Finished merging adjacent mutants: 3 pairs merged
 # Merging opposite-strand same-position mutants (presumably tail-to-tail tandems)
  (not including cassette chromosomes) (including non-nuclear chromosomes)
