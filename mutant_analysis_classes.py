@@ -1368,6 +1368,7 @@ class Insertional_mutant_pool_dataset():
             # Merge source dataset mutant data into own multi-dataset mutants
             #  (get_mutant will create new empty mutant if one doesn't exist)
             for mutant in dataset_object:
+                # TODO should a both-strand mutant and a + or -strand mutant at the same position be considered the same mutant during joining datasets??  Currently they're not, and this can give pretty odd results!  Make it an option?  Make it depend on readcounts?  I'm not really sure...  (Also see "TODO how should mutant lookup by position deal with both-strand mutants?")
                 curr_mutant = self.get_mutant(mutant.position)
                 curr_mutant.add_other_mutant_as_dataset(mutant, dataset_name, overwrite=overwrite, 
                                                         check_constant_data=check_gene_data)
