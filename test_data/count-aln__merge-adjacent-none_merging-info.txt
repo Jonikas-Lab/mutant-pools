@@ -1,6 +1,6 @@
 # Merging opposite-strand same-position mutants (presumably tail-to-tail tandems)
  (not including cassette chromosomes) (including non-nuclear chromosomes)
- MERGING opposite-strand same-position tandem mutants: chromosome_A + 500-? and chromosome_A - ?-501.
+ MERGING opposite-strand same-position tandem mutants: chromosome_A - ?-501 and chromosome_A + 500-?, 1 and 1 reads.
 # Finished merging opposite-strand same-position mutants: 1 pairs merged
 # Counting adjacent mutants: actually counting mutants up to distance 10000, but only printing info for up to distance 1 - you can get the full data from the pickle file
  (not including cassette chromosomes) (including non-nuclear chromosomes)

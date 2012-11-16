@@ -1624,6 +1624,9 @@ class Insertional_mutant_pool_dataset():
             # want to merge mutant2 into mutant1, so make sure mutant1 is the one with more reads, swap if otherwise
             if mutant1_readcount < mutant2_readcount:
                 pos1, pos2 = pos2, pos1
+            # or if they have the same readcount numbers, make sure mutant1 is the one with the earlier position
+            elif mutant1_readcount == mutant2_readcount:
+                pos1, pos2 = sorted([pos2, pos1])
             # normally just save the mutants for merging, except special case below
             if pos2 not in mutants_to_merge_key_into_val:
                 mutants_to_merge_key_into_val[pos2] = pos1
@@ -1642,7 +1645,8 @@ class Insertional_mutant_pool_dataset():
                     else:               mutants_to_merge_key_into_val[pos2] = min(mutants_to_merge_key_into_val[pos2],pos1)
         return mutants_to_merge_key_into_val
 
-    def _merge_mutant_list(self, mutants_to_merge_key_into_val, OUTPUT=None, description="", extra_check=None, extra_note=""):
+    def _merge_mutant_list(self, mutants_to_merge_key_into_val, OUTPUT=None, description="", join_string="into", 
+                           extra_check=None, extra_note=""):
         """ Given a dict of mutants to be merged (key into val), do the merging; return number merged and other info.
 
         Merging is transitive - if A should be merged into B and B into C, just merge A into C 
@@ -1664,13 +1668,13 @@ class Insertional_mutant_pool_dataset():
             mutant1_readcount, mutant2_readcount = mutant1.total_read_count, mutant2.total_read_count
             distance = abs(pos2.min_position-pos1.min_position)
             readcount_ratio = self._readcount_ratio(mutant1, mutant2)
+            # write merging info
+            OUTPUT.write(" MERGING %s mutants: %s %s %s, %s and %s reads.\n"%(description, pos2, join_string, pos1,
+                                                                                mutant2_readcount, mutant1_readcount))
             # do actual merging, save counts!
             self._merge_two_mutants(pos1, pos2)
             N_merged_dict[distance] += 1
             merged_readcounts_dict[distance].append((mutant1_readcount, mutant2_readcount))
-            # write merging info; if both have equal readcounts, note that we're arbitrarily using the earlier one (pos1)
-            OUTPUT.write(" MERGING %s mutants: %s into %s, %s and %s reads.\n"%(description, pos2, pos1,
-                                                                                mutant2_readcount, mutant1_readcount))
         N_merged = sum(N_merged_dict.values())
         assert N_merged == len(mutants_to_merge_key_into_val), "Merged a different number than given!"
         return N_merged, N_merged_dict, merged_readcounts_dict
@@ -1759,7 +1763,7 @@ class Insertional_mutant_pool_dataset():
                 #  and then for the readcount ratios, for the both-strand mutant, only the same-strand readcount 
                 #   should be used! (from mutant.original_strand_readcounts)
 
-        ### go over all mutant pairs, get a dict of which ones to possibly merge (pos2:pos1 means pos2 should be merged INTO pos1)
+        ### go over all mutant pairs, get a dict of which ones to possibly merge (adjacent position, same strand, min ratio, etc)
         mutants_to_merge_key_into_val = self._grab_mergeable_mutants(merge_max_distance, same_strand=True, 
                                                                     max_count_ratio=None, min_count_ratio=merge_count_ratio, 
                                                                     merge_cassette_chromosomes=merge_cassette_chromosomes, 
@@ -1809,7 +1813,7 @@ class Insertional_mutant_pool_dataset():
 
         ### now that we have all the pairs-to-merge, do the actual merging!
         N_merged, N_merged_dict, merged_readcounts_dict = self._merge_mutant_list(mutants_to_merge_key_into_val, OUTPUT, 
-                                                                                  description="same-strand adjacent")
+                                                                              description="same-strand adjacent", join_string="into")
         ### add overall counts to dataset summary
         self.summary.adjacent_max_distance = merge_max_distance
         self.summary.adjacent_merging_count_ratio = merge_count_ratio
@@ -1846,36 +1850,33 @@ class Insertional_mutant_pool_dataset():
             raise MutantError("Cannot change which chromosomes are subject to mutant-merging! "
                               "Currently %s for cassette, %s for non-nuclear."%self.summary.merging_which_chromosomes)
         if OUTPUT is None: OUTPUT = FAKE_OUTFILE
+
+        ### go over all mutant pairs, get a dict of which ones to possibly merge (same position, opposite strands, max ratio, etc)
+        mutants_to_merge = self._grab_mergeable_mutants(merge_max_distance=0, same_strand=False, 
+                                                        max_count_ratio=None, min_count_ratio=None, 
+                                                        merge_cassette_chromosomes=merge_cassette_chromosomes, 
+                                                        merge_other_chromosomes=merge_other_chromosomes)
+
+        ### based on leave_N_mutants and leave_method, determine which ones to actually merge
+        # TODO implement leave_N_mutants and leave_method! ('by_ratio', maybe 'random') for opposite-tandem merging, too!!  Like in def merge_adjacent_mutants above.
+
         OUTPUT.write("# Merging opposite-strand same-position mutants (presumably tail-to-tail tandems)\n"
                     +" (%sincluding cassette chromosomes)"%('' if merge_cassette_chromosomes else 'not ')
                     +" (%sincluding non-nuclear chromosomes)\n"%('' if merge_other_chromosomes else 'not '))
 
-        # TODO refactor this to use _grab_mergeable_mutants and _merge_mutant_list!!
-        # TODO implement leave_N_mutants and leave_method! ('by_ratio', maybe 'random') for opposite-tandem merging, too!!  Like in def merge_adjacent_mutants above.
+        ### now that we have all the pairs-to-merge, do the actual merging!
+        N_merged, N_merged_dict, merged_readcounts_dict = self._merge_mutant_list(mutants_to_merge, OUTPUT, 
+                                                              description="opposite-strand same-position tandem", join_string="and")
+        assert (N_merged_dict == {0: N_merged} or (N_merged==0 and N_merged_dict=={}))
 
-        all_positions = sorted([mutant.position for mutant in self])
-        # same-position opposite-strand mutants will always be adjacent on the sorted position list, so only look at those
-        for pos1,pos2 in zip(all_positions,all_positions[1:]):
-            # if the two mutants are on different chromosomes or different positions, go on to the next pair
-            if pos1.chromosome != pos2.chromosome:        continue
-            if pos2.min_position != pos1.min_position:    continue
-            # if the two mutants are on chromosomes that shouldn't be merged, go on to the next pair
-            if merge_cassette_chromosomes==False and is_cassette_chromosome(pos1.chromosome): continue
-            if merge_other_chromosomes==False and is_other_chromosome(pos1.chromosome):       continue
-            assert pos1.strand != pos2.strand, "Mutants with same chromosome/position must have different strands!"
-            assert 'both' not in [pos1.strand, pos2.strand], "Two mutants in one position must be +/- strand, not both!"
-
-            OUTPUT.write(" MERGING opposite-strand same-position tandem mutants: %s and %s.\n"%(pos1,pos2))
-            self.summary.merged_opposite_tandems += 1
-            self.summary.merged_opposite_tandems_readcounts.append(self._readcounts_sorted(pos1,pos2))
-            self._merge_two_mutants(pos1, pos2)
-
-        # add overall counts to dataset summary
-        OUTPUT.write("# Finished merging opposite-strand same-position mutants: %s pairs merged\n"%\
-                     self.summary.merged_opposite_tandems)
-        self.summary.merging_which_chromosomes = (merge_cassette_chromosomes, merge_other_chromosomes)
+        ### add overall counts to dataset summary
+        self.summary.merged_opposite_tandems += N_merged
+        self.summary.merged_opposite_tandems_readcounts.extend(merged_readcounts_dict[0])
         # need to sort the ratio list, since the order doesn't matter
         self.summary.merged_opposite_tandems_readcounts.sort()
+        self.summary.merging_which_chromosomes = (merge_cassette_chromosomes, merge_other_chromosomes)
+        OUTPUT.write("# Finished merging opposite-strand same-position mutants: %s pairs merged\n"%\
+                     self.summary.merged_opposite_tandems)
 
     def count_adjacent_mutants(self, max_distance_to_print=None, max_distance_to_count=10000, 
                                count_cassette_chromosomes=False, count_other_chromosomes=True, 
