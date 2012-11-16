@@ -16,7 +16,7 @@
 #  (read location with respect to cassette: which end, which direction):	(?, ?)	(?, ?)
 #  (average and median reads per mutant):	(5, 3)	(4, 4)
 #  Most common mutant(s): reads (% of aligned) (position or count):	9 (64%) (chromosome_A + 100-?)	7 (58%) (chromosome_A + 100-?)
-#  Mutant cassettes with unknown gene info (probably cassette-mapped) (% of total):	0 (0%)	3 (100%)
+#  Mutant cassettes on chromosomes with no gene data (cassette, some scaffolds, maybe chloroplast/mito) (% of total):	0 (0%)	3 (100%)
 #  Mutant cassettes in intergenic spaces (% of total, % of known):	0 (0%, 0%)	0 (0%, N/A)
 ## Mutant cassettes inside genes (% of total, % of known):	3 (100%, 100%)	0 (0%, N/A)
 #  Mutant cassettes in sense orientation to gene (% of ones in genes):	2 (67%)	0 (N/A)

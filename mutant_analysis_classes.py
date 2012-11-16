@@ -1996,8 +1996,8 @@ class Insertional_mutant_pool_dataset():
                                                                                  [summ.aligned_read_count]) ))
 
         special_chromosomes = []
-        if count_cassette:  special_chromosomes += sorted(summ.cassette_chromosomes)
-        if count_other:     special_chromosomes += sorted(summ.other_chromosomes)
+        if count_cassette:  special_chromosomes += sorted(set.union(*[set(summ.cassette_chromosomes) for summ in summaries]))
+        if count_other:     special_chromosomes += sorted(set.union(*[set(summ.other_chromosomes) for summ in summaries]))
 
         for chromosome in special_chromosomes:
             DVG.append((line_prefix+"Reads aligned to %s (%% of aligned):"%chromosome, 
@@ -2047,7 +2047,7 @@ class Insertional_mutant_pool_dataset():
 
         # print the gene annotation info, but only if there is any
         if any([summ.mutants_in_genes+summ.mutants_not_in_genes for summ in summaries]):
-            DVG.append((line_prefix+"Mutant cassettes with unknown gene info (probably cassette-mapped) (% of total):", 
+            DVG.append((line_prefix+"Mutant cassettes on chromosomes with no gene data (cassette, some scaffolds, maybe chloroplast/mito) (% of total):", 
                         lambda summ,mutants: value_and_percentages(summ.mutants_undetermined, [len(mutants)]) ))
             DVG.append((line_prefix+"Mutant cassettes in intergenic spaces (% of total, % of known):", 
                         lambda summ,mutants: value_and_percentages(summ.mutants_not_in_genes, 
