@@ -1,4 +1,4 @@
-# Merging opposite-strand same-position mutants (presumably tail-to-tail tandems)
+# Merging opposite-strand same-position mutants (presumably tail-to-tail tandems): leave_N_mutants 0, max_count_ratio None, leave_method by_ratio
  (not including cassette chromosomes) (including non-nuclear chromosomes)
  MERGING opposite-strand same-position tandem mutants: chromosome_A - ?-501 and chromosome_A + 500-?, 1 and 1 reads.
 # Finished merging opposite-strand same-position mutants: 1 pairs merged

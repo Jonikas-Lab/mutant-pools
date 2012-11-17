@@ -44,20 +44,20 @@ def do_test_run():
                  ('ignore-cassette', "-c -e 5prime -r forward -n3 -L", [aln_infile1]),
                  ('separate-cassette', "-C -e 5prime -r forward -n3 -L", [aln_infile1]),
                  ('sorted-by-count', "-o read_count -e 5prime -r forward -n3 -L", [aln_infile1]),
-                 ('with-gene-info_merged', "-Q -e 5prime -r forward -g %s -d -n0"%gff_genefile, [aln_infile2]),
-                 ('with-gene-info_unmerged', "-B -Q -e 5prime -r forward -g %s -d -n0"%gff_genefile, [aln_infile2]),
-                 ('multiple-infiles', "-Q -e 5prime -r forward -n0 -L", [aln_infile1,aln_infile2]),
-                 ('dont-merge-tandems', "-n0 -Q", [aln_infile3]),
-                 ('merge-adjacent-none', "-n0", [aln_infile3]),
-                 ('merge-adjacent1-r3', "-M --merge_max_distance=1 --merge_count_ratio=3 -n0", [aln_infile3]),
-                 ('merge-adjacent1-r1', "-M --merge_max_distance=1 --merge_count_ratio=1 -n0", [aln_infile3]),
-                 ('merge-adjacent2-r3', "-M --merge_max_distance=2 --merge_count_ratio=3 -n0", [aln_infile3]), 
-                 ('remove-from-other-all', "-Q -X %s -n0"%dataset_to_remove, [aln_infile2]), 
-                 ('remove-from-other-min4', "-Q -X %s -z4 -n0"%dataset_to_remove, [aln_infile2]), 
-                 ('remove-from-other-perfect', "-Q -X %s -Z -z4 -n0"%dataset_to_remove, [aln_infile2]),
+                 ('with-gene-info_merged', "-e 5prime -r forward -g %s -n0"%gff_genefile, [aln_infile2]),
+                 ('with-gene-info_unmerged', "-B -e 5prime -r forward -g %s -n0"%gff_genefile, [aln_infile2]),
+                 ('multiple-infiles', "-e 5prime -r forward -n0 -L", [aln_infile1,aln_infile2]),
+                 ('dont-merge-tandems', "-n0", [aln_infile3]),
+                 ('merge-adjacent-none', "-n0 -Q -Y0", [aln_infile3]),
+                 ('merge-adjacent1-r3', "-MQ -D1 -w3 -Y0 -n0", [aln_infile3]),
+                 ('merge-adjacent1-r1', "-MQ -D1 -w1 -Y0 -n0", [aln_infile3]),
+                 ('merge-adjacent2-r3', "-MQ -D2 -w3 -Y0 -n0", [aln_infile3]), 
+                 ('remove-from-other-all', "-X %s -n0"%dataset_to_remove, [aln_infile2]), 
+                 ('remove-from-other-min4', "-X %s -z4 -n0"%dataset_to_remove, [aln_infile2]), 
+                 ('remove-from-other-perfect', "-X %s -Z -z4 -n0"%dataset_to_remove, [aln_infile2]),
                  ('old-infile-format', "-e 5prime -r forward -n3 -L", [aln_infile0]),
                 ]
-    # MAYBE-TODO change all the expected files to merge tandems, so I can remove -Q from all test runs except dont-merge-tandems?
+    # MAYBE-TODO add run-tests for other mutant-merging options?  But they all have pretty good unit-tests.
     # MAYBE-TODO add run-test for --gene_annotation_file?
     # MAYBE-TODO add run-test for --input_collapsed_to_unique?  Or is that unit-tested already?
 
@@ -85,8 +85,8 @@ def define_option_parser():
     from optparse import OptionParser
     parser = OptionParser(__doc__)
 
-    # taken:     aAbBcCdDe---g-h---jJ--lLmMn-o---qQr---tTuUvVwWxX-YzZ  
-    # free:      ---------EfF-G-HiI--kK-----N-OpP---RsS----------y---  
+    # taken:     aAbBcC-De---g-h---jJ--lLmMn-o---qQr---tTuUvVwWxXyYzZ  
+    # free:      ------d--EfF-G-HiI--kK-----N-OpP---RsS--------------  
 
     ### test options
     parser.add_option('-t','--test_functionality', action='store_true', default=False, 
@@ -103,15 +103,27 @@ def define_option_parser():
                       metavar='|'.join(mutant_analysis_classes.SEQ_DIRECTIONS), 
                       help="Is the read in the forward or reverse direction compared to the cassette? (default %default).")
 
+    parser.add_option('-D', '--adjacent_max_distance', type='int', default=1, metavar='N',
+                      help="Count/merge adjacent mutants only if they're at most N bases distant; (default %default)")
     parser.add_option('-M', '--merge_adjacent_mutants', action="store_true", default=False, 
-                      help="Merge adjacent mutants if they satisfy the -w/-W constraints (default %default)")
-    parser.add_option('-w', '--merge_max_distance', type='int', default=1, metavar='N',
-                      help="For -M: merge mutants only if they're at most N bases distant (default %default)")
-    parser.add_option('-W', '--merge_count_ratio', type='int', default=1000, metavar='K',
-                      help="For -M: merge mutants only if one has K x fewer reads than the other (default %default)")
-    parser.add_option('-Q', '--dont_merge_tandems', action="store_true", default=False,
-                      help="DON'T merge mutants on opposite strands same position (tail-to-tail-tandems) "
-                          +"(if False, tandem mutants ARE merged) (default %default)")
+                      help="Merge adjacent mutants if they satisfy the -W/-w constraints (default %default)")
+    parser.add_option('-W', '--merge_adjacent_leave_mutants', default='auto', metavar='N',
+                      help="For -M: how many mutants to leave unmerged: a number, 'auto' (based on opposite-strand "
+                          +"adjacent mutants); ignored if -w option is given. '(default %default)")
+    parser.add_option('-w', '--merge_adjacent_count_ratio', type='int', default=None, metavar='K',
+                      help="For -M: merge mutants only if one has at least K times fewer reads than the other (default %default)")
+    parser.add_option('-Q', '--merge_opposite_tandem_mutants', action="store_true", default=False,
+                      help="Merge opposite-strand same-position mutants (tail-to-tail-tandems) "
+                          +"if they satisfy the -Y/-y contraints. (default %default)")
+    parser.add_option('-Y', '--merge_opposite_leave_mutants', type='int', default=1, metavar='N',
+                      help="For -Q: how many mutants to leave unmerged: a number, 'auto' (based on opposite-strand "
+                          +"adjacent mutants); ignored if -y option is given, '(default %default)")
+    parser.add_option('-y', '--merge_opposite_count_ratio', type='int', default=None, metavar='K',
+                      help="For -Q: merge mutants only if the readcounts are within Kx of each other. (default %default)")
+    parser.add_option('--merge_mutant_choice_method', choices=['by_ratio','random'], default='by_ratio', metavar='by_ratio|random',
+                      help="For -M and -Q: if using non-zero -W/-Y (and NOT using -w/-y), should the mutants to merge be chosen "
+                          +"randomly, or by highest/lowest readcount ratio? (default %default)")
+
     parser.add_option('-j', '--merge_in_cassette', action='store_true', default=False, 
                       help="For adjacent and tandem merging/counts: include mutants in cassette (default %default)")
     parser.add_option('-J', '--dont_merge_in_other_chrom', action='store_true', default=False, 
@@ -158,12 +170,12 @@ def define_option_parser():
     ### gene-finding and gene-annotation options 
     parser.add_option('-g', '--gene_position_reference_file', default=None, metavar='FILE', 
                       help="File to use to look up gene IDs based on chromosomal location (default %default)")
-    parser.add_option('-d', '--detailed_gene_features', action="store_true", default=True,
+    parser.add_option('--detailed_gene_features', action="store_true", default=True,
                       help="Find out what part of the gene (UTR,intron,exon) a mutant hit, based on the -g file "
-                          +"(default %default). May take a lot of memory - increase -Y option value to fix that.")
-    parser.add_option('-D', '--no_detailed_gene_features', action="store_false", dest='detailed_gene_features',
-                      help="Turns -d off.")
-    parser.add_option('-Y', '--N_detail_run_groups', type="int", default=5, metavar='N', 
+                          +"(default %default). May take a lot of memory - increase --N_detail_run_groups to fix that.")
+    parser.add_option('--no_detailed_gene_features', action="store_false", dest='detailed_gene_features',
+                      help="Turns --detailed_gene_features off.")
+    parser.add_option('--N_detail_run_groups', type="int", default=5, metavar='N', 
                       help="How many passes to split reading the detailed_gene_features into (default %default) "
                           +"- may take a lot of memory (and CPU) if read in a single pass; too many passes waste CPU.")
     # MAYBE-TODO add a "flank" option (with variable size), to catch mutants that are in the flanks of genes? Do we care?
@@ -417,36 +429,45 @@ def main(infiles, outfile, options):
             cassette_alignment_data.remove_mutants_based_on_other_dataset(other_dataset, 
                  readcount_min=options.remove_mutants_readcount_min, perfect_reads=options.remove_mutants_min_is_perfect)
 
-    ### optionally merge adjacent mutants (since they're probably just artifacts of indels during deepseq)
+    ### optionally merge some mutant categories
     with open(mutant_merging_outfile, 'w') as MERGEFILE:
       with open(cassette_merging_outfile, 'w') as CASSETTE_MERGEFILE:
+        # 1) adjacent same-strand mutants (since they're probably just artifacts of indels during deepseq/PCR)
         if options.merge_adjacent_mutants: 
-            all_alignment_data.merge_adjacent_mutants(merge_max_distance = options.merge_max_distance, 
-                                                      min_count_ratio = options.merge_count_ratio, 
-                                                      merge_cassette_chromosomes = options.merge_in_cassette, 
-                                                      merge_other_chromosomes = (not options.dont_merge_in_other_chrom), 
-                                                      OUTPUT = MERGEFILE)
+            try:                                                leave_N_mutants = int(options.merge_adjacent_leave_mutants)
+            except ValueError:                                  leave_N_mutants = options.merge_adjacent_leave_mutants
+            if options.merge_adjacent_count_ratio is not None:  leave_N_mutants = 'use_ratio'
+            all_alignment_data.merge_adjacent_mutants(merge_max_distance=options.adjacent_max_distance, 
+                      leave_N_mutants=leave_N_mutants, min_count_ratio = options.merge_adjacent_count_ratio, 
+                      leave_method=options.merge_mutant_choice_method, merge_cassette_chromosomes = options.merge_in_cassette, 
+                      merge_other_chromosomes = (not options.dont_merge_in_other_chrom), OUTPUT = MERGEFILE)
             if options.merge_in_cassette and options.separate_cassette:
-                cassette_alignment_data.merge_adjacent_mutants(merge_max_distance = options.merge_max_distance, 
-                                                      min_count_ratio = options.merge_count_ratio, 
-                                                      merge_cassette_chromosomes = True, merge_other_chromosomes = False, 
-                                                      OUTPUT = CASSETTE_MERGEFILE)
-        if not options.dont_merge_tandems: 
-            all_alignment_data.merge_opposite_tandem_mutants(merge_cassette_chromosomes = options.merge_in_cassette, 
-                                                      merge_other_chromosomes = (not options.dont_merge_in_other_chrom), 
-                                                      OUTPUT = MERGEFILE)
+                cassette_alignment_data.merge_adjacent_mutants(merge_max_distance = options.adjacent_max_distance, 
+                          leave_N_mutants=leave_N_mutants, min_count_ratio = options.merge_adjacent_count_ratio, 
+                          leave_method=options.merge_mutant_choice_method, merge_cassette_chromosomes = True, 
+                          merge_other_chromosomes = False, OUTPUT = CASSETTE_MERGEFILE)
+        # 2) opposite-strand same-position mutants (since they're probably just tail-to-tail cassette tandems)
+        if options.merge_opposite_tandem_mutants: 
+            try:                                                leave_N_mutants = int(options.merge_opposite_leave_mutants)
+            except ValueError:                                  leave_N_mutants = options.merge_opposite_leave_mutants
+            if options.merge_opposite_count_ratio is not None:  leave_N_mutants = 'use_ratio'
+            all_alignment_data.merge_opposite_tandem_mutants(leave_N_mutants=leave_N_mutants, 
+                          max_count_ratio = options.merge_opposite_count_ratio, leave_method=options.merge_mutant_choice_method, 
+                          merge_cassette_chromosomes = options.merge_in_cassette, 
+                          merge_other_chromosomes = (not options.dont_merge_in_other_chrom), OUTPUT = MERGEFILE)
             if options.merge_in_cassette and options.separate_cassette:
-                cassette_alignment_data.merge_opposite_tandem_mutants(merge_cassette_chromosomes = True,
-                                                      merge_other_chromosomes = False,
-                                                      OUTPUT = CASSETTE_MERGEFILE)
-        all_alignment_data.count_adjacent_mutants(max_distance_to_print = options.merge_max_distance, 
+                cassette_alignment_data.merge_opposite_tandem_mutants(leave_N_mutants=leave_N_mutants, 
+                              max_count_ratio = options.merge_opposite_count_ratio, leave_method=options.merge_mutant_choice_method, 
+                              merge_cassette_chromosomes = True, merge_other_chromosomes = False, OUTPUT = CASSETTE_MERGEFILE)
+        # 3) count adjacent mutants, even if not doing any merging
+        all_alignment_data.count_adjacent_mutants(max_distance_to_print = options.adjacent_max_distance, 
                                   max_distance_to_count = 10000, count_cassette_chromosomes = options.merge_in_cassette, 
                                   count_other_chromosomes = (not options.dont_merge_in_other_chrom), OUTPUT = MERGEFILE)
         if options.separate_cassette:
-            cassette_alignment_data.count_adjacent_mutants(max_distance_to_print = options.merge_max_distance, 
+            cassette_alignment_data.count_adjacent_mutants(max_distance_to_print = options.adjacent_max_distance, 
                                   max_distance_to_count = 10, count_cassette_chromosomes = True, 
                                   count_other_chromosomes = False, OUTPUT = CASSETTE_MERGEFILE)
-        # TODO make an option for max_distance_to_count!  And I'm using a much lower one for cassette because it's so dense
+        # MAYBE-TODO make an option for max_distance_to_count?  I'm using a much lower one for cassette because it's so dense.
     # since there's no optional as/with statement, just remove the cassette_merging_outfile if unwanted
     if not options.separate_cassette:
         os.remove(cassette_merging_outfile)
