@@ -1385,7 +1385,7 @@ class Insertional_mutant_pool_dataset():
         self.gene_annotation_header = merge_values_to_unique(gene_annotation_header_list, blank_value=[], convert_for_set=tuple, 
                                                 value_name='gene_annotation_header', context='datasets in multi-dataset')
         # using getattr instead of just d.total_genes_in_genome because some older datasets don't HAVE the total_genes_in_genome
-        #  attribute, and getattr lets me give a default of 0 when the attribute isn't missing 
+        #  attribute, and getattr lets me give a default of 0 when the attribute is missing 
         #  (and 0 is used as blank_value in the merge_values_to_unique call on the next line).
         total_genes_in_genome_list = [getattr(d,'total_genes_in_genome',0) for d in source_dataset_dict.values()] 
         self.total_genes_in_genome = merge_values_to_unique(total_genes_in_genome_list, blank_value=0, 
@@ -2116,10 +2116,12 @@ class Insertional_mutant_pool_dataset():
                    lambda summ,mutants: _fraction_or_unknown(summ.discarded_wrong_start, [summ.full_read_count])))
         DVG.append((line_prefix+"discarded due to no cassette (% of total):", 
                    lambda summ,mutants: _fraction_or_unknown(summ.discarded_no_cassette, [summ.full_read_count])))
-        all_other_end = sum([summ.discarded_other_end for summ in summaries])
+        # using getattr because some older datasets don't HAVE the discarded_other_end attribute, and getattr lets me give 
+        #  a default of 0 when the attribute is missing (which is what it should be - old datasets didn't have that functionality) 
+        all_other_end = sum([getattr(summ,'discarded_other_end',0) for summ in summaries])
         if all_other_end:
             DVG.append((line_prefix+"separated other-end reads (3'/5') (% of total):", 
-                       lambda summ,mutants: _fraction_or_unknown(summ.discarded_other_end, [summ.full_read_count])))
+                       lambda summ,mutants: _fraction_or_unknown(getattr(summ,'discarded_other_end',0), [summ.full_read_count])))
 
         DVG.append((header_prefix+"Reads without a unique alignment (% of total, % of post-preprocessing):", 
                     lambda summ,mutants: _fraction_or_unknown(summ.non_aligned_read_count, 
