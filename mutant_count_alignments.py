@@ -422,13 +422,13 @@ def main(infiles, outfile, options):
       with open(cassette_merging_outfile, 'w') as CASSETTE_MERGEFILE:
         if options.merge_adjacent_mutants: 
             all_alignment_data.merge_adjacent_mutants(merge_max_distance = options.merge_max_distance, 
-                                                      merge_count_ratio = options.merge_count_ratio, 
+                                                      min_count_ratio = options.merge_count_ratio, 
                                                       merge_cassette_chromosomes = options.merge_in_cassette, 
                                                       merge_other_chromosomes = (not options.dont_merge_in_other_chrom), 
                                                       OUTPUT = MERGEFILE)
             if options.merge_in_cassette and options.separate_cassette:
                 cassette_alignment_data.merge_adjacent_mutants(merge_max_distance = options.merge_max_distance, 
-                                                      merge_count_ratio = options.merge_count_ratio, 
+                                                      min_count_ratio = options.merge_count_ratio, 
                                                       merge_cassette_chromosomes = True, merge_other_chromosomes = False, 
                                                       OUTPUT = CASSETTE_MERGEFILE)
         if not options.dont_merge_tandems: 

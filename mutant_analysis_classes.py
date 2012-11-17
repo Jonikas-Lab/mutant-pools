@@ -1680,7 +1680,7 @@ class Insertional_mutant_pool_dataset():
         return N_merged, N_merged_dict, merged_readcounts_dict
 
     # TODO switch leave_N_mutants default to 'auto' once finished implementing and passed old run-tests
-    def merge_adjacent_mutants(self, merge_max_distance=1, leave_N_mutants='use_ratio', merge_count_ratio=100, leave_method='by_ratio',
+    def merge_adjacent_mutants(self, merge_max_distance=1, leave_N_mutants='use_ratio', min_count_ratio=100, leave_method='by_ratio',
                                merge_cassette_chromosomes=False, merge_other_chromosomes=True, OUTPUT=sys.stdout):
         """ Merge adjacent mutants based on strand, distance, and count ratio or number; save counts.
 
@@ -1699,8 +1699,8 @@ class Insertional_mutant_pool_dataset():
 
         The implementation is a bit complicated.  
          * we're ONLY looking at mutant pairs on the same strand, within merge_max_distance bases of each other.
-         * the basic functionality depends on the leave_N_mutants value, and then the merge_count_ratio and leave_method values:
-            - if leave_N_mutants is 'use_ratio', all mutant pairs with a readcount ratio >=merge_count_ratio will be merged, 
+         * the basic functionality depends on the leave_N_mutants value, and then the min_count_ratio and leave_method values:
+            - if leave_N_mutants is 'use_ratio', all mutant pairs with a readcount ratio >=min_count_ratio will be merged, 
                 regardless of how many will be merged/left.  leave_method must be "by_ratio" in this case.
             - if leave_N_mutants is a number N>=0, enough mutants will be merged so that N unmerged pairs are left. 
               Which pairs are merged/left depends on leave_method:  
@@ -1734,13 +1734,13 @@ class Insertional_mutant_pool_dataset():
                 raise MutantError("Bad leave_N_mutants value!")
             if leave_N_mutants==allowed_leave_N_mutants_vals[1] and leave_method!=allowed_leave_method_vals[0]:
                 raise MutantError("Bad leave_N_mutants and leave_method value combination!")
-            if merge_count_ratio < 1:  
-                raise MutantError("merge_count_ratio must be at least 1!")
+            if min_count_ratio < 1:  
+                raise MutantError("min_count_ratio must be at least 1!")
             if leave_method not in ['by_ratio', 'random']:  
                 raise MutantError("Bad by_ratio value in merge_adjacent_mutants!")
-            # if we're not calculating leave_N_mutants based on merge_count_ratio, merge_count_ratio should be ignored - set to 1
+            # if we're not calculating leave_N_mutants based on min_count_ratio, min_count_ratio should be ignored - set to 1
             if leave_N_mutants!=allowed_leave_N_mutants_vals[1]:
-                merge_count_ratio = 1
+                min_count_ratio = None
         ### check if values are consistent with previous counting/merging (if block for folding-readability purposes)
         if True:
             if self.summary.adjacent_merging_count_ratio is not None:
@@ -1765,45 +1765,55 @@ class Insertional_mutant_pool_dataset():
 
         ### go over all mutant pairs, get a dict of which ones to possibly merge (adjacent position, same strand, min ratio, etc)
         mutants_to_merge_key_into_val = self._grab_mergeable_mutants(merge_max_distance, same_strand=True, 
-                                                                    max_count_ratio=None, min_count_ratio=merge_count_ratio, 
+                                                                    max_count_ratio=None, min_count_ratio=min_count_ratio, 
                                                                     merge_cassette_chromosomes=merge_cassette_chromosomes, 
                                                                     merge_other_chromosomes=merge_other_chromosomes)
 
         ### based on leave_N_mutants and leave_method, determine which ones to actually merge
-        # if we're using the ratio directly and ignoring leave_N_mutants, just merge all of them.  Otherwise decide which:
-        if not leave_N_mutants=='use_ratio':
-            # determine the actual leave_N_mutants number if 'auto'
+        #   MAYBE-TODO refactor this section with the matching section in merge_opposite_tandem_mutants to avoid code duplication?
+        # if we're just using the ratio directly, or leave_N_mutants is 0 (i.e. merge all mutants, leave none), 
+        # just merge all the mutant pairs
+        if leave_N_mutants=='use_ratio' or leave_N_mutants==0:  pass
+        # for other leave_N_mutants values, decide which mutant pairs to merge and leave
+        else:
+            # determine the actual leave_N_mutants number if 'auto' (see docstring for how this is done and why)
+            #  (only run self.count_adjacent_mutants if it hasn't been run before)
             if leave_N_mutants=='auto':
-                # TODO implement!
-                pass
+                if self.summary.adjacent_max_distance is None:
+                    self.count_adjacent_mutants(count_cassette_chromosomes=merge_cassette_chromosomes, 
+                                                count_other_chromosomes=merge_other_chromosomes) 
+                opposite_away =   sum([self.adjacent_opposite_away_dict  [i] for i in range(1, merge_max_distance+1)])
+                opposite_toward = sum([self.adjacent_opposite_toward_dict[i] for i in range(1, merge_max_distance+1)])
+                leave_N_mutants = min(opposite_away+opposite_toward, 2*opposite_toward)
             # determine which mutants to merge/leave - method depends on leave_method
-            if leave_method=='by_ratio':
-                # TODO implement!
-                pass
-            elif leave_method=='random':
-                # TODO implement!
-                pass
-            else:
-                raise MutantError("Unknown leave_method value %s!"%leave_method)
-            # TODO add run-tests or unit-tests for this new complicated merging behavior!
+            # convert mutants_to_merge_key_into_val from dict to list to make it easier to manipulate
+            mutants_to_merge = list(mutants_to_merge_key_into_val.items())
+            # sort mutants_to_merge based on the factor specified by leave_method - random, or reverse sort by readcount ratio
+            #  (reverse, since we want to first sort the pairs with very different readcounts, i.e. high ratios)
+            if leave_method=='random':      random.shuffle(mutants_to_merge)
+            elif leave_method=='by_ratio':  mutants_to_merge.sort(key = lambda (x,y): self._readcount_ratio(x,y), reverse=True)
+            else:                           raise MutantError("Unknown leave_method value %s!"%leave_method)
+            # take the first N mutant pairs for merging, leaving leave_N_mutants unmerged; convert mutants_to_merge back into a dict
+            mutants_to_merge_key_into_val = dict(mutants_to_merge[:-leave_N_mutants])
             # MAYBE-TODO write more info to OUTPUT about how the number of mutants to merge is determined, etc?
+            # TODO add run-tests or unit-tests for this new complicated merging behavior!
 
         ### write basic info to OUTPUT (if block for readability)
         # this has to be done after the mutants to merge have been determined, in case we're auto-determining merge_max_distance
         if True:
             if OUTPUT is None: OUTPUT = FAKE_OUTFILE
             OUTPUT.write("# Merging adjacent mutants: max distance %s, min count ratio %s\n"%(merge_max_distance, 
-                                                                                              merge_count_ratio))
+                                                                                              min_count_ratio))
             # TODO switch to the version below after I'm done implementing and I have the new run-tests
             #OUTPUT.write("# Merging adjacent mutants: max distance %s, leave_N_mutants %s, "%(merge_max_distance, leave_N_mutants) 
-            #             +"min count ratio %s, leave_method %s\n"%(merge_count_ratio, leave_method))
+            #             +"min count ratio %s, leave_method %s\n"%(min_count_ratio, leave_method))
             OUTPUT.write(" (The merged mutant will have the position of whichever original mutant had more reads)\n")
-            if merge_count_ratio == 1:  
+            if min_count_ratio == 1:  
                 OUTPUT.write(" (Warning: minimum ratio is 1, so sometimes both mutants will have the same read count "
                              "- the earlier position is used in that case; and if many mutants in a row have the same, "
                              "read count, all will be merged into the first one.)\n")
                 # MAYBE-TODO come up with a better solution for this?
-            elif merge_count_ratio < 2:  
+            elif min_count_ratio < 2:  
                 OUTPUT.write(" (Warning: minimum ratio is below 2, so there may be odd behavior with multiple adjacent mutants"
                              " in a row - for instance mutants with 9,8,7 reads would get merged into the first one, not the "
                              "middle one - not clear what would be better. [example numbers may not match real min ratio])\n")
@@ -1816,7 +1826,7 @@ class Insertional_mutant_pool_dataset():
                                                                               description="same-strand adjacent", join_string="into")
         ### add overall counts to dataset summary
         self.summary.adjacent_max_distance = merge_max_distance
-        self.summary.adjacent_merging_count_ratio = merge_count_ratio
+        self.summary.adjacent_merging_count_ratio = min_count_ratio
         self.summary.merging_which_chromosomes = (merge_cassette_chromosomes, merge_other_chromosomes)
         for distance in set(N_merged_dict.keys() + merged_readcounts_dict.keys()):
             self.summary.merged_adjacent_same_strand_dict[distance] += N_merged_dict[distance]
@@ -1830,8 +1840,9 @@ class Insertional_mutant_pool_dataset():
     # LATER-TODO should put a header line on merging-outfile giving the main outfile name; and also give the main outfile a header line saying that the mutant merging info is in options.mutant_merging_outfile.
 
 
-    def merge_opposite_tandem_mutants(self, merge_cassette_chromosomes=False, merge_other_chromosomes=True, 
-                                      OUTPUT=sys.stdout):
+    # TODO switch leave_N_mutants default to 'auto' once finished implementing and passed old run-tests
+    def merge_opposite_tandem_mutants(self, leave_N_mutants='use_ratio', max_count_ratio=None, leave_method='by_ratio',
+                                      merge_cassette_chromosomes=False, merge_other_chromosomes=True, OUTPUT=sys.stdout):
         """ Merge opposite-strand tandem mutants (in same position but opposite strands), setting strand to 'both'. 
 
         Merge mutants if they're in the same position but on opposite strands; merge their read counts, sequences etc, 
@@ -1853,12 +1864,37 @@ class Insertional_mutant_pool_dataset():
 
         ### go over all mutant pairs, get a dict of which ones to possibly merge (same position, opposite strands, max ratio, etc)
         mutants_to_merge = self._grab_mergeable_mutants(merge_max_distance=0, same_strand=False, 
-                                                        max_count_ratio=None, min_count_ratio=None, 
+                                                        max_count_ratio=max_count_ratio, min_count_ratio=None, 
                                                         merge_cassette_chromosomes=merge_cassette_chromosomes, 
                                                         merge_other_chromosomes=merge_other_chromosomes)
 
         ### based on leave_N_mutants and leave_method, determine which ones to actually merge
-        # TODO implement leave_N_mutants and leave_method! ('by_ratio', maybe 'random') for opposite-tandem merging, too!!  Like in def merge_adjacent_mutants above.
+        # Just merge all the mutant pairs, IF we're using the ratio directly and ignoring leave_N_mutants, 
+        #  or if leave_N_mutants is 0 (i.e. merge all mutants, leave none).
+        if leave_N_mutants=='use_ratio' or leave_N_mutants==0:  pass
+        # for other leave_N_mutants values, decide which mutant pairs to merge and leave
+        else:
+            # determine the actual leave_N_mutants number if 'auto' (see docstring for how this is done and why)
+            #  (only run self.count_adjacent_mutants if it hasn't been run before)
+            if leave_N_mutants=='auto':
+                if self.summary.adjacent_max_distance is None:
+                    self.count_adjacent_mutants(count_cassette_chromosomes=merge_cassette_chromosomes, 
+                                                count_other_chromosomes=merge_other_chromosomes) 
+                opposite_away = self.summary.adjacent_opposite_toward_dict[1]
+                opposite_toward = self.summary.adjacent_opposite_away_dict[1]
+                leave_N_mutants = min((opposite_away+opposite_toward)/2, opposite_toward)
+            # determine which mutants to merge/leave - method depends on leave_method
+            # convert mutants_to_merge_key_into_val from dict to list to make it easier to manipulate
+            mutants_to_merge = list(mutants_to_merge.items())
+            # sort mutants_to_merge based on the factor specified by leave_method - random, or reverse sort by readcount ratio
+            #  (not reverse, since we want to first sort the pairs with similar readcounts, i.e. low ratios)
+            if leave_method=='random':      random.shuffle(mutants_to_merge)
+            elif leave_method=='by_ratio':  mutants_to_merge.sort(key = lambda (x,y): self._readcount_ratio(x,y), reverse=False)
+            else:                           raise MutantError("Unknown leave_method value %s!"%leave_method)
+            # take the first N mutant pairs for merging, leaving leave_N_mutants unmerged; convert mutants_to_merge back into a dict
+            mutants_to_merge = dict(mutants_to_merge[:-leave_N_mutants])
+            # MAYBE-TODO write more info to OUTPUT about how the number of mutants to merge is determined, etc?
+            # TODO add run-tests or unit-tests for this new complicated merging behavior!
 
         OUTPUT.write("# Merging opposite-strand same-position mutants (presumably tail-to-tail tandems)\n"
                     +" (%sincluding cassette chromosomes)"%('' if merge_cassette_chromosomes else 'not ')
@@ -2980,28 +3016,28 @@ class Testing_Insertional_mutant_pool_dataset(unittest.TestCase):
         positions_and_readcounts_raw += ", A+100 5, B+101 1, C+200 5, C-200 1, C+300 5, C-301 1"
         # test1 - max distance 1, min ratio 5
         dataset = self._make_test_mutant_dataset(positions_and_readcounts_raw)
-        dataset.merge_adjacent_mutants(merge_max_distance=1, merge_count_ratio=5, OUTPUT=None)
+        dataset.merge_adjacent_mutants(merge_max_distance=1, min_count_ratio=5, OUTPUT=None)
         assert dataset.summary.merged_adjacent_same_strand_dict == {1:2}
         assert dataset.summary.merged_adjacent_same_strand_readcounts_dict == {1:[(5,1),(5,1)]}
         # test2 - max distance 2, min ratio 5
         dataset = self._make_test_mutant_dataset(positions_and_readcounts_raw)
-        dataset.merge_adjacent_mutants(merge_max_distance=2, merge_count_ratio=5, OUTPUT=None)
+        dataset.merge_adjacent_mutants(merge_max_distance=2, min_count_ratio=5, OUTPUT=None)
         assert dataset.summary.merged_adjacent_same_strand_dict == {1:2, 2:1}
         assert dataset.summary.merged_adjacent_same_strand_readcounts_dict == {1:[(5,1),(5,1)], 2:[(5,1)]}
         # test3 - max distance 10, min ratio 5
         dataset = self._make_test_mutant_dataset(positions_and_readcounts_raw)
-        dataset.merge_adjacent_mutants(merge_max_distance=10, merge_count_ratio=5, OUTPUT=None)
+        dataset.merge_adjacent_mutants(merge_max_distance=10, min_count_ratio=5, OUTPUT=None)
         assert dataset.summary.merged_adjacent_same_strand_dict == {1:2, 2:1, 5:1}
         assert dataset.summary.merged_adjacent_same_strand_readcounts_dict == {1:[(5,1),(5,1)], 2:[(5,1)], 5:[(5,1)]}
         # test4 - max distance 10, min ratio 2
         dataset = self._make_test_mutant_dataset(positions_and_readcounts_raw)
-        dataset.merge_adjacent_mutants(merge_max_distance=10, merge_count_ratio=2, OUTPUT=None)
+        dataset.merge_adjacent_mutants(merge_max_distance=10, min_count_ratio=2, OUTPUT=None)
         assert dataset.summary.merged_adjacent_same_strand_dict == {1:3, 2:1, 5:2}
         assert dataset.summary.merged_adjacent_same_strand_readcounts_dict == {1:[(4,2),(5,1),(5,1)], 
                                                                                2:[(5,1)], 5:[(4,2),(5,1)]}
         # test5 - max distance 10, min ratio 1
         dataset = self._make_test_mutant_dataset(positions_and_readcounts_raw)
-        dataset.merge_adjacent_mutants(merge_max_distance=10, merge_count_ratio=1, OUTPUT=None)
+        dataset.merge_adjacent_mutants(merge_max_distance=10, min_count_ratio=1, OUTPUT=None)
         assert dataset.summary.merged_adjacent_same_strand_dict == {1:4, 2:1, 5:2}
         assert dataset.summary.merged_adjacent_same_strand_readcounts_dict == {1:[(1,1),(4,2),(5,1),(5,1)], 
                                                                                2:[(5,1)], 5:[(4,2),(5,1)]}
@@ -3009,38 +3045,38 @@ class Testing_Insertional_mutant_pool_dataset(unittest.TestCase):
         # transitive merging: make sure that A merges into C if A should merge into B and B into C, 
         positions_and_readcounts_raw = "1+100 1, 1+101 2, 1+102 4"
         dataset = self._make_test_mutant_dataset(positions_and_readcounts_raw)
-        dataset.merge_adjacent_mutants(merge_max_distance=1, merge_count_ratio=2, OUTPUT=None)
+        dataset.merge_adjacent_mutants(merge_max_distance=1, min_count_ratio=2, OUTPUT=None)
         assert [m.position.min_position for m in dataset] == [102]
         # transitive merging addendum - check that in the same case, A wouldn't merge into C without B there
         positions_and_readcounts_raw = "1+100 1, 1+102 4"
         dataset = self._make_test_mutant_dataset(positions_and_readcounts_raw)
-        dataset.merge_adjacent_mutants(merge_max_distance=1, merge_count_ratio=2, OUTPUT=None)
+        dataset.merge_adjacent_mutants(merge_max_distance=1, min_count_ratio=2, OUTPUT=None)
         assert len(dataset) == 2
         # another transitive merging case, with opposite merge direction and higher distances
         positions_and_readcounts_raw = "1+100 4, 1+102 2, 1+105 1"
         dataset = self._make_test_mutant_dataset(positions_and_readcounts_raw)
-        dataset.merge_adjacent_mutants(merge_max_distance=4, merge_count_ratio=2, OUTPUT=None)
+        dataset.merge_adjacent_mutants(merge_max_distance=4, min_count_ratio=2, OUTPUT=None)
         assert [m.position.min_position for m in dataset] == [100]
         # another transitive merging case, with opposite strand and a longer chain
         positions_and_readcounts_raw = "1-100 8, 1-101 4, 1-102 2, 1-103 1"
         dataset = self._make_test_mutant_dataset(positions_and_readcounts_raw)
-        dataset.merge_adjacent_mutants(merge_max_distance=1, merge_count_ratio=2, OUTPUT=None)
+        dataset.merge_adjacent_mutants(merge_max_distance=1, min_count_ratio=2, OUTPUT=None)
         assert [m.position.min_position for m in dataset] == [100]
         # split merging 1 - if B could be merged into either A or C, pick the closer one
         positions_and_readcounts_raw = "1+99 5, 1+100 1, 1+102 10"
         dataset = self._make_test_mutant_dataset(positions_and_readcounts_raw)
-        dataset.merge_adjacent_mutants(merge_max_distance=2, merge_count_ratio=5, OUTPUT=None)
+        dataset.merge_adjacent_mutants(merge_max_distance=2, min_count_ratio=5, OUTPUT=None)
         assert dict([(m.position.min_position,m.total_read_count) for m in dataset]) == {99:6, 102:10}
         # split merging 2 - if B could be merged into either A or C and distances are the same, pick the higher-read one
         positions_and_readcounts_raw = "1+99 5, 1+100 1, 1+101 10"
         dataset = self._make_test_mutant_dataset(positions_and_readcounts_raw)
-        dataset.merge_adjacent_mutants(merge_max_distance=2, merge_count_ratio=5, OUTPUT=None)
+        dataset.merge_adjacent_mutants(merge_max_distance=2, min_count_ratio=5, OUTPUT=None)
         assert dict([(m.position.min_position,m.total_read_count) for m in dataset]) == {99:5, 101:11}
         # split merging 3 - if B could be merged into either A or C and distances and readcounts are the same, 
         #                       pick the earlier-position one (arbitrary but nonrandom for ease of testing)
         positions_and_readcounts_raw = "1+99 5, 1+100 1, 1+101 5"
         dataset = self._make_test_mutant_dataset(positions_and_readcounts_raw)
-        dataset.merge_adjacent_mutants(merge_max_distance=2, merge_count_ratio=5, OUTPUT=None)
+        dataset.merge_adjacent_mutants(merge_max_distance=2, min_count_ratio=5, OUTPUT=None)
         assert dict([(m.position.min_position,m.total_read_count) for m in dataset]) == {99:6, 101:5}
         ### tests for tests for merge_cassette_chromosomes and merge_other_chromosomes args
         positions_and_readcounts_raw = ("chromosome_1+100 5, chromosome_1+101 1, "
@@ -3048,24 +3084,24 @@ class Testing_Insertional_mutant_pool_dataset(unittest.TestCase):
                                         "something_else+100 5, something_else+101 1")
         # merge all
         dataset = self._make_test_mutant_dataset(positions_and_readcounts_raw, raw_chrom_names=True)
-        dataset.merge_adjacent_mutants(merge_max_distance=1, merge_count_ratio=5, OUTPUT=None, 
+        dataset.merge_adjacent_mutants(merge_max_distance=1, min_count_ratio=5, OUTPUT=None, 
                                        merge_cassette_chromosomes=True, merge_other_chromosomes=True)
         assert len(dataset) == 3
         # don't merge cassette
         dataset = self._make_test_mutant_dataset(positions_and_readcounts_raw, raw_chrom_names=True)
-        dataset.merge_adjacent_mutants(merge_max_distance=1, merge_count_ratio=5, OUTPUT=None, 
+        dataset.merge_adjacent_mutants(merge_max_distance=1, min_count_ratio=5, OUTPUT=None, 
                                        merge_cassette_chromosomes=False, merge_other_chromosomes=True)
         assert len(dataset) == 4
         assert dataset.summary.mutants_in_chromosome('insertion_cassette') == 2
         # don't merge other
         dataset = self._make_test_mutant_dataset(positions_and_readcounts_raw, raw_chrom_names=True)
-        dataset.merge_adjacent_mutants(merge_max_distance=1, merge_count_ratio=5, OUTPUT=None, 
+        dataset.merge_adjacent_mutants(merge_max_distance=1, min_count_ratio=5, OUTPUT=None, 
                                        merge_cassette_chromosomes=True, merge_other_chromosomes=False)
         assert len(dataset) == 4
         assert dataset.summary.mutants_in_chromosome('something_else') == 2
         # don't merge cassette or other
         dataset = self._make_test_mutant_dataset(positions_and_readcounts_raw, raw_chrom_names=True)
-        dataset.merge_adjacent_mutants(merge_max_distance=1, merge_count_ratio=5, OUTPUT=None, 
+        dataset.merge_adjacent_mutants(merge_max_distance=1, min_count_ratio=5, OUTPUT=None, 
                                        merge_cassette_chromosomes=False, merge_other_chromosomes=False)
         assert len(dataset) == 5
         assert dataset.summary.mutants_in_chromosome('chromosome_1') == 1
@@ -3077,16 +3113,16 @@ class Testing_Insertional_mutant_pool_dataset(unittest.TestCase):
         # ratio<1
         for ratio in (0, 0.1, 0.5, 0.99):
             dataset = self._make_test_mutant_dataset(positions_and_readcounts_raw, raw_chrom_names=True)
-            self.assertRaises(MutantError, dataset.merge_adjacent_mutants, merge_count_ratio=ratio, OUTPUT=None)
+            self.assertRaises(MutantError, dataset.merge_adjacent_mutants, min_count_ratio=ratio, OUTPUT=None)
         # summary.adjacent_merging_count_ratio set (either directly or through merging twice
         for ratio in (1,2,3,10,100,1000):
             dataset = self._make_test_mutant_dataset(positions_and_readcounts_raw, raw_chrom_names=True)
             dataset.summary.adjacent_merging_count_ratio = 1
-            self.assertRaises(MutantError, dataset.merge_adjacent_mutants, merge_count_ratio=ratio, OUTPUT=None)
+            self.assertRaises(MutantError, dataset.merge_adjacent_mutants, min_count_ratio=ratio, OUTPUT=None)
         for ratio in (1,2,3,10,100,1000):
             dataset = self._make_test_mutant_dataset(positions_and_readcounts_raw, raw_chrom_names=True)
-            dataset.merge_adjacent_mutants(merge_count_ratio=ratio, OUTPUT=None)
-            self.assertRaises(MutantError, dataset.merge_adjacent_mutants, merge_count_ratio=ratio, OUTPUT=None)
+            dataset.merge_adjacent_mutants(min_count_ratio=ratio, OUTPUT=None)
+            self.assertRaises(MutantError, dataset.merge_adjacent_mutants, min_count_ratio=ratio, OUTPUT=None)
         # max_distance inconsistent with previous setting in dataset.summary
         distances = set(range(10))
         for dist1 in distances:
@@ -3216,7 +3252,7 @@ class Testing_Insertional_mutant_pool_dataset(unittest.TestCase):
             assert (dataset.summary.same_position_opposite, dataset.summary.adjacent_same_strand_dict) == (tandem, {1:adj})
         ### test different_parameters arg
         dataset = self._make_test_mutant_dataset(positions_and_readcounts_raw, raw_chrom_names=True)
-        dataset.merge_adjacent_mutants(merge_max_distance=2, merge_count_ratio=5, OUTPUT=None, 
+        dataset.merge_adjacent_mutants(merge_max_distance=2, min_count_ratio=5, OUTPUT=None, 
                                        merge_cassette_chromosomes=True, merge_other_chromosomes=False)
         # using same count_* args as for merging, and max_distance >= that for merging - works
         for dist in (2,5):
