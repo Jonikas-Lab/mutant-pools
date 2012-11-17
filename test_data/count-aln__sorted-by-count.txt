@@ -19,7 +19,6 @@
 #   (adjacent-merging/counting max distance):	(1)
 #   (if we're including mutants in cassette and in non-nuclear chromosomes):	(False, True)
 #  merged same-strand adjacent mutant pairs and opposite-strand tandem pairs:	0, 0
-#   (adjacent-merging min count ratio - None if no adjacent-merging):	(None)
 #  remaining same-position opposite-strand pairs (if not merged as tandems):	0
 #  remaining adjacent opposite-strand "toward-facing" pairs (those are definitely real):	0
 #  remaining adjacent opposite-strand "away-facing" pairs (% of toward-facing):	0 (N/A)
