@@ -831,8 +831,9 @@ class Dataset_summary_data():
         #  and the dataset name (None if it's a single dataset, string for multi-datasets)
         self.dataset_name = dataset_name
         self.dataset = dataset
-        # information on reads that aren't included in the dataset mutants
+        # information on reads that aren't included in the dataset mutants - unknown or 0 by default
         self.discarded_read_count, self.discarded_wrong_start, self.discarded_no_cassette = 'unknown', 'unknown', 'unknown'
+        self.discarded_other_end = 0
         self.non_aligned_read_count, self.unaligned, self.multiple_aligned = 0, 'unknown', 'unknown'
         self.ignored_region_read_counts = defaultdict(int)
         # mutant merging information
@@ -853,8 +854,8 @@ class Dataset_summary_data():
 
     # TODO unit-test all these methods!
 
-    def add_discarded_reads(self, N_all_discarded, N_wrong_start, N_no_cassette, replace=False):
-        """ Add not-None arg values to discarded_read_count, discarded_wrong_start and discarded_no_cassette (or replace). 
+    def add_discarded_reads(self, N_all_discarded, N_wrong_start, N_no_cassette, N_other_end, replace=False):
+        """ Add not-None arg values to appropriate self.discarded_* attributes (or replace them). 
         
         If the original values are 'unknown', or replace is True, replace instead of adding.
         If any of the args is None, don't modify the original value, unles replace is True, then set to 'unknown'.
@@ -871,9 +872,14 @@ class Dataset_summary_data():
             if replace or self.discarded_no_cassette=='unknown': self.discarded_no_cassette = int(N_no_cassette)
             else:                                                self.discarded_no_cassette += int(N_no_cassette)
         elif replace:                                            self.discarded_no_cassette = 'unknown'
+        if N_other_end is not None:
+            if replace or self.discarded_other_end=='unknown':   self.discarded_other_end = int(N_other_end)
+            else:                                                self.discarded_other_end += int(N_other_end)
+        elif replace:                                            self.discarded_other_end = 'unknown'
         # special case for when we don't know the specific discarded categories, but we know total discarded is 0, 
         #  so the specific categories must be 0 too:
-        if self.discarded_read_count == 0:   self.discarded_wrong_start, self.discarded_no_cassette = 0, 0
+        if self.discarded_read_count == 0:   
+            self.discarded_wrong_start, self.discarded_no_cassette, self.discarded_other_end = 0, 0, 0
 
     def add_nonaligned_reads(self, N_all_non_aligned, N_unaligned, N_multiple_aligned, replace=False):
         """ Add not-None arg values to non_aligned_read_count, unaligned and multiple_aligned (or replace them).
@@ -2110,6 +2116,10 @@ class Insertional_mutant_pool_dataset():
                    lambda summ,mutants: _fraction_or_unknown(summ.discarded_wrong_start, [summ.full_read_count])))
         DVG.append((line_prefix+"discarded due to no cassette (% of total):", 
                    lambda summ,mutants: _fraction_or_unknown(summ.discarded_no_cassette, [summ.full_read_count])))
+        all_other_end = sum([summ.discarded_other_end for summ in summaries])
+        if all_other_end:
+            DVG.append((line_prefix+"separated other-end reads (3'/5') (% of total):", 
+                       lambda summ,mutants: _fraction_or_unknown(summ.discarded_other_end, [summ.full_read_count])))
 
         DVG.append((header_prefix+"Reads without a unique alignment (% of total, % of post-preprocessing):", 
                     lambda summ,mutants: _fraction_or_unknown(summ.non_aligned_read_count, 
