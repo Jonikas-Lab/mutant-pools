@@ -363,6 +363,15 @@ def read_joint_mutant_file(infile, which_read_subtype):
     return sample_data, sample_names, mutant_data
 
 
+def _read_mutant_file(infile):
+    """ Read mutant input file (old .txt format, or new .pickle format). """
+    if infile.endswith('.pickle'):
+        current_dataset = general_utilities.unpickle(infile)
+    else:
+        current_dataset = Insertional_mutant_pool_dataset(infile=infile)
+        current_dataset.count_adjacent_mutants(OUTPUT=None)
+    return current_dataset
+
 def remove_mutants(all_data, file_with_mutants_to_remove, min_readcount_for_removal):
     """ ______________
     Doesn't modify the input."""
@@ -370,8 +379,7 @@ def remove_mutants(all_data, file_with_mutants_to_remove, min_readcount_for_remo
     # TODO write somewhere on the plot that mutants were removed?
     sample_data, sample_names, mutant_data = all_data
     # get a list of (chrom,strand,min_pos) tuples for the mutants to remove from the dataset
-    dataset_to_remove = Insertional_mutant_pool_dataset()
-    dataset_to_remove.read_data_from_file(file_with_mutants_to_remove)
+    dataset_to_remove = _read_mutant_file(file_with_mutants_to_remove)
     mutants_to_remove = set([(mutant.position.chromosome, mutant.position.strand, str(mutant.position.min_position)) 
                              for mutant in dataset_to_remove])
     # go over all mutants in full dataset, only copy ones not in mutants_to_remove to the new datasets
@@ -414,7 +422,7 @@ def get_mutant_colors(color_cassette_mutants=False, color_mutants_from_files={},
         if verbose:
             print "mutants with %s+ reads in file %s will be colored %s"%(read_count_cutoff, mutant_file, color)
         dataset = Insertional_mutant_pool_dataset()
-        dataset.read_data_from_file(mutant_file)
+        dataset = _read_mutant_file(mutant_file)
         for mutant in dataset:
             chrom, strand, min_pos = mutant.position.chromosome, mutant.position.strand, mutant.position.min_position
             # if we're coloring cassette mutants grey, exclude them from this
