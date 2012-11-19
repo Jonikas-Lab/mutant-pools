@@ -976,6 +976,9 @@ class Dataset_summary_data():
         return self.cassette_chromosomes | self.other_chromosomes
 
     @property
+    def N_mutants(self):
+        return len([1 for m in self.dataset if m.read_info(self.dataset_name).total_read_count]) 
+    @property
     def mutants_in_genes(self):
         return len([1 for m in self.dataset if m.read_info(self.dataset_name).total_read_count 
                     and m.gene not in SPECIAL_GENE_CODES.all_codes])
@@ -1136,7 +1139,7 @@ class Insertional_mutant_pool_dataset():
     # Note that all of this will work just fine for multi-datasets without changes, since multi-datasets simply contain
     #  the same dictionary but with multi-dataset mutants instead of single-dataset ones.
 
-    def __len__(self):      return len(self._mutants_by_position)
+    def __len__(self):      return self.summary.N_mutants
     def __iter__(self):     return self._mutants_by_position.itervalues()
     # for multi-datasets, for iterating over only mutants with 1+ reads in a particular dataset, see mutants_in_dataset()
 
