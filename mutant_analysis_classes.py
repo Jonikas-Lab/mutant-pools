@@ -1581,8 +1581,7 @@ class Insertional_mutant_pool_dataset():
 
     ######### MUTANT-MERGING AND ADJACENT-COUNTING
 
-    def _possibly_adjacent_positions(self, max_distance, same_strand_only=False, include_cassette_chromosomes=True, 
-                                     include_other_chromosomes=False):
+    def _possibly_adjacent_positions(self, max_distance, same_strand_only, include_cassette_chromosomes, include_other_chromosomes):
         """ Generates all mutant position pairs that might be within max_distance of each other (same strand, or not).
 
         May or may not be well optimized (the most naive way would just be combinations(all_positions,2)).
@@ -1773,7 +1772,7 @@ class Insertional_mutant_pool_dataset():
         return N_merged, N_merged_dict, merged_readcounts_dict
 
     def merge_adjacent_mutants(self, merge_max_distance=1, leave_N_mutants='auto', min_count_ratio=100, leave_method='by_ratio',
-                               merge_cassette_chromosomes=False, merge_other_chromosomes=True, OUTPUT=sys.stdout):
+                               merge_cassette_chromosomes=False, merge_other_chromosomes=False, OUTPUT=sys.stdout):
         """ Merge adjacent mutants based on strand, distance, and count ratio or number; save counts.
 
         The idea is to merge mutants that are likely to actually be a single mutant, but have different positions due to PCR or
@@ -1843,7 +1842,7 @@ class Insertional_mutant_pool_dataset():
                 # MAYBE-TODO or allow this and just re-run count_adjacent_mutants afterward with new value?
             if not self.summary.merging_which_chromosomes in [(merge_cassette_chromosomes,merge_other_chromosomes), (None,None)]:
                 raise MutantError("Cannot change which chromosomes are subject to mutant-merging! "
-                                 +"Currently %s for cassette, %s for non-nuclear."%self.summary.merging_which_chromosomes
+                                 +"Currently %s for cassette, %s for non-nuclear. "%self.summary.merging_which_chromosomes
                                  +"Trying to change to %s and %s."%(merge_cassette_chromosomes, merge_other_chromosomes))
             if any([mutant.position.strand=='both' for mutant in self]):
                 raise MutantError("merge_adjacent_mutants should be run BEFORE merge_opposite_tandem_mutants "
@@ -1897,7 +1896,8 @@ class Insertional_mutant_pool_dataset():
         self.summary.merged_adjacent_same_strand_readcounts_dict = sort_lists_inside_dict(
                                                                 self.summary.merged_adjacent_same_strand_readcounts_dict)
         # Always do an adjacent-mutant re-count after merging!
-        self.count_adjacent_mutants(OUTPUT=None)
+        self.count_adjacent_mutants(count_cassette_chromosomes=merge_cassette_chromosomes, 
+                                    count_other_chromosomes=merge_other_chromosomes, OUTPUT=None)
         OUTPUT.write("# Finished merging adjacent mutants: %s pairs merged\n"%self.summary.merged_adjacent_pairs) 
 
     # TODO was there some other bug when doing tandem-merging and adjacent-merging at once?  I think something weird came up in actual data analysis - see ../../1206_Ru-screen1_deepseq-data-early/notes.txt  "Mutants" section.
@@ -1905,7 +1905,7 @@ class Insertional_mutant_pool_dataset():
 
 
     def merge_opposite_tandem_mutants(self, leave_N_mutants='auto', max_count_ratio=None, leave_method='by_ratio',
-                                      merge_cassette_chromosomes=False, merge_other_chromosomes=True, OUTPUT=sys.stdout):
+                                      merge_cassette_chromosomes=False, merge_other_chromosomes=False, OUTPUT=sys.stdout):
         """ Merge opposite-strand tandem mutants (in same position but opposite strands) depending on ratio; set strand to 'both'. 
 
         The idea is to merge mutants that are likely to actually be a single mutant that has two opposite-direction cassette copies
@@ -1973,12 +1973,13 @@ class Insertional_mutant_pool_dataset():
         self.summary.merged_opposite_tandems_readcounts.sort()
         self.summary.merging_which_chromosomes = (merge_cassette_chromosomes, merge_other_chromosomes)
         # Always do an adjacent-mutant re-count after merging!
-        self.count_adjacent_mutants(OUTPUT=None)
+        self.count_adjacent_mutants(count_cassette_chromosomes=merge_cassette_chromosomes, 
+                                    count_other_chromosomes=merge_other_chromosomes, OUTPUT=None)
         OUTPUT.write("# Finished merging opposite-strand same-position mutants: %s pairs merged\n"%\
                      self.summary.merged_opposite_tandems)
 
     def count_adjacent_mutants(self, max_distance_to_print=None, max_distance_to_count=10000, 
-                               count_cassette_chromosomes=False, count_other_chromosomes=True, 
+                               count_cassette_chromosomes=False, count_other_chromosomes=False, 
                                different_parameters=False, OUTPUT=None):
         """ Count various categories of adjacent mutants (as dist:count dictionaries); save data to self.summary. 
         

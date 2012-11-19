@@ -16,7 +16,7 @@
 #  Reads with cassette direction matching chromosome - strand (% of aligned):	2 (5.1%)
 ## Mutant merging/counts (deciding when different-position reads should be one mutant)	
 #   (adjacent-merging/counting max distance):	(1)
-#   (if we're including mutants in cassette and in non-nuclear chromosomes):	(False, True)
+#   (if we're including mutants in cassette and in non-nuclear chromosomes):	(False, False)
 #  merged same-strand adjacent mutant pairs and opposite-strand tandem pairs:	0, 0
 #  remaining same-position opposite-strand pairs (if not merged as tandems):	2
 #  remaining adjacent opposite-strand "toward-facing" pairs (those are definitely real):	0

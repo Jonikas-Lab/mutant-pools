@@ -127,9 +127,9 @@ def define_option_parser():
 
     parser.add_option('-j', '--merge_in_cassette', action='store_true', default=False, 
                       help="For adjacent and tandem merging/counts: include mutants in cassette (default %default)")
-    parser.add_option('-J', '--dont_merge_in_other_chrom', action='store_true', default=False, 
-                      help="For adjacent and tandem merging/counts: don't include mutants in non-cassette non-genome "
-                          +"chromosomes like chloroplast and mitochondrial(default %default)")
+    parser.add_option('-J', '--merge_in_other_chrom', action='store_true', default=False, 
+                      help="For adjacent and tandem merging/counts: include mutants in non-cassette non-nuclear chromosomes "
+                          +"(like chloroplast and mitochondrial) (default %default)")
 
     parser.add_option('-X', '--remove_mutants_from_file', metavar='FILE',
                       help='Remove all mutants present in FILE from the datasets (see -z/-Z for read count cutoff).')
@@ -489,7 +489,7 @@ def main(infiles, outfile, options):
             all_alignment_data.merge_adjacent_mutants(merge_max_distance=options.adjacent_max_distance, 
                       leave_N_mutants=leave_N_mutants, min_count_ratio = options.merge_adjacent_count_ratio, 
                       leave_method=options.merge_mutant_choice_method, merge_cassette_chromosomes = options.merge_in_cassette, 
-                      merge_other_chromosomes = (not options.dont_merge_in_other_chrom), OUTPUT = MERGEFILE)
+                      merge_other_chromosomes = options.merge_in_other_chrom, OUTPUT = MERGEFILE)
             if options.merge_in_cassette and options.separate_cassette:
                 cassette_alignment_data.merge_adjacent_mutants(merge_max_distance = options.adjacent_max_distance, 
                           leave_N_mutants=leave_N_mutants, min_count_ratio = options.merge_adjacent_count_ratio, 
@@ -503,7 +503,7 @@ def main(infiles, outfile, options):
             all_alignment_data.merge_opposite_tandem_mutants(leave_N_mutants=leave_N_mutants, 
                           max_count_ratio = options.merge_opposite_count_ratio, leave_method=options.merge_mutant_choice_method, 
                           merge_cassette_chromosomes = options.merge_in_cassette, 
-                          merge_other_chromosomes = (not options.dont_merge_in_other_chrom), OUTPUT = MERGEFILE)
+                          merge_other_chromosomes = options.merge_in_other_chrom, OUTPUT = MERGEFILE)
             if options.merge_in_cassette and options.separate_cassette:
                 cassette_alignment_data.merge_opposite_tandem_mutants(leave_N_mutants=leave_N_mutants, 
                               max_count_ratio = options.merge_opposite_count_ratio, leave_method=options.merge_mutant_choice_method, 
@@ -513,7 +513,7 @@ def main(infiles, outfile, options):
         #  so just run it again here with detail-printing - MAYBE-TODO find a more efficient way instead of counting twice?
         all_alignment_data.count_adjacent_mutants(max_distance_to_print = options.adjacent_max_distance, 
                                   max_distance_to_count = 10000, count_cassette_chromosomes = options.merge_in_cassette, 
-                                  count_other_chromosomes = (not options.dont_merge_in_other_chrom), OUTPUT = MERGEFILE)
+                                  count_other_chromosomes = options.merge_in_other_chrom, OUTPUT = MERGEFILE)
         if options.separate_cassette:
             cassette_alignment_data.count_adjacent_mutants(max_distance_to_print = options.adjacent_max_distance, 
                                   max_distance_to_count = 10, count_cassette_chromosomes = True, 
