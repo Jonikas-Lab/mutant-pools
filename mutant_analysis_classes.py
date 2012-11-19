@@ -2055,24 +2055,24 @@ class Insertional_mutant_pool_dataset():
             if pos1.chromosome != pos2.chromosome:  continue
             distance = abs(pos2.min_position-pos1.min_position)
             if distance > max_distance_to_count:    continue
+            readcount1 = self.get_mutant(pos1).total_read_count
+            readcount2 = self.get_mutant(pos2).total_read_count
+            sorted_readcounts = tuple(sorted([readcount1,readcount2], reverse=True))
             # same position, opposite strands
             if pos1.min_position==pos2.min_position:
                 assert pos1.strand != pos2.strand, "Two mutants with same position and strand shouldn't happen!"
                 assert 'both' not in (pos1.strand,pos2.strand), "A both-strand mutant can't be same-position to another!"
                 same_position_opposite_strands += 1
-                same_position_opposite_strands_readcounts.append(self._readcounts_sorted(pos1, pos2))
-                OUTPUT.write("  opposite-strand same-position tandem mutants: %s and %s.\n"%(pos1,pos2))
+                same_position_opposite_strands_readcounts.append(sorted_readcounts)
+                OUTPUT.write("  opposite-strand same-position tandem mutants: %s and %s, %s and %s reads.\n"%(pos1,pos2,
+                                                                                                         readcount1,readcount2))
             # adjacent positions, same strand - remember that both-strand mutants are same-strand with everything!
             elif pos1.strand == pos2.strand or 'both' in (pos1.strand,pos2.strand): 
                 assert pos1.min_position!=pos2.min_position, "Two mutants with same position and strand shouldn't happen!"
                 adjacent_same_strand_dict[distance] += 1
-                adjacent_same_strand_readcounts_dict[distance].append(self._readcounts_sorted(pos1, pos2))
+                adjacent_same_strand_readcounts_dict[distance].append(sorted_readcounts)
                 if distance <= max_distance_to_print:
-                    assert (pos1 in self and pos2 in self)
-                    mutant1_readcount = self.get_mutant(pos1).total_read_count
-                    mutant2_readcount = self.get_mutant(pos2).total_read_count
-                    OUTPUT.write("  same-strand adjacent mutants: %s and %s, %s and %s reads.\n"%(pos1,pos2, 
-                                                                                     mutant1_readcount, mutant2_readcount))
+                    OUTPUT.write("  same-strand adjacent mutants: %s and %s, %s and %s reads.\n"%(pos1,pos2, readcount1,readcount2))
             # adjacent positions, opposite strands
             else:
                 assert pos1.min_position != pos2.min_position and pos1.strand != pos2.strand, "Not adjacent-opposite!"
@@ -2082,14 +2082,16 @@ class Insertional_mutant_pool_dataset():
                 first_pos = min([pos1, pos2])
                 if first_pos.strand == '+':
                     adjacent_opposite_strands_away_dict[distance] += 1
-                    adjacent_opposite_strands_away_readcounts_dict[distance].append(self._readcounts_sorted(pos1, pos2))
+                    adjacent_opposite_strands_away_readcounts_dict[distance].append(sorted_readcounts)
                     if distance <= max_distance_to_print:
-                        OUTPUT.write('  adjacent opposite-strand away-facing mutants: %s and %s.\n'%(pos1,pos2))
+                        OUTPUT.write('  adjacent opposite-strand away-facing mutants: %s and %s, %s and %s reads.\n'%(pos1,pos2,
+                                                                                                         readcount1,readcount2))
                 else:
                     adjacent_opposite_strands_toward_dict[distance] += 1
-                    adjacent_opposite_strands_toward_readcounts_dict[distance].append(self._readcounts_sorted(pos1, pos2))
+                    adjacent_opposite_strands_toward_readcounts_dict[distance].append(sorted_readcounts)
                     if distance <= max_distance_to_print:
-                        OUTPUT.write('  adjacent opposite-strand toward-facing mutants: %s and %s.\n'%(pos1,pos2))
+                        OUTPUT.write('  adjacent opposite-strand toward-facing mutants: %s and %s, %s and %s reads.\n'%(pos1,pos2,
+                                                                                                         readcount1,readcount2))
 
         # add results to dataset summary; sort all the ratio-lists, since the order doesn't matter
         self.summary.adjacent_same_strand_dict = adjacent_same_strand_dict

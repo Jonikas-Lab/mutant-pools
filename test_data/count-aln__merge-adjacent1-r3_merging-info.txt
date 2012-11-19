@@ -11,5 +11,5 @@
 # Counting adjacent mutants: actually counting mutants up to distance 10000, but only printing info for up to distance 1 - you can get the full data from the pickle file
  (not including cassette chromosomes) (not including non-nuclear chromosomes)
   same-strand adjacent mutants: chromosome_A + 300-? and chromosome_A + 301-?, 1 and 1 reads.
-  adjacent opposite-strand away-facing mutants: chromosome_A + 600-? and chromosome_A - ?-602.
+  adjacent opposite-strand away-facing mutants: chromosome_A + 600-? and chromosome_A - ?-602, 5 and 1 reads.
 # Finished counting (actually counted mutants up to distance 10000, but only printing info for up to distance 1 - you can get the full data from the pickle file). Adjacent mutant counts (max distance 1): 1 adjacent same-strand pairs, 0 same-position opposite-strand pairs, 1 adjacent opposite-strand away-facing pairs (may be tandems with a deletion), 0 adjacent opposite-strand toward-facing pairs (definitely two separate mutants).
