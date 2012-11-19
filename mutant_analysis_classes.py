@@ -21,7 +21,7 @@ import HTSeq
 from BCBio import GFF
 # my modules
 from general_utilities import split_into_N_sets_by_counts, add_dicts_of_ints, sort_lists_inside_dict, keybased_defaultdict, value_and_percentages, FAKE_OUTFILE, NaN, nan_func, merge_values_to_unique
-from DNA_basic_utilities import SEQ_ENDS, SEQ_STRANDS, SEQ_DIRECTIONS, SEQ_ORIENTATIONS, position_test_contains, position_test_overlap
+from DNA_basic_utilities import SEQ_ENDS, SEQ_STRANDS, SEQ_DIRECTIONS, SEQ_ORIENTATIONS, position_test_contains, position_test_overlap, chromosome_sort_key
 from seq_basic_utilities import get_seq_count_from_collapsed_header
 from deepseq_utilities import check_mutation_count_try_all_methods
 # there's a "from parse_annotation_file import parse_gene_annotation_file" in one function, not always needed
@@ -170,16 +170,14 @@ class Insertion_position(object):
         """ Make key for sorting/comparison - based on chromosome/position/strand, with improved chromosome-number sorting.
 
         First two fields are chromosome data - splits chromosome into name/number (both optional), 
-         so that "chr2" sorts before "chr12" (but 'chr' before 'chr1', and 'other_chr1' after 'chr4').
+         so that 'chr2' sorts before 'chr12' (but 'chr' before 'chr1', and 'other_chr1' after 'chr4'), and also so that chromosomes
+         sort first, then other names (cassette, chloroplast/mitochondrial, anything else), then scaffolds.
         Next two fields are min_/max_position - these are always numerically defined, so ?-101 and 100-? will sort together
          (as opposed to if we used position_before/_after, which can be None).
         Next field is strand - we want the sorting on position BEFORE strand, it's more readable/sensible that way.
         Final two fields are position_before/after, to ensure ?-101 isn't considered equal to 100-101.
         """
-        chromosome_data = re.search('^(?P<name>.*[^\d])?(?P<number>\d*)', self.chromosome)
-        chromosome_name = chromosome_data.group('name')         # if there were no non-digit characters, this is None
-        chromosome_number = int(chromosome_data.group('number')) if chromosome_data.group('number') else 0
-        all_position_values = (chromosome_name, chromosome_number, self.min_position, self.max_position, 
+        all_position_values = (chromosome_sort_key(self.chromosome), self.min_position, self.max_position, 
                                self.strand, self.position_before, self.position_after)
         return all_position_values
 
@@ -1588,7 +1586,8 @@ class Insertional_mutant_pool_dataset():
 
         If same_strand_only is True, both-strand positions are counted as both +strand and -strand.
         """
-        for chromosome in self.summary.all_chromosomes:
+        # using chromosome_sort_key to sort the chromosomes sensibly! Matters when we're printing merge/count details.
+        for chromosome in sorted(self.summary.all_chromosomes, key=chromosome_sort_key):
             if include_cassette_chromosomes==False and is_cassette_chromosome(chromosome): continue
             if include_other_chromosomes==False and is_other_chromosome(chromosome):       continue
 
