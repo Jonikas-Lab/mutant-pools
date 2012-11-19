@@ -1896,6 +1896,8 @@ class Insertional_mutant_pool_dataset():
         # sort the lists inside the readcounts dict, since the order doesn't matter
         self.summary.merged_adjacent_same_strand_readcounts_dict = sort_lists_inside_dict(
                                                                 self.summary.merged_adjacent_same_strand_readcounts_dict)
+        # Always do an adjacent-mutant re-count after merging!
+        self.count_adjacent_mutants(OUTPUT=None)
         OUTPUT.write("# Finished merging adjacent mutants: %s pairs merged\n"%self.summary.merged_adjacent_pairs) 
 
     # TODO was there some other bug when doing tandem-merging and adjacent-merging at once?  I think something weird came up in actual data analysis - see ../../1206_Ru-screen1_deepseq-data-early/notes.txt  "Mutants" section.
@@ -1970,6 +1972,8 @@ class Insertional_mutant_pool_dataset():
         # need to sort the ratio list, since the order doesn't matter
         self.summary.merged_opposite_tandems_readcounts.sort()
         self.summary.merging_which_chromosomes = (merge_cassette_chromosomes, merge_other_chromosomes)
+        # Always do an adjacent-mutant re-count after merging!
+        self.count_adjacent_mutants(OUTPUT=None)
         OUTPUT.write("# Finished merging opposite-strand same-position mutants: %s pairs merged\n"%\
                      self.summary.merged_opposite_tandems)
 

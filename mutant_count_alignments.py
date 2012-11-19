@@ -509,6 +509,8 @@ def main(infiles, outfile, options):
                               max_count_ratio = options.merge_opposite_count_ratio, leave_method=options.merge_mutant_choice_method, 
                               merge_cassette_chromosomes = True, merge_other_chromosomes = False, OUTPUT = CASSETTE_MERGEFILE)
         # 3) count adjacent mutants, even if not doing any merging
+        # Actually there's always a count done after each merge, but that count doesn't print the details to anything, 
+        #  so just run it again here with detail-printing - MAYBE-TODO find a more efficient way instead of counting twice?
         all_alignment_data.count_adjacent_mutants(max_distance_to_print = options.adjacent_max_distance, 
                                   max_distance_to_count = 10000, count_cassette_chromosomes = options.merge_in_cassette, 
                                   count_other_chromosomes = (not options.dont_merge_in_other_chrom), OUTPUT = MERGEFILE)
