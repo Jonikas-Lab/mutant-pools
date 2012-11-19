@@ -625,8 +625,8 @@ class Insertional_mutant():
         for (seq,count) in other.sequences_and_counts.iteritems():
             self.sequences_and_counts[seq] += count
         self.unique_sequence_count = len(self.sequences_and_counts)
-        # LATER-TODO may want to keep more data about sequences! Like exact position and strand and number of mutations - may want to store a list of HTSeq.alignment objects instead of just sequences+counts, really
-        # TODO keep full info about the original mutants, somehow?
+        # LATER-TODO may want to keep more data about sequences! Like exact position and strand and number of mutations - may want to store a list of HTSeq.alignment objects instead of just sequences+counts, really.
+        # TODO keep full info about the original mutants, somehow?  I don't know if that should be kept in the mutant, or separately as a list of merged mutants in the dataset.
         other._set_readcount_related_data_to_zero()
 
     def add_counts(self, total_count, perfect_count, sequence_variant_count, assume_new_sequences=False, 
@@ -1900,8 +1900,8 @@ class Insertional_mutant_pool_dataset():
         OUTPUT.write("# Finished merging adjacent mutants: %s pairs merged\n"%self.summary.merged_adjacent_pairs) 
 
     # TODO was there some other bug when doing tandem-merging and adjacent-merging at once?  I think something weird came up in actual data analysis - see ../../1206_Ru-screen1_deepseq-data-early/notes.txt  "Mutants" section.
-    # LATER-TODO should put a header line on merging-outfile giving the main outfile name; and also give the main outfile a header line saying that the mutant merging info is in options.mutant_merging_outfile.
 
+    # TODO keep the merging info in the dataset in addition to printing it!  Maybe just make a separate merged_mutant dictionary with copies of the original before-merging mutants?  And a list of the merged mutant position pairs and the resulting mutant position pairs, so they can all be looked up if desired.
 
     def merge_opposite_tandem_mutants(self, leave_N_mutants='auto', max_count_ratio=None, leave_method='by_ratio',
                                       merge_cassette_chromosomes=False, merge_other_chromosomes=False, OUTPUT=sys.stdout):
