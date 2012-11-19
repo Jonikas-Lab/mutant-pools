@@ -171,7 +171,7 @@ class Insertion_position(object):
 
         First two fields are chromosome data - splits chromosome into name/number (both optional), 
          so that "chr2" sorts before "chr12" (but 'chr' before 'chr1', and 'other_chr1' after 'chr4').
-        Next two fields are min_/max_position - these are always numerically defined, so ?-101 and 100? will sort together
+        Next two fields are min_/max_position - these are always numerically defined, so ?-101 and 100-? will sort together
          (as opposed to if we used position_before/_after, which can be None).
         Next field is strand - we want the sorting on position BEFORE strand, it's more readable/sensible that way.
         Final two fields are position_before/after, to ensure ?-101 isn't considered equal to 100-101.
@@ -578,9 +578,14 @@ class Insertional_mutant():
         if orientation_both:    self.orientation = orientation_both.pop()
         if feature_both:        self.gene_feature = feature_both.pop()
 
-    def merge_mutant(self, other, check_gene_data=True, opposite_strand_tandem=False):
-        """ Merge other mutant into this mutant: merge counts, sequences, optionally position; set other's counts to 0.
+    def merge_mutant(self, other, check_gene_data=True, opposite_strand_tandem=False, other_is_imperfect=False):
+        """ Merge other mutant into this mutant: merge counts, sequences, etc; set other's counts to 0.
         Does NOT check that the positions match - this should be done by the caller. 
+        Does NOT merge the positions, except for strand in the opposite_strand_tandem==True case.
+
+        If other_is_imperfect, do NOT count the other mutant's reads as perfect (if it's an off-by-one mutant due to indel, or such).
+        If opposite_strand_tandem, expect the two mutants to be +/- strand; set strand and orientation to 'both', 
+         and store original +/- strand readcounts in self.original_strand_readcounts.
         """
         if self.multi_dataset or other.multi_dataset:  
             raise MutantError("Merging multi-dataset mutants not implemented!")
@@ -608,27 +613,23 @@ class Insertional_mutant():
             # also set the gene-orientation to "both", unless there is no gene
             if self.gene not in SPECIAL_GENE_CODES.all_codes:
                 self.orientation = 'both'
-        # otherwise, just keep the self position, since that should be the one with more reads; 
-        else:
-            assert self.total_read_count >= other.total_read_count, "Merging mutants the wrong way!"
-            # MAYBE-TODO implement position merging?  Are we ever going to need it, really?  PROBABLY NOT.
+        # otherwise, just keep the self position.
+        # MAYBE-TODO implement position merging?  Are we ever going to need it, really?  PROBABLY NOT.
 
         ### merge read counts
         self.total_read_count += other.total_read_count
-        # increment perfect read counts only for opposite-side-tandem, because in that case both sides are equally "good"; 
-        #  in cases of merging due to off-by-one position, "perfect" read counts from the wrong position aren't perfect!
-        if opposite_strand_tandem:
+        # whether the other mutant's reads should be counted as perfect depends on the situation - if we're adding together mutants
+        #  from two datasets, or opposite-tandems, both are equally good, but if we're merging same-strand-adjacent mutants 
+        #  (where one has a position off by one due to indel), the other mutant shouldn't be considered perfect. 
+        if not other_is_imperfect:
             self.perfect_read_count += other.perfect_read_count
         # merge sequences
         for (seq,count) in other.sequences_and_counts.iteritems():
             self.sequences_and_counts[seq] += count
         self.unique_sequence_count = len(self.sequences_and_counts)
         # LATER-TODO may want to keep more data about sequences! Like exact position and strand and number of mutations - may want to store a list of HTSeq.alignment objects instead of just sequences+counts, really
-        # TODO for merged opposite-tandems, should keep info about merging in the mutant itself!  How, exactly?  I did already add m.original_strand_readcounts...
-        # MAYBE-TODO for merged adjacent mutants, keep track of merging info too?
+        # TODO keep full info about the original mutants, somehow?
         other._set_readcount_related_data_to_zero()
-
-    # MAYBE-TODO should there also be an add_mutant function that adds mutant readcounts together and optionally makes sure the positions are the same, or should that be the same as merge_mutant?  There are two separate use cases: one where we're merging two adjacent mutants from one dataset, one where we're adding the counts for two mutants from two different datasets. But the mechanics are similar...
 
     def add_counts(self, total_count, perfect_count, sequence_variant_count, assume_new_sequences=False, 
                    dataset_name=None):
@@ -1165,6 +1166,34 @@ class Insertional_mutant_pool_dataset():
         If mutant doesn't exist, create a new one with no reads/sequences. """
         return self._mutants_by_position[self._make_position_object_if_needed(*args,**kwargs)]
 
+    def get_matching_position_mutants(self, *args, **kwargs):
+        """ Return a list of mutants "matching" given position - same-position both-strand and +/-strand positions count as matching.
+        Input should be an Insertion_position instance, or arguments to create one.
+
+        Currently NOT QUITE FULLY IMPLEMENTED OR TESTED - see TODO comments in the code.
+        """
+        # TODO in addition to strand, this should return 100-101 when given ?-101 and 100-?, probably?  And vice versa?  TODO think about that!  Currently those are ALL CONSIDERED DISTINCT. 
+        # TODO should this be a method of Insertion_position instead?
+        position = self._make_position_object_if_needed(*args,**kwargs)
+        chromosome = position.chromosome
+        pos_before, pos_after = position.position_before, position.position_after
+        matching_positions = [position]
+        # if strand is both, look for all possible matching single-strand mutants (with known position before, after, or both)
+        if position.strand=='both':
+            for strand in '+-':
+                for (before, after) in [(pos_before, None), (None, pos_after), (pos_before, pos_after)]:
+                    matching_positions.append(Insertion_position(chromosome, strand, position_before=before, position_after=after))
+        # if strand is +/-, look for a both-strand mutant, based on whichever one of positions before/after is defined
+        else:
+            if pos_before is None:      matching_positions.append(Insertion_position(chromosome, 'both', 
+                                                             position_before=pos_after-1, position_after=pos_after))
+            elif pos_before is None:    matching_positions.append(Insertion_position(chromosome, 'both', 
+                                                             position_before=pos_before, position_after=pos_before+1))
+            else:                       matching_positions.append(Insertion_position(chromosome, 'both', 
+                                                             position_before=pos_before, position_after=pos_after))
+            # TODO what if our mutant is +strand 100-?, and there's an existing both-strand mutant that's 100-105 or something, NOT the expected 100-101?
+        return matching_positions
+
     # TODO how should mutant lookup by position deal with both-strand mutants?  You can have two mutants in the same position on opposite strands, but you CAN'T have one on both strands and one on + or -...  There should be safeguards to fold the + or - into the both-strand one if it's searched for, and things! THINK ABOUT THAT.
 
     # MAYBE-TODO implement get_Nth_mutant_by_position and get_Nth_mutant_by_readcount or some such?
@@ -1426,6 +1455,24 @@ class Insertional_mutant_pool_dataset():
 
     ######### PROCESSING/MODIFYING DATASET
 
+    def merge_other_dataset(self, other_dataset):
+        """ Move all mutants from other_dataset to self (merge with existing same-position mutants if present).
+
+        Currently NOT IMPLEMENTED if either dataset contains both-stranded mutants (merged opposite-tandems). 
+        Only merges mutants with identical positions - 100-?, ?-101 and 100-101 are all considered distinct.
+        Mutants are removed from other_dataset.
+        """
+        if any([m.position.strand=='both' for m in self]):
+            raise MutantError("Cannot run merge_other_dataset into a dataset with both-stranded mutants!")
+        if any([m.position.strand=='both' for m in other_dataset]):
+            raise MutantError("Cannot run merge_other_dataset from a dataset with both-stranded mutants!")
+        for other_mutant in list(other_dataset):
+            this_mutant = self.get_mutant(other_mutant.position)
+            this_mutant.merge_mutant(other_mutant)
+            other_dataset.remove_mutant(other_mutant)
+        assert len(other_dataset) == other_dataset.summary.aligned_read_count == 0
+        # LATER-TODO what to do with cases where one dataset has a both-strand mutant and the other has a +strand or -strand one?  Should probably merge them, or if not, give an error (make that an option?).  And what about mutants with similar positions, like ?-101 and 100-? and 100-101?  (This would be relevant when merging 5' and 3' sets, for instance).  See half-implemented get_matching_position_mutants method.
+
     def remove_mutants_based_on_other_dataset(self, other_dataset, readcount_min=1, perfect_reads=False):
         """ Remove any mutants with at least readcount_min reads in other_dataset (or perfect reads, if perfect_reads=True)
 
@@ -1555,7 +1602,7 @@ class Insertional_mutant_pool_dataset():
             for (pos1, pos2) in combinations(all_positions,2):
                 yield (pos1, pos2)
 
-    def _merge_two_mutants(self, pos1, pos2):
+    def _merge_two_mutants(self, pos1, pos2, mutant2_is_imperfect):
         """ Merge two mutants (given by position), while making sure not to mess up dictionary key immutability. 
         
         Doing the merge may require the position to change, and changing a dictionary key is BAD, 
@@ -1569,7 +1616,7 @@ class Insertional_mutant_pool_dataset():
         self.remove_mutant(pos1)
         self.remove_mutant(pos2)
         mutant1.position.make_mutable_REMEMBER_CLEANUP_FIRST()
-        mutant1.merge_mutant(mutant2, opposite_strand_tandem=(pos1.strand!=pos2.strand))
+        mutant1.merge_mutant(mutant2, opposite_strand_tandem=(pos1.strand!=pos2.strand), other_is_imperfect=mutant2_is_imperfect)
         mutant1.position.make_immutable()
         self.add_mutant(mutant1)
 
@@ -1688,8 +1735,8 @@ class Insertional_mutant_pool_dataset():
             else:                   mutants_to_merge = dict(mutants_to_merge)
         return mutants_to_merge
 
-    def _merge_mutant_list(self, mutants_to_merge_key_into_val, OUTPUT=None, description="", join_string="into", 
-                           extra_check=None, extra_note=""):
+    def _merge_mutant_list(self, mutants_to_merge_key_into_val, count_merged_mutant_as_imperfect, 
+                           OUTPUT=None, description="", join_string="into", extra_check=None, extra_note=""):
         """ Given a dict of mutants to be merged (key into val), do the merging; return number merged and other info.
 
         Merging is transitive - if A should be merged into B and B into C, just merge A into C 
@@ -1715,7 +1762,7 @@ class Insertional_mutant_pool_dataset():
             OUTPUT.write(" MERGING %s mutants: %s %s %s, %s and %s reads.\n"%(description, pos2, join_string, pos1,
                                                                                 mutant2_readcount, mutant1_readcount))
             # do actual merging, save counts!
-            self._merge_two_mutants(pos1, pos2)
+            self._merge_two_mutants(pos1, pos2, count_merged_mutant_as_imperfect)
             N_merged_dict[distance] += 1
             merged_readcounts_dict[distance].append((mutant1_readcount, mutant2_readcount))
         N_merged = sum(N_merged_dict.values())
@@ -1834,7 +1881,8 @@ class Insertional_mutant_pool_dataset():
         # MAYBE-TODO write more info to OUTPUT about how the number of mutants to merge is determined, etc?
 
         ### now that we have all the pairs-to-merge, do the actual merging!
-        N_merged, N_merged_dict, merged_readcounts_dict = self._merge_mutant_list(mutants_to_merge_key_into_val, OUTPUT, 
+        N_merged, N_merged_dict, merged_readcounts_dict = self._merge_mutant_list(mutants_to_merge_key_into_val, 
+                                                                              count_merged_mutant_as_imperfect=True, OUTPUT=OUTPUT, 
                                                                               description="same-strand adjacent", join_string="into")
         ### add overall counts to dataset summary
         self.summary.adjacent_max_distance = merge_max_distance
@@ -1908,7 +1956,8 @@ class Insertional_mutant_pool_dataset():
         # MAYBE-TODO write more info to OUTPUT about how the number of mutants to merge is determined, etc?
 
         ### now that we have all the pairs-to-merge, do the actual merging!
-        N_merged, N_merged_dict, merged_readcounts_dict = self._merge_mutant_list(mutants_to_merge, OUTPUT, 
+        N_merged, N_merged_dict, merged_readcounts_dict = self._merge_mutant_list(mutants_to_merge, 
+                                                              count_merged_mutant_as_imperfect=False, OUTPUT=OUTPUT, 
                                                               description="opposite-strand same-position tandem", join_string="and")
         assert (N_merged_dict == {0: N_merged} or (N_merged==0 and N_merged_dict=={}))
 
@@ -2947,6 +2996,30 @@ class Testing_Insertional_mutant_pool_dataset(unittest.TestCase):
         pass
         # MAYBE-TODO implement using a mock-up of HTSeq_alignment?  (see Testing_single_functions for how I did that)
         #   make sure it fails if self.cassette_end isn't defined...
+
+    def test__merge_other_dataset(self):
+        # basic test that the correct mutants are being merged:  merge identical positions (first pair), 
+        #  but not one-off positions, opposite strands, different positions or different chromosomes (remaining pairs)
+        positions_and_readcounts_raw_1 = "A+100 5, B-200 5, C+300 5, D+500 5, E-400 5"
+        positions_and_readcounts_raw_2 = "A+100 1, B-201 1, C-300 1, E+500 1, D-400 1"
+        chromosomes = set([s[0] for s in positions_and_readcounts_raw_1.split(', ')+positions_and_readcounts_raw_2.split(', ')])
+        dataset = self._make_test_mutant_dataset(positions_and_readcounts_raw_1, raw_chrom_names=True)
+        other_dataset = self._make_test_mutant_dataset(positions_and_readcounts_raw_2, raw_chrom_names=True)
+        for chrom in chromosomes: 
+            assert dataset.summary.mutants_in_chromosome(chrom) == other_dataset.summary.mutants_in_chromosome(chrom) == 1
+            assert (dataset.summary.reads_in_chromosome(chrom), other_dataset.summary.reads_in_chromosome(chrom)) == (5, 1)
+        dataset.merge_other_dataset(other_dataset)
+        for chrom,N_mutants in zip(chromosomes,(1,2,2,2,2)):
+            assert (dataset.summary.mutants_in_chromosome(chrom),other_dataset.summary.mutants_in_chromosome(chrom)) == (N_mutants,0)
+            assert (dataset.summary.reads_in_chromosome(chrom), other_dataset.summary.reads_in_chromosome(chrom)) == (6, 0)
+        # checking that an exception is raised if attempting to merge a both-strand mutant (in either dataset)
+        mutant_both = Insertional_mutant(Insertion_position('A','both',position_before=100, immutable=True))
+        mutant_both.add_counts(2,2,1)
+        mutant_both.add_sequence_and_counts('AAA',2)
+        other_dataset.add_mutant(mutant_both)
+        self.assertRaises(MutantError, dataset.merge_other_dataset, other_dataset)
+        self.assertRaises(MutantError, other_dataset.merge_other_dataset, dataset)
+        # MAYBE-TODO add more detailed checks to see if the mutant sequences are merged correctly etc?  Or should that just be done in the mutant.merge_mutant unit-test?  It looks good enough.
 
     def test__remove_mutants_below_readcount(self):
         positions_and_readcounts_raw = "A+100 5/5, A-200 2/2, A+300 1/1, A-400 5/2, A+500 5/1"
