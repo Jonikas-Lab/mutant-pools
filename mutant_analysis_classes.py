@@ -1137,7 +1137,14 @@ class Insertional_mutant_pool_dataset():
     # Note that all of this will work just fine for multi-datasets without changes, since multi-datasets simply contain
     #  the same dictionary but with multi-dataset mutants instead of single-dataset ones.
 
-    def __len__(self):      return self.summary.N_mutants
+    def __len__(self):      
+        # Return the number of mutants with some non-zero readcounts (DON'T count zero-read mutants, even if present!).
+        #  A bit tricky for multi-datasets. 
+        if not self.multi_dataset: 
+            return self.summary.N_mutants
+        else:
+            return len([m for m in self if sum([m.by_dataset[x].total_read_count for x in m.by_dataset.keys()])])
+
     def __iter__(self):     return self._mutants_by_position.itervalues()
     # for multi-datasets, for iterating over only mutants with 1+ reads in a particular dataset, see mutants_in_dataset()
 
@@ -2243,12 +2250,12 @@ class Insertional_mutant_pool_dataset():
                                                        [2*summ.adjacent_opposite_toward], percentage_format_str='%.0f') )) 
 
         DVG.append((header_prefix+"Distinct mutants (read groups) by cassette insertion position:", 
-                    lambda summ,mutants: "%s"%len(mutants) ))
+                    lambda summ,mutants: "%s"%summ.N_mutants ))
         DVG.append((line_prefix+"(read location with respect to cassette: which end, which direction):", 
                     lambda summ,mutants: "(%s, %s)"%(summ.cassette_end, 
                                                 {'?': '?', True: 'reverse', False: 'forward'}[summ.reads_are_reverse]) ))
         DVG.append((line_prefix+"(average and median reads per mutant):", 
-                    lambda summ,mutants: "(%d, %d)"%(round((summ.aligned_read_count)/len(mutants)), 
+                    lambda summ,mutants: "(%d, %d)"%(round((summ.aligned_read_count)/summ.N_mutants), 
                                      round(median([m.read_info(summ.dataset_name).total_read_count for m in mutants]))) ))
 
         DVG.append((line_prefix+"Most common mutant(s): reads (% of aligned) (position or count):",
@@ -2259,18 +2266,18 @@ class Insertional_mutant_pool_dataset():
             DVG.append((line_prefix+"Mutant cassettes in %s (%% of total):"%chromosome, 
                         lambda summ,mutants,chromosome=chromosome: value_and_percentages(
                                                                                 summ.mutants_in_chromosome(chromosome),
-                                                                                [len(mutants)]) ))
+                                                                                [summ.N_mutants]) ))
 
         # print the gene annotation info, but only if there is any
         if any([summ.mutants_in_genes+summ.mutants_not_in_genes for summ in summaries]):
             DVG.append((line_prefix+"Mutant cassettes on chromosomes with no gene data (cassette, some scaffolds, maybe chloroplast/mito) (% of total):", 
-                        lambda summ,mutants: value_and_percentages(summ.mutants_undetermined, [len(mutants)]) ))
+                        lambda summ,mutants: value_and_percentages(summ.mutants_undetermined, [summ.N_mutants]) ))
             DVG.append((line_prefix+"Mutant cassettes in intergenic spaces (% of total, % of known):", 
                         lambda summ,mutants: value_and_percentages(summ.mutants_not_in_genes, 
-                                                   [len(mutants), summ.mutants_not_in_genes+summ.mutants_in_genes]) ))
+                                                   [summ.N_mutants, summ.mutants_not_in_genes+summ.mutants_in_genes]) ))
             DVG.append((header_prefix+"Mutant cassettes inside genes (% of total, % of known):", 
                         lambda summ,mutants: value_and_percentages(summ.mutants_in_genes, 
-                                                   [len(mutants), summ.mutants_not_in_genes+summ.mutants_in_genes]) ))
+                                                   [summ.N_mutants, summ.mutants_not_in_genes+summ.mutants_in_genes]) ))
             for orientation in sorted(set.union(*[set(summ.mutant_counts_by_orientation) for summ in summaries]), 
                                       reverse=True):
                 DVG.append((line_prefix+"Mutant cassettes in %s orientation to gene (%% of ones in genes):"%orientation, 
@@ -2316,6 +2323,7 @@ class Insertional_mutant_pool_dataset():
             OUTPUT.write(line_description)
             for summ,dataset in summaries_and_datasets:
                 # MAYBE-TODO is this self.mutants_in_dataset thing actually needed?... Could derive it from summary.
+                # MAYBE-TODO is mutants even needed here?  I think it's only used in the median readcount calculation, and that could be made a summary property.
                 mutants = list(self.mutants_in_dataset(dataset))
                 OUTPUT.write('\t' + line_value_getter(summ,mutants))
             OUTPUT.write('\n')
