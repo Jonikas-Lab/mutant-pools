@@ -267,7 +267,7 @@ def plot_all_correlations(all_data, plot_scale, figname, print_correlation=False
             # axis labels on the leftmost plot of each row only; sample name and #reads, and #mutants for counts
             if i==j-1: 
                 sample_label = _make_sample_label_text(sample_names[i], sample_i, datatype, 
-                                                       min_value=(0 if plot_scale=='lin' else min_value), 
+                                                       min_value=(0 if plot_scale=='linear' else min_value), 
                                                        end_spaces=5, end_newlines=4)
                 mplt.ylabel(sample_label, rotation=0, fontweight='bold', fontsize='x-large')
             # putting the title on the first subplot instead of the whole figure is a cheat, but I don't know how else.
@@ -300,7 +300,7 @@ def plot_all_correlations(all_data, plot_scale, figname, print_correlation=False
     # need a label for the last column, below the last plot
     # TODO if there are just two samples (i.e. one plot), change the top_newlines/end_spaces/end_newlines values to 0 in both this xlabel and the ylabel above to make things look better (may want to abstract all this into a subfunction)
     sample_label = _make_sample_label_text(sample_names[-1], sample_j, datatype, 
-                                           min_value=(0 if plot_scale=='lin' else min_value), 
+                                           min_value=(0 if plot_scale=='linear' else min_value), 
                                            end_spaces=0, top_newlines=2)
     mplt.xlabel(sample_label, rotation=0, fontweight='bold', fontsize='x-large', multialignment='right')
     return fig
