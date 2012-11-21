@@ -23,6 +23,7 @@ import matplotlib.pyplot as mplt
 
 ### my modules
 import general_utilities
+import DNA_basic_utilities
 from mutant_analysis_classes import *
 
 
@@ -163,8 +164,13 @@ def plot_all_correlations(all_data, plot_scale, figname, print_correlation=False
     # TODO what about TD changes or growth rate changes, do those need their own datatypes?
     sample_data, sample_names, mutant_data = all_data
     N_samples = len(sample_names)
-    if mutants_to_color:    colors = [mutants_to_color[tuple(mutant_line[:3])] for mutant_line in mutant_data]
-    else:                   colors = ['k' for mutant_line in mutant_data]
+    ### coloring the dots based on various factors:
+    # TODO make this a command-line option!
+    if_color_by_chromosome = False
+    if if_color_by_chromosome:  colors = color_by_chromosome(mutant_data)
+    else:
+        if mutants_to_color:    colors = [mutants_to_color[tuple(mutant_line[:3])] for mutant_line in mutant_data]
+        else:                   colors = ['k' for mutant_line in mutant_data]
     # TODO might want plotsize to be an option, along with default dotsize, and maybe dpi?  Does the dpi even do anything?
     plotsize = 4
     dotsize = 1
@@ -436,6 +442,21 @@ def get_mutant_colors(color_cassette_mutants=False, color_mutants_from_files={},
     assert color_dict[('chromosome_1','+',100)] == 'black'
     assert color_dict[('insertion_cassette','+',100)] == grey_color if color_cassette_mutants else 'black'
     return color_dict
+
+
+def color_by_chromosome(mutant_field_list, grey_color='0.6'):
+    """ Return a list of colors based on the list of mutants, coloring them by chromosome type.
+    """
+    # TODO update docstring!
+    chromosome_colors = defaultdict(lambda: 'm')
+    chromosome_colors.update({'chromosome': 'k', 'scaffold': 'b', 'chloroplast': 'g', 'mitochondrial': 'r', 'insertion': grey_color, 'cassette': grey_color})
+    # TODO write somewhere on the plot what the colors mean!  Make them customizable?
+
+    mutant_colors = []
+    print mutant_field_list[:10]
+    for mutant_fields in mutant_field_list:
+        mutant_colors.append(chromosome_colors[DNA_basic_utilities.chromosome_type(mutant_fields[0])])
+    return mutant_colors
 
 
 def main_functionality(infile, options=None):
