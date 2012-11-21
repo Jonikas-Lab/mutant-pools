@@ -207,21 +207,21 @@ def define_option_parser():
 
 
 def get_info_from_metadata_files(infiles, input_metadata_file, cassette_end, verbosity_level):
-    """ Parse metadata files to get wrong-format and unaligned/multiple read counts; return None if cannot be determined. 
+    """ Parse metadata files to get wrong-format and unaligned/multiple read counts (or 'unknown' if cannot be determined). 
 
     Returns a tuple of the following counts: discarded, wrong_start, no_cassette, non_aligned, unaligned, multiple_aligned.
-    Any of them can be None, meaning it could not be determined. 
+    Any of them can be 'unknown', meaning it could not be determined. 
     It looks for the information in the metadata file for each infile; if it can't find or parse the metadata file for 
-     any infile, the final count is None.
+     any infile, the final count is unknown.
     Special treatment for the non_aligned value for old-format files, in which that count is not in metadata at all.
     """
     # if the option specified no metadata files, total discarded readcount cannot be determined
     if input_metadata_file == 'NONE':
-        return None, None, None, None, None, None
+        return 'unknown', 'unknown', 'unknown', 'unknown', 'unknown', 'unknown'
     # make sure the -m option has a value that will work with the number of infiles
     if len(infiles)>1 and not input_metadata_file=='AUTO':
         print "Warning: when multiple input files are given, the -m option must be NONE or AUTO - ignoring other value."
-        return None, None, None, None, None, None
+        return 'unknown', 'unknown', 'unknown', 'unknown', 'unknown', 'unknown'
 
     # get the read counts for each infile; only return the total at the end, if all values are found
     counts_per_file = {'discarded':[], 'wrong_start':[], 'no_cassette':[], 'other_end':[], 'unaligned':[], 'multiple_aligned':[]}
@@ -244,11 +244,11 @@ def get_info_from_metadata_files(infiles, input_metadata_file, cassette_end, ver
         if not os.path.exists(curr_input_metadata_file):
             if verbosity_level>0:
                 print 'Warning: metadata input file %s not found! Proceeding without it.'%curr_input_metadata_file
-            counts_per_file['discarded'].append(None)
-            counts_per_file['wrong_start'].append(None)
-            counts_per_file['no_cassette'].append(None)
-            counts_per_file['unaligned'].append(None)
-            counts_per_file['multiple_aligned'].append(None)
+            counts_per_file['discarded'].append('unknown')
+            counts_per_file['wrong_start'].append('unknown')
+            counts_per_file['no_cassette'].append('unknown')
+            counts_per_file['unaligned'].append('unknown')
+            counts_per_file['multiple_aligned'].append('unknown')
             file_formats.append(file_format)
             continue
 
@@ -269,16 +269,17 @@ def get_info_from_metadata_files(infiles, input_metadata_file, cassette_end, ver
             if verbosity_level>0:
                 print("Warning: metadata input file %s didn't contain discarded read count line! "%curr_input_metadata_file
                       +"Proceeding without it.")
-            counts_per_file['discarded'].append(None)
+            counts_per_file['discarded'].append('unknown')
 
         file_formats.append(file_format)
-        ### all the other information only shows up in new-format files - in old-format just assume None
+        ### all the other information only shows up in new-format files - in old-format just assume unknown
+        #  (except the other_end value, which was always 0 in old-format because old-format lacked that dual-end processing)
         if file_format=='old':
-                counts_per_file['wrong_start'].append(None)
-                counts_per_file['no_cassette'].append(None)
+                counts_per_file['wrong_start'].append('unknown')
+                counts_per_file['no_cassette'].append('unknown')
                 counts_per_file['other_end'].append(0)
-                counts_per_file['unaligned'].append(None)
-                counts_per_file['multiple_aligned'].append(None)
+                counts_per_file['unaligned'].append('unknown')
+                counts_per_file['multiple_aligned'].append('unknown')
     
         else:
             ### wrong-start discarded read count (new-format only)
@@ -290,7 +291,7 @@ def get_info_from_metadata_files(infiles, input_metadata_file, cassette_end, ver
                 if verbosity_level>0:
                     print("Warning: metadata file %s didn't contain wrong-start readcount line! "%curr_input_metadata_file
                           +"Proceeding without it.")
-                counts_per_file['wrong_start'].append(None)
+                counts_per_file['wrong_start'].append('unknown')
 
             ### no-cassette discarded read count (new-format only)
             for line in open(curr_input_metadata_file):
@@ -301,10 +302,10 @@ def get_info_from_metadata_files(infiles, input_metadata_file, cassette_end, ver
                 if verbosity_level>0:
                     print("Warning: metadata file %s didn't contain no-cassette readcount line! "%curr_input_metadata_file
                           +"Proceeding without it.")
-                counts_per_file['no_cassette'].append(None)
+                counts_per_file['no_cassette'].append('unknown')
 
             ### other-end read count (new-format only, optional)
-            # note that this line is not present if there weren't any other-end reads, so if it's not, we'll save 0 instead of None, 
+            # this line is not present if there weren't any other-end reads, so if it's not, we'll save 0 instead of unknown, 
             #  since it means a 0, not an unknown value (and old-format files didn't have this functionality so it's always 0 there)
             other_end = [x for x in mutant_analysis_classes.SEQ_ENDS if not x==cassette_end][0].replace("prime","'")
             for line in open(curr_input_metadata_file):
@@ -328,7 +329,7 @@ def get_info_from_metadata_files(infiles, input_metadata_file, cassette_end, ver
                 if verbosity_level>0:
                     print("Warning: metadata file %s didn't contain unaligned readcount line! "%curr_input_metadata_file
                           +"Proceeding without it.")
-                counts_per_file['unaligned'].append(None)
+                counts_per_file['unaligned'].append('unknown')
 
             ### multiple-aligned read count (new-format only)
             for line in open(curr_input_metadata_file):
@@ -339,7 +340,7 @@ def get_info_from_metadata_files(infiles, input_metadata_file, cassette_end, ver
                 if verbosity_level>0:
                     print("Warning: metadata file %s "%curr_input_metadata_file 
                           +"didn't contain genomic-multiple readcount line! Proceeding without it.")
-                counts_per_file['multiple_aligned'].append(None)
+                counts_per_file['multiple_aligned'].append('unknown')
 
             # MAYBE-TODO also grab the "good" readcounts (from preprocessing and alignment) and make sure they match 
             #  the numbers we see in the dataset?
@@ -348,24 +349,24 @@ def get_info_from_metadata_files(infiles, input_metadata_file, cassette_end, ver
     #  for new-format files that information comes from the metadata (and split into unaligned/multiple subcategories), 
     #  but for the old-format files it comes from the data infile itself (without the category split. 
     # So for each old-format file, the general nonaligned count can be assumed to be 0 (and the real number will be 
-    #  (added during actual infile processing), but the unaligned/multiple counts stay None (i.e. unknown).
+    #  (added during actual infile processing), but the unaligned/multiple counts stay unknown
     counts_per_file['total_non_aligned'] = []
     for file_format, unaligned_count, multiple_count in zip(file_formats, counts_per_file['unaligned'], 
                                                             counts_per_file['multiple_aligned']):
         if file_format=='old':                                  counts_per_file['total_non_aligned'].append(0)
-        elif unaligned_count is None or multiple_count is None: counts_per_file['total_non_aligned'].append(None)
+        elif 'unknown' in (unaligned_count, multiple_count):    counts_per_file['total_non_aligned'].append('unknown')
         else:                                                   counts_per_file['total_non_aligned'].append(\
                                                                                         unaligned_count+multiple_count)
 
-    # do sums for each count category: of the length of the list is wrong or None is on the list, return None/unknown:
+    # do sums for each count category: of the length of the list is wrong or unknown is on the list, return unknown:
     #  if some metadata files were missing the discarded counts line, total discarded readcount cannot be determined
     #  if the discarded read counts for all infiles were found, return the sum as the total discarded read count
     total_counts = {}
     for key, list_of_counts in counts_per_file.iteritems():
-        if len(list_of_counts)<len(infiles) or None in list_of_counts:
+        if len(list_of_counts)<len(infiles) or ('unknown' in list_of_counts):
             if verbosity_level>0:
                 print "Warning: %s read count not found for some files! Ignoring all values, keeping 'unknown'."%key
-            total_counts[key] = None
+            total_counts[key] = 'unknown'
         else:
             total_counts[key] = sum(list_of_counts)
 
@@ -431,17 +432,16 @@ def main(infiles, outfile, options):
     #   (all_alignment_data initializes them to 'unkown', so if file is not given or can't be found/parsed, do nothing)
     N_discarded, N_wrong_start, N_no_cassette, N_other_end, N_non_aligned, N_unaligned, N_multiple = \
             get_info_from_metadata_files(infiles, options.input_metadata_file, options.read_cassette_end, options.verbosity_level)
-    if N_wrong_start is not None and N_no_cassette is not None:
+    if 'unknown' not in (N_wrong_start, N_no_cassette):
         assert N_discarded == N_wrong_start+N_no_cassette+N_other_end,\
                 "Discarded subtotals don't add up to discarded total! %s+%s+%s != %s"%(N_wrong_start,N_no_cassette,
                                                                                        N_other_end,N_discarded)
     all_alignment_data.summary.add_discarded_reads(N_discarded, N_wrong_start, N_no_cassette, N_other_end)
     if options.separate_cassette:
         cassette_alignment_data.summary.add_discarded_reads(N_discarded, N_wrong_start, N_no_cassette, N_other_end)
-    if N_unaligned is not None or N_multiple is not None:
-        all_alignment_data.summary.add_nonaligned_reads(N_non_aligned, N_unaligned, N_multiple)
-        if options.separate_cassette:
-            cassette_alignment_data.summary.add_nonaligned_reads(N_non_aligned, N_unaligned, N_multiple)
+    all_alignment_data.summary.add_nonaligned_reads(N_non_aligned, N_unaligned, N_multiple)
+    if options.separate_cassette:
+        cassette_alignment_data.summary.add_nonaligned_reads(N_non_aligned, N_unaligned, N_multiple)
     # MAYBE-TODO also get the final total number of reads from the metadata infile and make sure it's the same 
     #   as the number of processed reads I get from all_alignment_data.print_summary()?
 

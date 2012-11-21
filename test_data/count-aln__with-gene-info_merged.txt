@@ -3,13 +3,13 @@
 <REGEX># Date: .*
 <REGEX># Full options: {.*}
 ### SUMMARY:
-## Total reads in sample:	40
+## Total reads in sample:	40+unknown
 ## Reads discarded in preprocessing (% of total):	0 (0%)
 #  discarded due to wrong start (% of total):	0 (0%)
 #  discarded due to no cassette (% of total):	0 (0%)
-## Reads without a unique alignment (% of total, % of post-preprocessing):	0 (0%, 0%)
-#  unaligned reads (% of total, % of post-preprocessing):	0 (0%, 0%)
-#  multiply aligned reads (% of total, % of post-preprocessing):	0 (0%, 0%)
+## Reads without a unique alignment (% of total, % of post-preprocessing):	unknown (unknown)
+#  unaligned reads (% of total, % of post-preprocessing):	unknown (unknown)
+#  multiply aligned reads (% of total, % of post-preprocessing):	unknown (unknown)
 ## Uniquely aligned reads (% of total, % of post-preprocessing):	40 (100%, 100%)
 #  Perfectly aligned reads, no mismatches (% of aligned):	40 (100%)
 #  Reads with cassette direction matching chromosome + strand (% of aligned):	38 (95%)

@@ -12,8 +12,8 @@ from __future__ import division
 import sys, re
 import unittest
 from collections import defaultdict
-from itertools import combinations
-from numpy import median, round
+import itertools
+from numpy import median, round, isnan
 import copy
 import random
 # other libraries
@@ -830,51 +830,66 @@ class Dataset_summary_data():
         #  and the dataset name (None if it's a single dataset, string for multi-datasets)
         self.dataset_name = dataset_name
         self.dataset = dataset
-        # information on reads that aren't included in the dataset mutants - unknown or 0 by default
-        self.discarded_read_count, self.discarded_wrong_start, self.discarded_no_cassette = 'unknown', 'unknown', 'unknown'
+        # information on reads that aren't included in the dataset mutants - None or 0 by default
+        self.discarded_read_count, self.discarded_wrong_start, self.discarded_no_cassette = None, None, None
         self.discarded_other_end = 0
-        self.non_aligned_read_count, self.unaligned, self.multiple_aligned = 0, 'unknown', 'unknown'
+        self.non_aligned_read_count, self.unaligned, self.multiple_aligned = 0, None, None
         self.ignored_region_read_counts = defaultdict(int)
         # mutant merging information
+        self.blank_adjacent_mutant_info()
+        # MAYBE-TODO should cassette_end and reads_are_reverse be specified for the whole dataset, or just for each set of data added, in add_alignment_reader_to_data? The only real issue with this would be that then I wouldn't be able to print this information in the summary - or I'd have to keep track of what the value was for each alignment reader added and print that in the summary if it's a single value, or 'varied' if it's different values. Might also want to keep track of how many alignment readers were involved, and print THAT in the summary!  Or even print each (infile_name, cassette_end, reads_are_reverse) tuple as a separate line in the header.
+        self.cassette_end = cassette_end
+        self.reads_are_reverse = reads_are_reverse
+
+    # TODO unit-test all the methods below!
+
+    def blank_adjacent_mutant_info(self):
+        # general adjacent counting/merging settings
         self.adjacent_max_distance = None
         self.merging_which_chromosomes = (None, None)
+        # info on merged mutants
         self.merged_adjacent_same_strand_dict = defaultdict(int)
         self.merged_adjacent_same_strand_readcounts_dict = defaultdict(list)
         self.merged_opposite_tandems = 0
         self.merged_opposite_tandems_readcounts = []
+        # info on unmerged close-by mutants
         # MAYBE-TODO should the adjacent-mutant-counts (same_position_opposite, adjacent_opposite_toward, adjacent_opposite_away, adjacent_same_strand) be constants or property values?  May want to keep them as constants, they're expensive to calculate...
         self.same_position_opposite = NaN
         self.adjacent_opposite_toward_dict = defaultdict(nan_func)
         self.adjacent_opposite_away_dict = defaultdict(nan_func)
         self.adjacent_same_strand_dict = defaultdict(nan_func)
-        # MAYBE-TODO should cassette_end and reads_are_reverse be specified for the whole dataset, or just for each set of data added, in add_alignment_reader_to_data? The only real issue with this would be that then I wouldn't be able to print this information in the summary - or I'd have to keep track of what the value was for each alignment reader added and print that in the summary if it's a single value, or 'varied' if it's different values. Might also want to keep track of how many alignment readers were involved, and print THAT in the summary!  Or even print each (infile_name, cassette_end, reads_are_reverse) tuple as a separate line in the header.
-        self.cassette_end = cassette_end
-        self.reads_are_reverse = reads_are_reverse
-
-    # TODO unit-test all these methods!
 
     def add_discarded_reads(self, N_all_discarded, N_wrong_start, N_no_cassette, N_other_end, replace=False):
         """ Add not-None arg values to appropriate self.discarded_* attributes (or replace them). 
         
-        If the original values are 'unknown', or replace is True, replace instead of adding.
-        If any of the args is None, don't modify the original value, unles replace is True, then set to 'unknown'.
+        If the original values are None, or replace is True, replace instead of adding.
+        If either the original or new value is 'unknown', the result is 'unknown' as well. 
+        If any of the args is None, don't modify the original value, unless replace is True, then set to 'unknown'.
         """
+        # if self doesn't have an N_other_end attribute (some older datasets don't, this is for those), set it to 0
+        try:                    self.discarded_other_end
+        except AttributeError:  self.discarded_other_end = 0
+        # set everything
         if N_all_discarded is not None:
-            if replace or self.discarded_read_count=='unknown': self.discarded_read_count = int(N_all_discarded)
-            else:                                               self.discarded_read_count += int(N_all_discarded)
-        elif replace:                                           self.discarded_read_count = 'unknown'
+            if 'unknown' in (N_all_discarded, self.discarded_read_count):   self.discarded_read_count = 'unknown'
+            elif replace or self.discarded_read_count is None:              self.discarded_read_count = int(N_all_discarded)
+            else:                                                           self.discarded_read_count += int(N_all_discarded)
+        elif replace:                                                       self.discarded_read_count = 'unknown'
         if N_wrong_start is not None:
-            if replace or self.discarded_wrong_start=='unknown': self.discarded_wrong_start = int(N_wrong_start)
-            else:                                                self.discarded_wrong_start += int(N_wrong_start)
-        elif replace:                                            self.discarded_wrong_start = 'unknown'
+            if 'unknown' in (N_wrong_start, self.discarded_wrong_start):    self.discarded_wrong_start = 'unknown'
+            elif replace or self.discarded_wrong_start is None:             self.discarded_wrong_start = int(N_wrong_start)
+            else:                                                           self.discarded_wrong_start += int(N_wrong_start)
+        elif replace:                                                       self.discarded_wrong_start = 'unknown'
         if N_no_cassette is not None:
-            if replace or self.discarded_no_cassette=='unknown': self.discarded_no_cassette = int(N_no_cassette)
-            else:                                                self.discarded_no_cassette += int(N_no_cassette)
-        elif replace:                                            self.discarded_no_cassette = 'unknown'
+            if 'unknown' in (N_no_cassette, self.discarded_no_cassette):    self.discarded_no_cassette = 'unknown'
+            elif replace or self.discarded_no_cassette is None:             self.discarded_no_cassette = int(N_no_cassette)
+            else:                                                           self.discarded_no_cassette += int(N_no_cassette)
+        elif replace:                                                       self.discarded_no_cassette = 'unknown'
         if N_other_end is not None:
-            if replace or self.discarded_other_end=='unknown':   self.discarded_other_end = int(N_other_end)
-            else:                                                self.discarded_other_end += int(N_other_end)
-        elif replace:                                            self.discarded_other_end = 'unknown'
+            if 'unknown' in (N_other_end, self.discarded_other_end):        self.discarded_other_end = 'unknown'
+            elif replace or self.discarded_other_end is None:               self.discarded_other_end = int(N_other_end)
+            else:                                                           self.discarded_other_end += int(N_other_end)
+        elif replace:                                                       self.discarded_other_end = 'unknown'
         # special case for when we don't know the specific discarded categories, but we know total discarded is 0, 
         #  so the specific categories must be 0 too:
         if self.discarded_read_count == 0:   
@@ -883,24 +898,28 @@ class Dataset_summary_data():
     def add_nonaligned_reads(self, N_all_non_aligned, N_unaligned, N_multiple_aligned, replace=False):
         """ Add not-None arg values to non_aligned_read_count, unaligned and multiple_aligned (or replace them).
         
-        If the original values are 'unknown', or replace is True, replace instead of adding.
-        If any of the args is None, don't modify the original value, unles replace is True, then set to 'unknown'.
+        If the original values are None, or replace is True, replace instead of adding.
+        If either the original or new value is 'unknown', the result is 'unknown' as well. 
+        If any of the args is None, don't modify the original value, unless replace is True, then set to 'unknown'.
         """
         if N_all_non_aligned is not None:
-            if replace or self.unaligned=='unknown': self.non_aligned_read_count = int(N_all_non_aligned)
-            else:                                    self.non_aligned_read_count += int(N_all_non_aligned)
-        elif replace:                                self.non_aligned_read_count = 'unknown'
+            if 'unknown' in (N_all_non_aligned, self.non_aligned_read_count):   self.non_aligned_read_count = 'unknown'
+            elif replace or self.non_aligned_read_count is None:                self.non_aligned_read_count = int(N_all_non_aligned)
+            else:                                                               self.non_aligned_read_count += int(N_all_non_aligned)
+        elif replace:                                                           self.non_aligned_read_count = 'unknown'
         if N_unaligned is not None:
-            if replace or self.unaligned=='unknown': self.unaligned = int(N_unaligned)
-            else:                                    self.unaligned += int(N_unaligned)
-        elif replace:                                self.unaligned = 'unknown'
+            if 'unknown' in (N_unaligned, self.unaligned):          self.unaligned = 'unknown'
+            elif replace or self.unaligned is None:                 self.unaligned = int(N_unaligned)
+            else:                                                   self.unaligned += int(N_unaligned)
+        elif replace:                                               self.unaligned = 'unknown'
         if N_multiple_aligned is not None:
-            if replace or self.multiple_aligned=='unknown': self.multiple_aligned = int(N_multiple_aligned)
-            else:                                           self.multiple_aligned += int(N_multiple_aligned)
-        elif replace:                                       self.multiple_aligned = 'unknown'
-        # special case for when we don't know the specific unaligned categories, but we know total non-aligned is 0, 
-        #  so the specific categories must be 0 too:
-        if self.non_aligned_read_count==0:  self.unaligned, self.multiple_aligned = 0, 0
+            if 'unknown' in (N_multiple_aligned, self.multiple_aligned):    self.multiple_aligned = 'unknown'
+            elif replace or self.multiple_aligned is None:                  self.multiple_aligned = int(N_multiple_aligned)
+            else:                                                           self.multiple_aligned += int(N_multiple_aligned)
+        elif replace:                                                       self.multiple_aligned = 'unknown'
+        # Note: NO special case for when we don't know the specific categories, but we know total non_aligned is 0, 
+        #  because for old-format files non_aligned is initially 0 but gets increased when reading the actual *.sam file, 
+        #  which contains lines for unaligned reads (which are unaligned or multiple, both output the same with bowtie -m option)
 
     @property
     def aligned_read_count(self):
@@ -938,7 +957,7 @@ class Dataset_summary_data():
             except TypeError:   return "%s+unknown"%self.processed_read_count
         else:
             try:                return "%s+unknown"%(self.processed_read_count + self.discarded_read_count)
-            except TypeError:   return "%s+unknown+unknown"%self.processed_read_count
+            except TypeError:   return "%s+unknown"%self.processed_read_count
 
     @property
     def strand_read_counts(self):
@@ -1386,6 +1405,18 @@ class Insertional_mutant_pool_dataset():
 
     ######### MULTI-DATASET METHODS
 
+    def _set_merged_genome_info(self, gene_annotation_header_values, total_genes_in_genome_values):
+        """ Set self.gene_annotation_header and self.total_genes_in_genome based on inputs. 
+
+        Set to blank if all inputs are blank; otherwise to the single unique non-blank value on the list; 
+          if there are multiple distinct non-blank values, raise exception.  
+        """
+        # Merge any pieces of global information that's not per-dataset
+        self.gene_annotation_header = merge_values_to_unique(gene_annotation_header_values, blank_value=[], convert_for_set=tuple, 
+                                                value_name='gene_annotation_header', context='datasets in multi-dataset')
+        self.total_genes_in_genome = merge_values_to_unique(total_genes_in_genome_values, blank_value=0, 
+                                                value_name='total_genes_in_genome', context='datasets in multi-dataset')
+
     def populate_multi_dataset(self, source_dataset_dict, overwrite=False, check_gene_data=True):
         """ Given a dataset_name:single_dataset_object dictionary, populate current multi-dataset with the data. 
 
@@ -1421,15 +1452,11 @@ class Insertional_mutant_pool_dataset():
             # MAYBE-TODO add option to only include mutants with non-zero reads (total or perfect) in all datasets?  Or should that only happen during printing?  Or do we even care?  If I ever want to do that, there was code for it in the old version of mutant_join_datasets.py (before 2012-04-26)
 
         # Merge any pieces of global information that's not per-dataset
-        gene_annotation_header_list = [d.gene_annotation_header for d in source_dataset_dict.values()] 
-        self.gene_annotation_header = merge_values_to_unique(gene_annotation_header_list, blank_value=[], convert_for_set=tuple, 
-                                                value_name='gene_annotation_header', context='datasets in multi-dataset')
-        # using getattr instead of just d.total_genes_in_genome because some older datasets don't HAVE the total_genes_in_genome
-        #  attribute, and getattr lets me give a default of 0 when the attribute is missing 
-        #  (and 0 is used as blank_value in the merge_values_to_unique call on the next line).
-        total_genes_in_genome_list = [getattr(d,'total_genes_in_genome',0) for d in source_dataset_dict.values()] 
-        self.total_genes_in_genome = merge_values_to_unique(total_genes_in_genome_list, blank_value=0, 
-                                                value_name='total_genes_in_genome', context='datasets in multi-dataset')
+        #  using getattr instead of just d.total_genes_in_genome because some older datasets don't HAVE the total_genes_in_genome
+        #   attribute, and getattr lets me give a default of 0 when the attribute is missing 
+        #   (and 0 is used as blank_value in the merge_values_to_unique call in self._set_merged_genome_info).
+        self._set_merged_genome_info([d.gene_annotation_header for d in source_dataset_dict.values()], 
+                                     [getattr(d,'total_genes_in_genome',0) for d in source_dataset_dict.values()])
         # This has no unit-tests, but has a run-test in mutant_join_datasets.py
 
     def mutants_in_dataset(self, dataset_name=None):
@@ -1473,6 +1500,40 @@ class Insertional_mutant_pool_dataset():
         Only merges mutants with identical positions - 100-?, ?-101 and 100-101 are all considered distinct.
         Mutants are removed from other_dataset.
         """
+
+        ### Merge basic data from summary
+        # set name to None, as the safest option - only multi-datasets have names anyway, I think
+        self.summary.dataset_name = None
+        # for read/direction, keep the old value if old/new match, otherwise change to '?'
+        if self.summary.cassette_end != other_dataset.summary.cassette_end:             self.summary.cassette_end = '?'
+        if self.summary.reads_are_reverse != other_dataset.summary.reads_are_reverse:   self.summary.reads_are_reverse = '?'
+        # MAYBE-TODO if merging a 3' and 5' dataset, maybe should use 'both' or something instead of '?' ?
+
+        ### Merge extra readcount data, i.e. discarded/unaligned/removed/etc read counts from summary
+        # using getattr because some older datasets don't have that, should be 0 by default
+        other_discarded_other_end = getattr(other_dataset.summary,'discarded_other_end',0)
+        self.summary.add_discarded_reads(other_dataset.summary.discarded_read_count, other_dataset.summary.discarded_wrong_start, 
+                             other_dataset.summary.discarded_no_cassette, other_discarded_other_end, replace=False)
+        self.summary.add_nonaligned_reads(other_dataset.summary.non_aligned_read_count, other_dataset.summary.unaligned, 
+                                          other_dataset.summary.multiple_aligned, replace=False)
+        self.summary.ignored_region_read_counts = add_dicts_of_ints(self.summary.ignored_region_read_counts, 
+                                                                    other_dataset.summary.ignored_region_read_counts)
+
+        ### Deal with the merging info from the summary:
+        # Throw an exception if attempting to merge two datasets mutant-merging has been done on - mutant-merging really 
+        #  should be done AFTER all the dataset merging, otherwise it may turn out inconsistent
+        if self.summary.merged_opposite_tandems or sum(self.summary.merged_adjacent_same_strand_dict.values())\
+           or other_dataset.summary.merged_opposite_tandems or sum(other_dataset.summary.merged_adjacent_same_strand_dict.values()):
+            raise MutantError("Cannot merge together two datasets that had mutant-merging done - the results may be inconsistent!")
+        # Blank the adjacent-counts to force a counting re-run; the merged counts should still be blank, we just checked that.
+        self.summary.blank_adjacent_mutant_info()
+        
+        ### Merge non-mutant info from the dataset itself, non-summary (gene annotation header and total genes in genome)
+        # (see comments on self._set_merged_genome_info in populate_multi_dataset for explanation of the getattr)
+        self._set_merged_genome_info([d.gene_annotation_header for d in (self, other_dataset)], 
+                                     [getattr(d,'total_genes_in_genome',0) for d in (self, other_dataset)])
+
+        ### Merge the mutants
         if any([m.position.strand=='both' for m in self]):
             raise MutantError("Cannot run merge_other_dataset into a dataset with both-stranded mutants!")
         if any([m.position.strand=='both' for m in other_dataset]):
@@ -1482,6 +1543,7 @@ class Insertional_mutant_pool_dataset():
             this_mutant.merge_mutant(other_mutant)
             other_dataset.remove_mutant(other_mutant)
         assert len(other_dataset) == other_dataset.summary.aligned_read_count == 0
+
         # LATER-TODO what to do with cases where one dataset has a both-strand mutant and the other has a +strand or -strand one?  Should probably merge them, or if not, give an error (make that an option?).  And what about mutants with similar positions, like ?-101 and 100-? and 100-101?  (This would be relevant when merging 5' and 3' sets, for instance).  See half-implemented get_matching_position_mutants method.
 
     def remove_mutants_based_on_other_dataset(self, other_dataset, readcount_min=1, perfect_reads=False):
@@ -1610,7 +1672,7 @@ class Insertional_mutant_pool_dataset():
             #  so use a sliding window of size 2X+1.  #  (or of size X+1 if they're all on the same strand already)
 
             # go over each pos1,pos2 pair (only once)
-            for (pos1, pos2) in combinations(all_positions,2):
+            for (pos1, pos2) in itertools.combinations(all_positions,2):
                 yield (pos1, pos2)
 
     def _merge_two_mutants(self, pos1, pos2, mutant2_is_imperfect):
@@ -2195,7 +2257,8 @@ class Insertional_mutant_pool_dataset():
                    lambda summ: _fraction_or_unknown(summ.discarded_no_cassette, [summ.full_read_count])))
         # using getattr because some older datasets don't HAVE the discarded_other_end attribute, and getattr lets me give 
         #  a default of 0 when the attribute is missing (which is what it should be - old datasets didn't have that functionality) 
-        all_other_end = sum([getattr(summ,'discarded_other_end',0) for summ in summaries])
+        all_other_end = [getattr(summ,'discarded_other_end',0) for summ in summaries]
+        all_other_end = sum([0 if x=='unknown' else x for x in all_other_end])
         if all_other_end:
             DVG.append((line_prefix+"separated other-end reads (3'/5') (% of total):", 
                        lambda summ: _fraction_or_unknown(getattr(summ,'discarded_other_end',0), [summ.full_read_count])))
@@ -2968,6 +3031,8 @@ class Testing_Insertional_mutant_pool_dataset(unittest.TestCase):
         If readcount is a single number, it's the total read count; if it's two numbers, it's total/perfect.
         """
         dataset = Insertional_mutant_pool_dataset()
+        if not positions_and_readcounts_string: 
+            return dataset
         for string in positions_and_readcounts_string.split(', '):
             raw_pos, readcount = string.split(' ')
             if '/' in readcount:    readcount, perfect = [int(x) for x in readcount.split('/')]
@@ -3000,7 +3065,7 @@ class Testing_Insertional_mutant_pool_dataset(unittest.TestCase):
                 assert data.summary.processed_read_count == data.summary.aligned_read_count\
                         == data.summary.perfect_read_count == 0
                 assert data.summary.non_aligned_read_count == 0
-                assert data.summary.discarded_read_count == 'unknown'
+                assert data.summary.discarded_read_count == None
                 assert data.summary.ignored_region_read_counts == {}
                 assert sum(data.summary.strand_read_counts.values()) == 0
                 assert data.summary.mutants_in_genes == data.summary.mutants_not_in_genes\
@@ -3020,7 +3085,108 @@ class Testing_Insertional_mutant_pool_dataset(unittest.TestCase):
         #   make sure it fails if self.cassette_end isn't defined...
 
     def test__merge_other_dataset(self):
-        # basic test that the correct mutants are being merged:  merge identical positions (first pair), 
+        ### testing that the various overall information gets merged correctly
+        dataset = Insertional_mutant_pool_dataset()
+        other_dataset = Insertional_mutant_pool_dataset()
+        for name1,name2 in [('TEST1', 'TEST2'), ('TEST', 'TEST'), ('TEST', None), (None, 'TEST'), (None, None)]: 
+            dataset.summary.dataset_name = name1
+            other_dataset.summary.dataset_name = name2
+            dataset.merge_other_dataset(other_dataset)
+            assert dataset.summary.dataset_name is None
+        for end_info in ['3prime 3prime 3prime', '5prime 5prime 5prime', '3prime 5prime ?', '3prime ? ?', '5prime ? ?', '? ? ?']:
+            end_a, end_b, end_both = end_info.split()
+            for end1,end2 in [(end_a,end_b),(end_b,end_a)]:
+                dataset.summary.cassette_end = end1
+                other_dataset.summary.cassette_end = end2
+                dataset.merge_other_dataset(other_dataset)
+                assert dataset.summary.cassette_end == end_both
+        for reverse_a,reverse_b,reverse_both in [(True,True,True),(False,False,False), (True,False,'?'), 
+                                                 (True,'?','?'), (False,'?','?'), ('?','?','?')]:
+            for reverse1,reverse2 in [(reverse_a,reverse_b),(reverse_b,reverse_a)]:
+                dataset.summary.reads_are_reverse = reverse1
+                other_dataset.summary.reads_are_reverse = reverse2
+                dataset.merge_other_dataset(other_dataset)
+                assert dataset.summary.reads_are_reverse == reverse_both
+        ### testing that the extra readcount information gets merged correctly
+        # if both datasets have numbers, they get added together
+        dataset.summary.add_discarded_reads(60, 30, 20, 10, replace=True)
+        other_dataset.summary.add_discarded_reads(6, 3, 2, 1, replace=True)
+        dataset.summary.add_nonaligned_reads(30, 20, 10, replace=True)
+        other_dataset.summary.add_nonaligned_reads(3, 2, 1, replace=True)
+        dataset.summary.ignored_region_read_counts = {'test1':10, 'test2':20}
+        other_dataset.summary.ignored_region_read_counts = {'test1':1, 'test3':3}
+        dataset.merge_other_dataset(other_dataset)
+        assert (dataset.summary.discarded_read_count, dataset.summary.discarded_wrong_start, 
+                dataset.summary.discarded_no_cassette, dataset.summary.discarded_other_end) == (66, 33, 22, 11)
+        assert (dataset.summary.non_aligned_read_count, dataset.summary.unaligned, 
+                dataset.summary.multiple_aligned) == (33, 22, 11)
+        assert dataset.summary.ignored_region_read_counts == {'test1':11, 'test2':20, 'test3':3}
+        # if one dataset has numbers and the other has unknowns, the result should be unknowns either way, 
+        #  except summary.ignored_region_read_counts, which should still just get added)
+        for version in (1,2):
+            dataset.summary.add_discarded_reads(60, 30, 20, 10, replace=True)
+            other_dataset.summary.add_discarded_reads(None, None, None, None, replace=True)
+            dataset.summary.add_nonaligned_reads(30, 20, 10, replace=True)
+            other_dataset.summary.add_nonaligned_reads(None, None, None, replace=True)
+            dataset.summary.ignored_region_read_counts = {'test1':10, 'test2':20}
+            other_dataset.summary.ignored_region_read_counts = {}
+            if version==1:
+                dataset.merge_other_dataset(other_dataset)
+            else:
+                other_dataset.merge_other_dataset(dataset)
+                dataset = other_dataset
+            assert (dataset.summary.discarded_read_count, dataset.summary.discarded_wrong_start, 
+                    dataset.summary.discarded_no_cassette, dataset.summary.discarded_other_end) == ('unknown',) * 4
+            assert (dataset.summary.non_aligned_read_count, dataset.summary.unaligned, 
+                    dataset.summary.multiple_aligned) == ('unknown', 'unknown', 'unknown')
+            assert dataset.summary.ignored_region_read_counts == {'test1':10, 'test2':20}
+        ### testing that the mutant merging/counting gets dealt with correctly
+        # checking that all that data is made blank, if it's non-blank in either dataset
+        # these involve no merging
+        positions_and_readcounts_raw_1 = "A+100 1, B-201 1, C-300 1, E+500 1, D-400 1"
+        positions_and_readcounts_raw_2 = "A+100 1, A-101 1, A+301 1, A-300 1, A-400 1"
+        positions_and_readcounts_raw_3 = ""
+        all_raws = [positions_and_readcounts_raw_1, positions_and_readcounts_raw_2, positions_and_readcounts_raw_3]
+        for positions_and_readcounts_raw_a,positions_and_readcounts_raw_b in itertools.product(all_raws, all_raws):
+            # do merging-and-counting for one or both datasets
+            for merge_1,merge_2 in [(True,True), (True,False), (False,True)]:
+                dataset = self._make_test_mutant_dataset(positions_and_readcounts_raw_a)
+                other_dataset = self._make_test_mutant_dataset(positions_and_readcounts_raw_b)
+                if merge_1:
+                    dataset.merge_adjacent_mutants(OUTPUT=None)
+                    dataset.merge_opposite_tandem_mutants(OUTPUT=None)
+                    dataset.count_adjacent_mutants()
+                if merge_2:
+                    other_dataset.merge_adjacent_mutants(OUTPUT=None)
+                    other_dataset.merge_opposite_tandem_mutants(OUTPUT=None)
+                    other_dataset.count_adjacent_mutants()
+                dataset.merge_other_dataset(other_dataset)
+                assert dataset.summary.adjacent_max_distance == None
+                assert dataset.summary.merging_which_chromosomes == (None, None)
+                assert dataset.summary.merged_adjacent_same_strand_dict == defaultdict(int)
+                assert dataset.summary.merged_adjacent_same_strand_readcounts_dict == defaultdict(list)
+                assert dataset.summary.merged_opposite_tandems == 0
+                assert dataset.summary.merged_opposite_tandems_readcounts == []
+                assert isnan(dataset.summary.same_position_opposite)
+                assert dataset.summary.adjacent_opposite_toward_dict == defaultdict(nan_func)
+                assert dataset.summary.adjacent_opposite_away_dict == defaultdict(nan_func)
+                assert dataset.summary.adjacent_same_strand_dict == defaultdict(nan_func)
+        # checking that an exception is raised if either dataset had mutant-merging done
+        # 1 and 2 have merging, 3 doesn't
+        positions_and_readcounts_raw_1 = "A+100 5, A+101 5, B+100 5, B-100 5, C+100 5, C-101 1, D-100 1, D+101 1"
+        positions_and_readcounts_raw_2 = "A+100 1, A-100 1, A+301 1, A-300 1, A-400 1"
+        positions_and_readcounts_raw_3 = "A+100 1, A-101 1, A+301 1, A-300 1, A-400 1"
+        all_raws = [positions_and_readcounts_raw_1, positions_and_readcounts_raw_2, positions_and_readcounts_raw_3]
+        for positions_and_readcounts_raw_a,positions_and_readcounts_raw_b in itertools.permutations(all_raws, 2):
+            # do merging-and-counting for one or both datasets
+                dataset = self._make_test_mutant_dataset(positions_and_readcounts_raw_a)
+                other_dataset = self._make_test_mutant_dataset(positions_and_readcounts_raw_b)
+                dataset.merge_adjacent_mutants(leave_N_mutants=0, OUTPUT=None)
+                dataset.merge_opposite_tandem_mutants(leave_N_mutants=0, OUTPUT=None)
+                other_dataset.merge_adjacent_mutants(leave_N_mutants=0, OUTPUT=None)
+                other_dataset.merge_opposite_tandem_mutants(leave_N_mutants=0, OUTPUT=None)
+                self.assertRaises(MutantError, dataset.merge_other_dataset, other_dataset)
+        ### basic test that the correct mutants are being merged:  merge identical positions (first pair), 
         #  but not one-off positions, opposite strands, different positions or different chromosomes (remaining pairs)
         positions_and_readcounts_raw_1 = "A+100 5, B-200 5, C+300 5, D+500 5, E-400 5"
         positions_and_readcounts_raw_2 = "A+100 1, B-201 1, C-300 1, E+500 1, D-400 1"
@@ -3034,7 +3200,7 @@ class Testing_Insertional_mutant_pool_dataset(unittest.TestCase):
         for chrom,N_mutants in zip(chromosomes,(1,2,2,2,2)):
             assert (dataset.summary.mutants_in_chromosome(chrom),other_dataset.summary.mutants_in_chromosome(chrom)) == (N_mutants,0)
             assert (dataset.summary.reads_in_chromosome(chrom), other_dataset.summary.reads_in_chromosome(chrom)) == (6, 0)
-        # checking that an exception is raised if attempting to merge a both-strand mutant (in either dataset)
+        ### checking that an exception is raised if attempting to merge a both-strand mutant (in either dataset)
         mutant_both = Insertional_mutant(Insertion_position('A','both',position_before=100, immutable=True))
         mutant_both.add_counts(2,2,1)
         mutant_both.add_sequence_and_counts('AAA',2)
@@ -3591,7 +3757,7 @@ class Testing_Insertional_mutant_pool_dataset(unittest.TestCase):
         # summary
         assert data2.summary.processed_read_count == data2.summary.aligned_read_count\
                 == data2.summary.perfect_read_count == 40
-        assert data2.summary.non_aligned_read_count == 0
+        assert data2.summary.non_aligned_read_count == 'unknown'
         assert data2.summary.strand_read_counts == {'+':38, '-':2}
         assert len(data2) == 40
         assert data2.summary.mutants_in_genes == 39
