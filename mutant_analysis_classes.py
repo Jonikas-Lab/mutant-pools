@@ -1980,7 +1980,9 @@ class Insertional_mutant_pool_dataset():
 
     # TODO was there some other bug when doing tandem-merging and adjacent-merging at once?  I think something weird came up in actual data analysis - see ../../1206_Ru-screen1_deepseq-data-early/notes.txt  "Mutants" section.
 
-    # TODO add checking for more complicated cases like three mutants next to each other?  Apparently this does happen, see mutant_pool_screens/1211_positions_Ru-screen1-for-paper
+    # MAYBE-TODO implement mutant-merging for multi-datasets?  Either independent merging for each component dataset (but that's a bit silly, they could just be done on the singles), OR actually potentially useful different functionality of merging the SAME mutants in all the datasets, using either one particular dataset or the sum of all datasets as reference to decide which pairs to merge.
+
+    # MAYBE-TODO add checking for more complicated cases like three mutants next to each other?  Apparently this does happen, see mutant_pool_screens/1211_positions_Ru-screen1-for-paper
 
     # TODO keep the merging info in the dataset in addition to printing it!  Maybe just make a separate merged_mutant dictionary with copies of the original before-merging mutants?  And a list of the merged mutant position pairs and the resulting mutant position pairs, so they can all be looked up if desired.
 
