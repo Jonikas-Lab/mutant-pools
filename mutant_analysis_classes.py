@@ -1860,6 +1860,13 @@ class Insertional_mutant_pool_dataset():
                 #   rewritten so 'both' and either + or - would compare as the same, or something, 
                 #  and then for the readcount ratios, for the both-strand mutant, only the same-strand readcount 
                 #   should be used! (from mutant.original_strand_readcounts)
+                # BUT what would I do if I have a both-stranded mutant with fewer reads than an adjacent single-stranded mutant??
+                #  Can't really merge a both-stranded mutant into a single-stranded one, that would make NO SENSE,
+                #   since the other-strand reads cannot be a result of an indel.  
+                #  COULD read a single-strand mutant into a both-strand one, though...  
+                #  But in that case why not just do adjacent-merging before tandem-merging?  
+                #  So maybe this should continue not being allowed, and I should rewrite the error message to make it clear that
+                #   it's actually a bad idea, not just not implemented. 
 
         ### write basic info to OUTPUT (if block for readability)
         if True:
@@ -1910,6 +1917,8 @@ class Insertional_mutant_pool_dataset():
         OUTPUT.write("# Finished merging adjacent mutants: %s pairs merged\n"%self.summary.merged_adjacent_pairs) 
 
     # TODO was there some other bug when doing tandem-merging and adjacent-merging at once?  I think something weird came up in actual data analysis - see ../../1206_Ru-screen1_deepseq-data-early/notes.txt  "Mutants" section.
+
+    # TODO add checking for more complicated cases like three mutants next to each other?  Apparently this does happen, see mutant_pool_screens/1211_positions_Ru-screen1-for-paper
 
     # TODO keep the merging info in the dataset in addition to printing it!  Maybe just make a separate merged_mutant dictionary with copies of the original before-merging mutants?  And a list of the merged mutant position pairs and the resulting mutant position pairs, so they can all be looked up if desired.
 
