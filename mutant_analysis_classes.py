@@ -2476,6 +2476,16 @@ class Insertional_mutant_pool_dataset():
             OUTPUT.write('\n')
 
 
+def read_mutant_file(infile):
+    """ Read mutant input file, return as new dataset (old .txt format, or new .pickle format). """
+    if infile.endswith('.pickle'):
+        current_dataset = general_utilities.unpickle(infile)
+    else:
+        current_dataset = Insertional_mutant_pool_dataset(infile=infile)
+        current_dataset.count_adjacent_mutants(OUTPUT=None)
+    return current_dataset
+
+
 ############################################### Unit-tests ##############################################################
 
 class Testing_position_functionality(unittest.TestCase):
