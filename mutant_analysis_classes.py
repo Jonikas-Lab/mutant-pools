@@ -1474,9 +1474,12 @@ class Insertional_mutant_pool_dataset():
         datasets_from_summary = set(self.summary.keys())
         datasets_from_mutants = set.union(*[set(m.by_dataset.keys()) for m in self])
         _check_sets_raise_error(datasets_from_summary, datasets_from_mutants, "from summary", "from mutants")
-        if self._dataset_order is not None:     
-            datasets_from_order = set(self._dataset_order)
-            _check_sets_raise_error(datasets_from_order, datasets_from_summary, "from dataset_order", "from summary")
+        try:
+            if self._dataset_order is not None:     
+                datasets_from_order = set(self._dataset_order)
+                _check_sets_raise_error(datasets_from_order, datasets_from_summary, "from dataset_order", "from summary")
+        except AttributeError:
+            pass
 
     @property
     def dataset_order(self):
