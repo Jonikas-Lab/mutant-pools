@@ -14,7 +14,7 @@ import matplotlib.pyplot as mplt
 from matplotlib.font_manager import FontProperties
 # my modules
 import mutant_analysis_classes
-from general_utilities import unpickle
+import general_utilities
 import plotting_utilities
 
 
@@ -80,8 +80,9 @@ def get_all_datasets_glob(glob_pattern, split_filenames_on=None, readcounts_only
     return all_datasets
 
 
-############################################## Single-plot functions ##############################################
+############################################## Plotting readcounts ##############################################
 
+######### Single-plot functions
 
 def plot_readcounts_sorted(dataset_name_list, color_dict=None, perfect_only=False, x_max=None, y_max=None, y_min=0.7, 
                            log_y=True, legend=True, legend_kwargs=None):
@@ -95,6 +96,7 @@ def plot_readcounts_sorted(dataset_name_list, color_dict=None, perfect_only=Fals
     if log_y:   mplt.yscale('log')
     else:       mplt.yscale('linear')
     plotting_utilities.set_axes_limits(None, x_max, y_min, y_max)
+    plotting_utilities.remove_half_frame()
     if legend:
         if legend_kwargs is None:   mplt.legend(loc=4, ncol=3, numpoints=3, handlelength=1.2, handletextpad=.7, columnspacing=1, 
                                                 prop=FontProperties(size='medium'))
@@ -120,6 +122,7 @@ def plot_readcounts_cumulative(dataset_name_list, color_dict=None, linewidth_dic
     else:       mplt.xscale('linear')
     mplt.ylabel('% of mutants with that readcount or less')
     plotting_utilities.set_axes_limits(x_min, x_max, y_min, y_max)
+    plotting_utilities.remove_half_frame()
     if legend:
         if legend_kwargs is None:   mplt.legend(loc=4, ncol=3, numpoints=3, handlelength=1.2, handletextpad=.7, columnspacing=1, 
                                                 prop=FontProperties(size='medium'))
@@ -146,13 +149,13 @@ def plot_readcounts_hist(dataset_name_list, color_dict=None, Nbins=100, histtype
     mplt.ylabel('number of mutants with that readcount (%s)'%('log' if log_y else 'linear'))
     # TODO if x_log, change the xticklabels (and maybe add ticks?) to look like log!
     plotting_utilities.set_axes_limits(None, readcount_max, y_min, y_max)
+    plotting_utilities.remove_half_frame()
     if legend:
         mplt.legend(loc=1, ncol=3, numpoints=3, handlelength=1.2, handletextpad=.7, columnspacing=1, 
                     prop=FontProperties(size='medium'))
   
 
-############################################# Multi-plot functions ##############################################
-
+######### Multi-plot functions
 
 # this is OLD, probably doesn't work - MAYBE-TODO make it work if I actually want to?
 def plot_sample_row_multi_plots(sample_name, sample_N, total_samples, first_cumulative=True, 
@@ -183,6 +186,191 @@ def plot_sample_row_multi_plots(sample_name, sample_N, total_samples, first_cumu
         else:
             mplt.ylabel(sample_name)
         curr_plot += 1
+
+######################################## Plotting adjacent mutant data ###########################################
+
+def _get_singles_from_counter(val_count_dict, max_val):
+    """ Given a val:count dict, return a val list with each val present count times. (for creating histograms). """
+    val_singles_list = []
+    for val,count in val_count_dict.items():
+        if max_val is None or val <= max_val:
+            val_singles_list.extend([val]*count)
+    return val_singles_list
+
+
+colors_by_adjacent_category = {'adjacent-same-strand': 'red', 'adjacent-opposite-both': 'cyan', 'same-pos-opposite': 'orange', 
+                               'adjacent-opposite-toward': 'green', 'adjacent-opposite-away': 'blue' }
+
+
+def plot_adjacent_distance_histogram(dataset, incl_same_strand=True, incl_opposite_both=True, incl_opposite_separate=True, 
+                                     incl_same_pos_opposite=False, max_distance=None, N_bins=100, symlog_y=False, symthresh=100):
+    """ Step-histogram of the number of adjacent mutant pairs by distance, separated by type. 
+
+    Dataset should be a mutant_analysis_classes.Insertional_mutant_pool_dataset instance, which had its count_adjacent_mutants 
+     method ran at some point to fill the relevant summary fields with the information for this plot.
+    All the incl_* variables are True/False and govern which adjacent mutant types should be included. 
+     (Be careful with incl_same_pos_opposite - those are always distance 0, so it's hard to show them meaningfully in comparison
+       to the ones with a wider ditance range unless each distance has its own bin, like with max_distance 100 and N_bins 101). 
+    Only include mutant pairs with distance at most max_distance, if given.
+    If symlog_y, the y axis will be symlog-scale (linear up to symthresh, exponential afterward). 
+    """
+    datasets, labels, colors = [], [], []
+    if incl_same_strand:    
+        datasets.append(_get_singles_from_counter(dataset.summary.adjacent_same_strand_dict, max_distance))
+        labels.append('adjacent-same-strand')
+        colors.append(colors_by_adjacent_category[labels[-1]])
+    if incl_opposite_separate:
+        datasets.append(_get_singles_from_counter(dataset.summary.adjacent_opposite_toward_dict, max_distance))
+        labels.append('adjacent-opposite-toward')
+        colors.append(colors_by_adjacent_category[labels[-1]])
+        datasets.append(_get_singles_from_counter(dataset.summary.adjacent_opposite_away_dict, max_distance))
+        labels.append('adjacent-opposite-away')
+        colors.append(colors_by_adjacent_category[labels[-1]])
+    if incl_opposite_both:
+        adjacent_opposite_both = general_utilities.add_dicts_of_ints(dataset.summary.adjacent_opposite_toward_dict, 
+                                                                     dataset.summary.adjacent_opposite_away_dict)
+        datasets.append(_get_singles_from_counter(adjacent_opposite_both, max_distance))
+        labels.append('adjacent-opposite-both')
+        colors.append(colors_by_adjacent_category[labels[-1]])
+    if incl_same_pos_opposite:
+        datasets.append([0]*dataset.summary.same_position_opposite)
+        labels.append('same-pos-opposite')
+        colors.append(colors_by_adjacent_category[labels[-1]])
+        if max_distance>=N_bins:
+            print("Warning: if each distance doesn't get its own bin (N_bins = max_distance+1), "
+                  +"the same-pos-opposite count won't be fairly represented!")
+    xmin = min(sum(datasets, []))
+    xmax = max(sum(datasets, []))
+    xspread = xmax - xmin
+    # have to do bins by hand - TODO or do I?
+    #bins = [(low + i/N_bins*spread) for i in range(N_bins+1)]
+    hist_data, bin_edges, hist_patches = mplt.hist(datasets, label=labels, color=colors, bins=N_bins, histtype='step')
+    plotting_utilities.remove_half_frame()
+    mplt.xlabel('distance between the two mutants in a pair (bp)' + (' (binned into %s bins)'%N_bins if (xspread+1)>N_bins else ''))
+    mplt.ylabel('number of mutant pairs with given distance')
+    # sometimes mplt.hist gets the axis limits wrong, so fix them by hand
+    ymax = max(sum([list(d) for d in hist_data], []))
+    mplt.xlim(xmin-xspread/N_bins, xmax)
+    mplt.ylim(0-ymax/100, ymax*1.05)
+    mplt.legend(title='pair categories by relative orientation:', prop=FontProperties(size='medium'))
+
+
+def plot_adjacent_dist_1_bars(dataset, incl_same_strand=True, incl_opposite_both=True, incl_opposite_separate=True, 
+                              incl_same_pos_opposite=True, logscale_x=False):
+    """ Horizontal bar-plot of the number of 0-1bp adjacent mutant pairs, separated by type. 
+
+    Dataset should be a mutant_analysis_classes.Insertional_mutant_pool_dataset instance, which had its count_adjacent_mutants 
+     method ran at some point to fill the relevant summary fields with the information for this plot.
+    All the incl_* variables are True/False and govern which adjacent mutant types should be included. 
+    If logscale_x, the x axis will be log-scale. 
+    """
+    counts, labels, colors = [], [], []
+    if incl_same_strand:    
+        counts.append(dataset.summary.adjacent_same_strand_dict[1])
+        labels.append('adjacent-same-strand')
+        colors.append(colors_by_adjacent_category[labels[-1]])
+    if incl_opposite_both:
+        counts.append(dataset.summary.adjacent_opposite_toward_dict[1] + dataset.summary.adjacent_opposite_away_dict[1])
+        labels.append('adjacent-opposite-both')
+        colors.append(colors_by_adjacent_category[labels[-1]])
+    if incl_opposite_separate:
+        counts.append(dataset.summary.adjacent_opposite_toward_dict[1])
+        labels.append('adjacent-opposite-toward')
+        colors.append(colors_by_adjacent_category[labels[-1]])
+        counts.append(dataset.summary.adjacent_opposite_away_dict[1])
+        labels.append('adjacent-opposite-away')
+        colors.append(colors_by_adjacent_category[labels[-1]])
+    if incl_same_pos_opposite:
+        counts.append(dataset.summary.same_position_opposite)
+        labels.append('same-pos-opposite')
+        colors.append(colors_by_adjacent_category[labels[-1]])
+    # use everything reversed, so that the first one is on top instead of bottom (convert to list, matplotlib chokes on iterators)
+    mplt.barh(range(len(counts)), list(reversed(counts)), color=list(reversed(colors)), align='center', log=logscale_x)
+    mplt.yticks(range(len(labels)), list(reversed(labels)))
+    mplt.xlabel('number of mutant pairs in given category')
+    plotting_utilities.remove_half_frame()
+
+
+def _get_sorted_ratios_from_dict(ratio_distance_dict, min_distance, max_distance):
+    """ Given a distance:readcount_pair_list dict, return a list of readcount_pair ratios for distances between min and max. 
+    """
+    ratio_list = []
+    for dist in ratio_distance_dict.keys():
+        if min_distance <= dist <= max_distance:
+            for x,y in ratio_distance_dict[dist]:
+                x,y = sorted([x,y])
+                ratio_list.append(y/x)
+    return sorted(ratio_list)
+
+
+def plot_adjacent_readcount_ratios(dataset, distance_cutoffs, distance_linestyles=None, incl_same_strand=True, 
+                           incl_opposite_both=True, incl_opposite_separate=True, incl_same_pos_opposite=True, logscale_y=True):
+    """ Plot sorted readcount ratios of adjacent mutant pairs, separated by type and optionally distance categories.
+
+    Dataset should be a mutant_analysis_classes.Insertional_mutant_pool_dataset instance, which had its count_adjacent_mutants 
+     method ran at some point to fill the relevant summary fields with the information for this plot.
+    Distance_cutoffs should be a list of numbers: [1,10,1000] will result in plotting separate lines for mutant pairs with 
+     distance 1, 2-10, and 11-1000 for each type (except same-pos-opposite, since those always have a distance of 0)
+    Distance_linestyles should be a list of valid matplotlib.pyplot.plot linestyle values, one for each cutoff in distance_cutoffs.
+    All the incl_* variables are True/False and govern which adjacent mutant types should be included. 
+    If logscale_y, the y axis will be log-scale. 
+    """
+    # LATER-TODO do I actually want sorted readcount ratios, or would a histogram or something be better?  But histograms don't have linestyles... I could just make histogram-like data and use mplt.plot to plot it, though.
+    if distance_linestyles is None:
+        if len(distance_cutoffs)==2:    distance_linestyles = ['-', ':']
+        elif len(distance_cutoffs)==3:  distance_linestyles = ['-', '--', ':']
+        elif len(distance_cutoffs)==4:  distance_linestyles = ['-', '--', '-.', ':']
+        else:   raise Exception("If there aren't 2-4 distance_cutoffs, need to provide distance_linestyles!")
+    ratio_lists, labels, colors, linestyles = [], [], [], []
+    distance_mins = [0] + [x+1 for x in distance_cutoffs[:-1]]
+    if incl_same_strand:    
+        category = 'adjacent-same-strand'
+        for distance_min,distance_max,linestyle in zip(distance_mins, distance_cutoffs, distance_linestyles):
+            ratio_lists.append(_get_sorted_ratios_from_dict(dataset.summary.adjacent_same_strand_readcounts_dict, 
+                                                            distance_min, distance_max))
+            labels.append('%s, dist %s-%s'%(category, distance_min, distance_max))
+            colors.append(colors_by_adjacent_category[category])
+            linestyles.append(linestyle)
+    if incl_opposite_both:
+        category = 'adjacent-opposite-both'
+        for distance_min,distance_max,linestyle in zip(distance_mins, distance_cutoffs, distance_linestyles):
+            ratio_lists.append(sorted(sum([_get_sorted_ratios_from_dict(D, distance_min, distance_max) 
+                                           for D in (dataset.summary.adjacent_opposite_toward_readcounts_dict, 
+                                                     dataset.summary.adjacent_opposite_away_readcounts_dict,)], [])))
+            labels.append('%s, dist %s-%s'%(category, distance_min, distance_max))
+            colors.append(colors_by_adjacent_category[category])
+            linestyles.append(linestyle)
+    if incl_opposite_separate:
+        category = 'adjacent-opposite-toward'
+        for distance_min,distance_max,linestyle in zip(distance_mins, distance_cutoffs, distance_linestyles):
+            ratio_lists.append(_get_sorted_ratios_from_dict(dataset.summary.adjacent_opposite_toward_readcounts_dict, 
+                                                            distance_min, distance_max))
+            labels.append('%s, dist %s-%s'%(category, distance_min, distance_max))
+            colors.append(colors_by_adjacent_category[category])
+            linestyles.append(linestyle)
+        category = 'adjacent-opposite-away'
+        for distance_min,distance_max,linestyle in zip(distance_mins, distance_cutoffs, distance_linestyles):
+            ratio_lists.append(_get_sorted_ratios_from_dict(dataset.summary.adjacent_opposite_away_readcounts_dict, 
+                                                            distance_min, distance_max))
+            labels.append('%s, dist %s-%s'%(category, distance_min, distance_max))
+            colors.append(colors_by_adjacent_category[category])
+            linestyles.append(linestyle)
+    if incl_same_pos_opposite:
+        category = 'same-pos-opposite'
+        ratio_lists.append(_get_sorted_ratios_from_dict({0: dataset.summary.same_position_opposite_readcounts}, 0, 0))
+        labels.append('%s (always dist 0)'%(category))
+        colors.append(colors_by_adjacent_category[category])
+        linestyles.append(distance_linestyles[0])
+    for ratio_list,label,color,linestyle in zip(ratio_lists, labels, colors, linestyles):
+       mplt.plot([(y+1)/len(ratio_list) for y in range(len(ratio_list))], ratio_list, 
+                 color=color, linestyle=linestyle, label='%s - %s pairs'%(label, len(ratio_list)))
+    if logscale_y:   mplt.yscale('log')
+    plotting_utilities.remove_half_frame()
+    mplt.ylabel('readcount ratio between the two mutants in a pair')
+    mplt.xlabel('all adjacent mutant pairs, sorted by readcount ratio, normalized to 100%')
+    smallfont = FontProperties(size='smaller')
+    mplt.legend(prop=smallfont, loc=2)
+    mplt.title('Ratios between the readcounts of adjacent mutant pairs,\nby category and distance')
 
 
 ################################################# Testing etc ##################################################
