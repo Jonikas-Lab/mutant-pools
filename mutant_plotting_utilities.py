@@ -243,7 +243,7 @@ def _get_plotline_pos(middle_pos, total_width, total_N, N):
     return left_pos, right_pos
 
 
-def mutant_positions_and_data(mutant_datasets=[], density=False, colors=None, names='mutants', strands='both', 
+def mutant_positions_and_data(mutant_datasets=[], density=True, colors=None, names='mutants', strands='both', 
                           other_datasets=[], other_density=False, other_colors=None, other_names='other', 
                           bin_size=20000, chromosome_lengths=None, interpolate=False, condense_colorbars=True, 
                           include_scaffolds=False, include_cassette=False, include_other=False):
@@ -293,7 +293,7 @@ def mutant_positions_and_data(mutant_datasets=[], density=False, colors=None, na
         for curr_color,curr_density in zip(old_color_list,density_list):
             if curr_color is not None:  new_color_list.append(curr_color)
             else:   # see http://matplotlib.org/examples/pylab_examples/show_colormaps.html for all colormaps; *_r means reverse
-                if curr_density:        new_color_list.append('afmhot')
+                if curr_density:        new_color_list.append('gist_earth')
                 else:                   new_color_list.append('black')
 
     ### get the list of chromosomes to plot
@@ -365,10 +365,11 @@ def mutant_positions_and_data(mutant_datasets=[], density=False, colors=None, na
                 if chr_N==0:    all_heatmaps.append((im, curr_name))
 
     ### set plot limits, ticks, labels, etc
-    # mplt.imshow has an annoying tendency to reset the plot limits to match a single image, so set them by hand
+    # mplt.imshow has an annoying tendency to reset the plot limits to match a single image, so set them sensibly by hand
+    # we want the lower y limit to be slightly below 0, so that the first bin doesn't hide behind the axis line (checked by hand)
     edge_space = 1-total_plotline_width
     mplt.xlim(0 - total_plotline_width/2 - edge_space, len(all_chromosomes)-1 + total_plotline_width/2 + edge_space)
-    mplt.ylim(0, max(chromosome_lengths.values())*1.01)
+    mplt.ylim(-max(chromosome_lengths.values())*.0015, max(chromosome_lengths.values())*1.01)
     # add xticks with chromosome names as labels!  
     #  - if we only have normal chromosomes, display just the numbers.
     #  - if we have different kinds, need to display the full names - rotate them to keep them from overlapping.
@@ -378,20 +379,21 @@ def mutant_positions_and_data(mutant_datasets=[], density=False, colors=None, na
         mplt.xticks(range(len(all_chromosomes)), [x.split('_')[1] for x in all_chromosomes])
     else:
         mplt.xticks(range(len(all_chromosomes)), all_chromosomes, rotation=90)
+    # MAYBE-TODO it'd be nice to get rid of the actual ticks and just keep the labels, the ticks only obscure the data
     # modify yticks to be in Mb - and for some reason this resets ylim, so save it and set it back to previous value
     mplt.ylabel('chromosome position (in MB) (chromosomes start at the top)')
     ylim = mplt.ylim()
     yticks = mplt.yticks()[0]
     mplt.yticks(yticks, [x/1000000 for x in yticks])
     mplt.ylim(ylim)
-    # TODO this is inconsistent!  If chromosomes start at the top, they should be lined up on top instead of bottom... Ask Martin what the best way is.
+    # TODO the y scale/direction is inconsistent!  If chromosomes start at the top, they should be lined up on top instead of bottom... Ask Martin what the best way is.
+    plotting_utilities.remove_half_frame()
 
     ### add legends
     # normal legend for the line-plots (only if there's more than one dataset - if there's just one, presumably the title says it)
     if len(all_datasets_density_color_name)>1:
         mplt.legend(prop=FontProperties(size='small'))
         # MAYBE-TODO nicer legend formatting?  Get rid of frame, thicker line, line up with colorbars or something?
-    # colorbars for each heatmap, labeled with the dataset name
     # if desired, figure out sensible positioning to put smaller colorbars in two rows rather than have the default big ones
     if condense_colorbars:
         # column sizes
@@ -409,6 +411,7 @@ def mutant_positions_and_data(mutant_datasets=[], density=False, colors=None, na
         row_padding = 0.1*bbox.height
         row_height = (bbox.height - row_padding) / 2
         row_bottoms = [bbox.ymin + bbox.height/2 + row_padding/2, bbox.ymin]
+    # add colorbars for each heatmap, labeled with the dataset name
     for N, (plot, name) in enumerate(all_heatmaps):
         colorbar_kwargs = {}
         # optionally condense the colorbars: put in two rows, reduce spacing
