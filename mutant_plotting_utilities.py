@@ -454,6 +454,7 @@ def chromosome_density_scatterplot(mutant_dataset, include_scaffolds=True, inclu
     The *_multiplier arguments can be set to N>1 to make the plot reflect that fact that there are multiple copies 
      of the chloroplast/mitochondrial genomes in the cell, so the "functional" length is N times higher.
     """
+    # TODO add option to only count effective (mappable) length!
 
     # get the chromosome lengths from a file, if filename or None was given; grab only the chromosome types we want;
     #  apply chloro/mito multipliers
@@ -466,25 +467,32 @@ def chromosome_density_scatterplot(mutant_dataset, include_scaffolds=True, inclu
     chromosomes_by_type = _get_chromosomes_by_type(chromosome_lengths.keys(), include_scaffolds, include_cassette, include_other, 
                                                    output_dict=True)
 
+    mutants_in_chromosomes_all = {}
     for chr_type in sorted(chromosomes_by_type, key=seq_basic_utilities.chromosome_sort_key):
         chr_list = chromosomes_by_type[chr_type]
         mutants_in_chromosomes = [mutant_dataset.summary.mutants_in_chromosome(c) for c in chr_list]
+        mutants_in_chromosomes_all.update(dict(zip(chr_list, mutants_in_chromosomes)))
         if sum(mutants_in_chromosomes):
-            mplt.scatter([chromosome_lengths[c] for c in chr_list], mutants_in_chromosomes, 
-                         c=[seq_basic_utilities.chromosome_color(c) for c in chr_list], label=chr_type)
+            mplt.plot([chromosome_lengths[c] for c in chr_list], mutants_in_chromosomes, 'o', 
+                      color=seq_basic_utilities.CHROMOSOME_TYPE_COLORS[chr_type], label=chr_type)
 
-    mplt.ylabel('number of mutants in chromosome')
+    max_length = max(chromosome_lengths.values())
+    max_N_mutants = max(mutants_in_chromosomes_all.values())
     mplt.xlabel('chromosome length (in Mb)')
     mplt.xticks(mplt.xticks()[0], [x/1000000 for x in mplt.xticks()[0]])
+    mplt.xlim(-max_length*.05, max_length*1.1)
+    mplt.ylabel('number of mutants in chromosome')
+    mplt.ylim(-max_N_mutants*.05, max_N_mutants*1.1)
     mplt.legend(loc='lower right', prop=FontProperties(size='medium'))
 
 
-def chromosome_density_barchart(mutant_dataset, include_scaffolds=True, include_cassette=True, include_other=True, 
+def chromosome_density_barchart(mutant_dataset, include_scaffolds=True, include_cassette=False, include_other=True, 
                                         chromosome_lengths=None, chloroplast_multiplier=1, mito_multiplier=1):
     """ Make a simple bar-chart of chromosome mutant densities (per kb).
 
     See chromosome_density_scatterplot docstring for all the arguments - they're the same.
     """
+    # TODO add option to only count effective (mappable) length!
 
     # get the chromosome lengths from a file, if filename or None was given; grab only the chromosome types we want; 
     #  apply chloro/mito multipliers; sort
@@ -501,11 +509,11 @@ def chromosome_density_barchart(mutant_dataset, include_scaffolds=True, include_
     mutant_densities = [mutant_dataset.summary.mutants_in_chromosome(c)/chromosome_lengths[c]*1000 for c in all_chromosomes]
 
     mplt.bar(range(len(all_chromosomes)), mutant_densities, 
-             color=[seq_basic_utilities.chromosome_color(c) for c in all_chromosomes], align='center')
-
+             color=[seq_basic_utilities.chromosome_color(c) for c in all_chromosomes], align='center', linewidth=0)
+    # MAYBE-TODO add error bars based on total mutant number?
     # MAYBE-TODO add a line/something showing the max mutants/20kb value for each chromosome?  But that would require more data processing (similar to what was done in mutant_positions_and_data)
 
-    mplt.ylabel('density of mutants in chromosome (per kb)')
+    mplt.ylabel('mutants per kb')
     mplt.xticks(range(len(all_chromosomes)), all_chromosomes, rotation=90)
     mplt.xlim(-1, len(all_chromosomes))
     mplt.legend(loc='lower right', prop=FontProperties(size='medium'))
