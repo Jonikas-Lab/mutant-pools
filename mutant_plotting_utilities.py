@@ -324,13 +324,15 @@ def mutant_positions_and_data(mutant_datasets=[], density=True, colors=None, nam
             for chr_N,chromosome in enumerate(all_chromosomes):
                 chromosome_length = chromosome_lengths[chromosome]
                 left_pos, right_pos = _get_plotline_pos(chr_N, total_plotline_width, len(all_datasets_density_color_name), N)
-                position_list = curr_dataset[chromosome]
                 mplt.vlines(chr_N, left_pos, chromosome_length)
-                # inverting positions, so that position 0 is at the top, not the bottom - easier to read that way
-                inverted_positions = [chromosome_length - pos for pos in position_list]
-                # only give a label to one chromosome per dataset, so only one shows up in the legend
-                mplt.hlines(inverted_positions, left_pos, right_pos, color=curr_color, 
-                            label = ('__nolegend__' if chr_N!=0 else curr_name))
+                position_list = curr_dataset[chromosome]
+                # only plot the lines if there are any mutants
+                if position_list:
+                    # inverting positions, so that position 0 is at the top, not the bottom - easier to read that way
+                    inverted_positions = [chromosome_length - pos for pos in position_list]
+                    # only give a label to one chromosome per dataset, so only one shows up in the legend
+                    mplt.hlines(inverted_positions, left_pos, right_pos, color=curr_color, 
+                                label = ('__nolegend__' if chr_N!=0 else curr_name))
         # if we're doing a density plot, bin the positions into counts, and plot as a heatmap.
         else:
             chromosome_bin_count_lists = {}
