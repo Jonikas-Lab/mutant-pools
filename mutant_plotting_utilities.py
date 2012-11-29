@@ -88,7 +88,7 @@ def get_all_datasets_glob(glob_pattern, split_filenames_on=None, readcounts_only
 
 ######### Single-plot functions
 
-def plot_readcounts_sorted(dataset_name_list, color_dict=None, perfect_only=False, x_max=None, y_max=None, y_min=0.7, 
+def readcounts_sorted_plot(dataset_name_list, color_dict=None, perfect_only=False, x_max=None, y_max=None, y_min=0.7, 
                            log_y=True, legend=True, legend_kwargs=None):
     """ Basic sorted readcount plots - multiple in a single plot, takes a (dataset,name) list. """
     for dataset,name in dataset_name_list:
@@ -107,7 +107,7 @@ def plot_readcounts_sorted(dataset_name_list, color_dict=None, perfect_only=Fals
         else:                       mplt.legend(**legend_kwargs)
       
 
-def plot_readcounts_cumulative(dataset_name_list, color_dict=None, linewidth_dict=None, linestyle_dict=None, perfect_only=False, 
+def readcounts_cumulative_plot(dataset_name_list, color_dict=None, linewidth_dict=None, linestyle_dict=None, perfect_only=False, 
                                x_min=None, x_max=None, y_max=None, y_min=None, log_x=True, legend=True, legend_kwargs=None):
     """ ROC-like "cumulative histogram" - multiple in a single plot, takes a (dataset,name) list. """
     for dataset,name in dataset_name_list:
@@ -133,7 +133,7 @@ def plot_readcounts_cumulative(dataset_name_list, color_dict=None, linewidth_dic
         else:                       mplt.legend(**legend_kwargs)
   
 
-def plot_readcounts_hist(dataset_name_list, color_dict=None, Nbins=100, histtype='bar', perfect_only=False, log_x=True, log_y=False, 
+def readcounts_histogram(dataset_name_list, color_dict=None, Nbins=100, histtype='bar', perfect_only=False, log_x=True, log_y=False, 
                          readcount_max=None, y_max=None, y_min=None, no_edges=False, legend=True, legend_kwargs=None):
     """ Normal histogram (any type), linear or logscale - multiple in a single plot, takes a (dataset,name) list. """
     for dataset,name in dataset_name_list:
@@ -162,7 +162,7 @@ def plot_readcounts_hist(dataset_name_list, color_dict=None, Nbins=100, histtype
 ######### Multi-plot functions
 
 # this is OLD, probably doesn't work - MAYBE-TODO make it work if I actually want to?
-def plot_sample_row_multi_plots(sample_name, sample_N, total_samples, first_cumulative=True, 
+def sample_row_multi_plots(sample_name, sample_N, total_samples, first_cumulative=True, 
                                 xmax_ymax_Nbins_logx_logy_list=[(None,None,100,True,False),(None,None,100,False,False)], 
                                 histtype='bar', if_xlabels=True):
     """ Plot one sample readcount info with multiple methods: cumulative histogram, and any number of normal histograms with different settings. """
@@ -243,7 +243,7 @@ def _get_plotline_pos(middle_pos, total_width, total_N, N):
     return left_pos, right_pos
 
 
-def plot_mutant_positions(mutant_datasets=[], density=False, colors=None, names='mutants', strands='both', 
+def mutant_positions_and_data(mutant_datasets=[], density=False, colors=None, names='mutants', strands='both', 
                           other_datasets=[], other_density=False, other_colors=None, other_names='other', 
                           bin_size=20000, chromosome_lengths=None, interpolate=False, condense_colorbars=True, 
                           include_scaffolds=False, include_cassette=False, include_other=False):
@@ -431,7 +431,7 @@ def plot_mutant_positions(mutant_datasets=[], density=False, colors=None, names=
         mplt.draw()
 
 
-def plot_chromosome_density_scatterplot(mutant_dataset, include_scaffolds=True, include_cassette=True, include_other=True, 
+def chromosome_density_scatterplot(mutant_dataset, include_scaffolds=True, include_cassette=True, include_other=True, 
                                         chromosome_lengths=None, chloroplast_multiplier=1, mito_multiplier=1):
     """ Make a chromosome length vs mutant number scatterplot. 
 
@@ -468,11 +468,11 @@ def plot_chromosome_density_scatterplot(mutant_dataset, include_scaffolds=True, 
     mplt.legend(loc='lower right', prop=FontProperties(size='medium'))
 
 
-def plot_chromosome_density_barchart(mutant_dataset, include_scaffolds=True, include_cassette=True, include_other=True, 
+def chromosome_density_barchart(mutant_dataset, include_scaffolds=True, include_cassette=True, include_other=True, 
                                         chromosome_lengths=None, chloroplast_multiplier=1, mito_multiplier=1):
     """ Make a simple bar-chart of chromosome mutant densities (per kb).
 
-    See plot_chromosome_density_scatterplot docstring for all the arguments - they're the same.
+    See chromosome_density_scatterplot docstring for all the arguments - they're the same.
     """
 
     # get the chromosome lengths from a file, if filename or None was given; grab only the chromosome types we want; 
@@ -513,7 +513,7 @@ colors_by_adjacent_category = {'adjacent-same-strand': 'red', 'adjacent-opposite
                                'adjacent-opposite-toward': 'green', 'adjacent-opposite-away': 'blue' }
 
 
-def plot_adjacent_distance_histogram(dataset, incl_same_strand=True, incl_opposite_both=True, incl_opposite_separate=True, 
+def adjacent_distance_histogram(dataset, incl_same_strand=True, incl_opposite_both=True, incl_opposite_separate=True, 
                                      incl_same_pos_opposite=False, max_distance=None, N_bins=100, symlog_y=False, symthresh=100):
     """ Step-histogram of the number of adjacent mutant pairs by distance, separated by type. 
 
@@ -566,7 +566,7 @@ def plot_adjacent_distance_histogram(dataset, incl_same_strand=True, incl_opposi
     mplt.legend(title='pair categories by relative orientation:', prop=FontProperties(size='medium'))
 
 
-def plot_adjacent_dist_1_bars(dataset, incl_same_strand=True, incl_opposite_both=True, incl_opposite_separate=True, 
+def adjacent_dist1_barchart(dataset, incl_same_strand=True, incl_opposite_both=True, incl_opposite_separate=True, 
                               incl_same_pos_opposite=True, logscale_x=False):
     """ Horizontal bar-plot of the number of 0-1bp adjacent mutant pairs, separated by type. 
 
@@ -614,7 +614,7 @@ def _get_sorted_ratios_from_dict(ratio_distance_dict, min_distance, max_distance
     return sorted(ratio_list)
 
 
-def plot_adjacent_readcount_ratios(dataset, distance_cutoffs, distance_linestyles=None, incl_same_strand=True, 
+def adjacent_readcount_ratio_plot(dataset, distance_cutoffs, distance_linestyles=None, incl_same_strand=True, 
                            incl_opposite_both=True, incl_opposite_separate=True, incl_same_pos_opposite=True, logscale_y=True):
     """ Plot sorted readcount ratios of adjacent mutant pairs, separated by type and optionally distance categories.
 
