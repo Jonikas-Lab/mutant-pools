@@ -245,7 +245,7 @@ def _get_plotline_pos(middle_pos, total_width, total_N, N):
 
 def mutant_positions_and_data(mutant_datasets=[], density=True, colors=None, names='mutants', strands='both', 
                           other_datasets=[], other_density=False, other_colors=None, other_names='other', 
-                          bin_size=20000, chromosome_lengths=None, interpolate=False, condense_colorbars=True, 
+                          title='', bin_size=20000, chromosome_lengths=None, interpolate=False, condense_colorbars=True, 
                           include_scaffolds=False, include_cassette=False, include_other=False):
     """ Plot multiple mutant datasets or other data as position lines or density heatmaps across chromosomes. 
 
@@ -370,6 +370,8 @@ def mutant_positions_and_data(mutant_datasets=[], density=True, colors=None, nam
                 if chr_N==0:    all_heatmaps.append((im, curr_name))
 
     ### set plot limits, ticks, labels, etc
+    # it's important to do all this BEFORE colorbars, otherwise it'll apply to the colorbar instead of main axes!
+    if title:  mplt.title(title)
     # mplt.imshow has an annoying tendency to reset the plot limits to match a single image, so set them sensibly by hand
     # we want the lower y limit to be slightly below 0, so that the first bin doesn't hide behind the axis line (checked by hand)
     edge_space = 1-total_plotline_width
@@ -437,6 +439,7 @@ def mutant_positions_and_data(mutant_datasets=[], density=True, colors=None, nam
         c.set_ticks(zip(*ticks_and_labels)[0])
         c.set_ticklabels(zip(*ticks_and_labels)[1])
         mplt.draw()
+    # TODO it'd be nice if this actually returned the main axes object... (and maybe a list of colorbar axes too?)
 
 
 def chromosome_density_scatterplot(mutant_dataset, include_scaffolds=True, include_cassette=True, include_other=True, 
@@ -499,6 +502,8 @@ def chromosome_density_barchart(mutant_dataset, include_scaffolds=True, include_
 
     mplt.bar(range(len(all_chromosomes)), mutant_densities, 
              color=[seq_basic_utilities.chromosome_color(c) for c in all_chromosomes], align='center')
+
+    # MAYBE-TODO add a line/something showing the max mutants/20kb value for each chromosome?  But that would require more data processing (similar to what was done in mutant_positions_and_data)
 
     mplt.ylabel('density of mutants in chromosome (per kb)')
     mplt.xticks(range(len(all_chromosomes)), all_chromosomes, rotation=90)
