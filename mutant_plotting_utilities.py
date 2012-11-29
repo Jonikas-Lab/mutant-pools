@@ -337,10 +337,13 @@ def mutant_positions_and_data(mutant_datasets=[], density=True, colors=None, nam
             for chr_N,chromosome in enumerate(all_chromosomes):
                 chromosome_length = chromosome_lengths[chromosome]
                 position_list = curr_dataset[chromosome]
-                # divide the chromosome into bin_size-sized ranges; there'll be a smaller-than-bin_size chunk left over, 
-                #  so add an extra bin for that if it's at least half a bin_size, otherwise make the last bin bigger to compensate.
+                # divide the chromosome into bin_size-sized ranges; 
                 bin_edges = [x-.5 for x in range(1, chromosome_length+1, bin_size)]
+                # make sure there's at least one bin, even if the total length is smaller than a bin!  (for scaffolds/etc)
                 last_bin_edge = chromosome_length-.5
+                if len(bin_edges)==1:                               bin_edges.append(last_bin_edge)
+                # there'll be a smaller-than-bin_size chunk left over at the end (if length doesn't divide evenly into bin_size), 
+                #  so add an extra bin for that if it's at least half a bin_size, otherwise make the last bin bigger to compensate.
                 if (last_bin_edge - bin_edges[-1])/bin_size < .5:   bin_edges[-1] = last_bin_edge
                 else:                                               bin_edges.append(last_bin_edge)
                 bin_count_list, _  = numpy.histogram(position_list, bin_edges)
