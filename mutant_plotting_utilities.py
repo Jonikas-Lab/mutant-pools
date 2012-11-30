@@ -17,6 +17,7 @@ import matplotlib.pyplot as mplt
 from matplotlib.font_manager import FontProperties
 # my modules
 import mutant_analysis_classes
+import mutant_simulations
 import general_utilities
 import seq_basic_utilities
 import plotting_utilities
@@ -516,7 +517,75 @@ def chromosome_density_barchart(mutant_dataset, include_scaffolds=True, include_
     mplt.ylabel('mutants per kb')
     mplt.xticks(range(len(all_chromosomes)), all_chromosomes, rotation=90)
     mplt.xlim(-1, len(all_chromosomes))
-    mplt.legend(loc='lower right', prop=FontProperties(size='medium'))
+
+
+######################################### Plotting gene-related data ###########################################
+
+### number of genes with 1+/2+/etc mutants vs number of mutants (randomly chosen mutant subsets)
+
+def genes_with_N_mutants(dataset, step_size=100, max_N_mutants=3, N_mutants_colors=None, repeat_N_times=100, 
+                         total_genes=None, line_at_total_genes=False, mappable_percent=None, print_repeat_progress=10):
+    """ Plot % of all genes with N mutants for different-sized random subsets of dataset.
+
+    Plot % of all genes that have between 1 and max_N_mutants mutants (separate line for each N); 
+     N_mutants_colors should be a list of length max_N_mutants, giving the colors to plot the genes with each N mutants.
+    Total_genes is the total number of genes in the genome; if None, it'll be extracted from dataset if possible, 
+     or else the default value from the Phytozome chlamy v4.3 genome will be used (17114).
+
+    Plot points for mutant subset sizes between 0 and almost the full dataset size, in increments of step_size; 
+     the last point won't be the full dataset size, but the closest lower number divisible by step_size.
+
+    Dataset should be a mutant_analysis_classes.Insertional_mutant_pool_dataset instance, 
+     or a list of mutants (mutant_analysis_classes.Insertional_mutant instances).
+
+    Redo repeat_N_times, with different random subsets each time, to see the full representation.
+
+    Mappable_percent is the approximate % of mutants that are mappable, just to put in the xlabel; if None, don't print it. 
+    """
+    # TODO update to show simulated data in parallel to real data, once we have simulated data!  (Simulated data can go to higher total mutant numbers than we have in dataset)  Simulated lines should be paler colors or different markers or something.
+
+    # nice default color schemes only defined for some max_N_mutants values
+    if max_N_mutants==3 and N_mutants_colors is None:
+        N_mutants_colors = ['magenta','cyan','yellow']
+
+    # default total_genes: extract from dataset if possible; 
+    #  if not (dataset missing that attribute, dataset is a mutant list, or dataset value is None as well), use hardcoded default. 
+    if total_genes is None:
+        try:                    total_genes = dataset.total_genes_in_genome
+        except AttributeError:  pass
+        if total_genes is None: total_genes = 17114
+
+    # Plot it all several times with new random mutant subsets, to make sure we have a good coverage of the random space
+    for repeat in range(repeat_N_times):
+        if print_repeat_progress:
+            if not repeat % print_repeat_progress:  
+                print "repeat %s/%s..."%(repeat, repeat_N_times)
+        gene_counts_by_Nmutants = mutant_simulations.gene_counts_for_mutant_subsets(dataset, step_size, max_N_mutants)
+        for N_mutants,gene_counts in gene_counts_by_Nmutants.items():
+            # use custom colors if given, otherwise let mplt choose colors
+            plot_kwargs = {} if N_mutants_colors is None else {'color': N_mutants_colors[N_mutants-1]}
+            # only label the lines in the first repeat, to avoid 100 repeats in the legend!
+            if repeat==0:                   plot_kwargs['label'] = "genes with %s+ mutants"%N_mutants
+            mplt.plot(gene_counts, '.', linewidth=0, c=N_mutants_colors[N_mutants-1], **plot_kwargs)
+    # add a separate plot set for the actual full mutant count, with different style (black border), and put a line there
+   #gene_counts_by_N_mutants = mutants.get_gene_dict_by_mutant_number()
+   #for N_mutants in gene_counts_by_Nmutants.keys():
+   #    gene_count = sum([count for N,count in gene_counts_by_Nmutants.items() if N>=N_mutants])
+   #    # use custom colors if given, otherwise let mplt choose colors
+   #    plot_kwargs = {} if N_mutants_colors is None else {'color': N_mutants_colors[N_mutants-1]}
+   #    mplt.plot(len(mutants), [gene_count], 'o', linewidth=0, c=N_mutants_colors[N_mutants-1], **plot_kwargs)
+   #mplt.legend(loc='upper left', prop=FontProperties(size='medium'))
+    # add a line at the total gene number - TODO this doesn't work right... figure out sensible xmin/xmax values, reset xlim
+   #if line_at_total_genes:
+   #    mplt.hlines(total_genes, -1, len(dataset)/50, color='gray', linestyle=':')
+
+    mplt.title('Number of genes hit vs number of mutants sequenced\n(plotted for %s random mutant subsets)'%repeat_N_times)
+    mplt.ylabel("Number of genes hit (out of %s total chlamy nuclear genes)"%total_genes)
+    mplt.yticks(mplt.yticks()[0], ["%i (%.0f%%)"%(x, x*100/total_genes) for x in mplt.yticks()[0]])
+    mplt.xlabel("Number of mutants (randomly chosen out of %s total)\n"%len(dataset) 
+                +"(counting only mappable unique genomic mutants%s)"%(' - about %s%%'%mappable_percent if mappable_percent else ''))
+    mplt.xticks(mplt.xticks()[0], ["%i"%(x*100) for x in mplt.xticks()[0]])
+
 
 
 ######################################## Plotting adjacent mutant data ###########################################

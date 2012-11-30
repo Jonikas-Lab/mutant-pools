@@ -24,6 +24,7 @@ import seq_basic_utilities
 ### mappability over genome
 
 # TODO!
+# TODO should we look at 21bp chunks, or 20bp, or a combination of both?  Do we have any mutants with only 20bp flanking regions? Check!
 
 
 ### simulate dataset with N randomly positioned mutants, taking into account mappable/unmappable positions!
@@ -37,63 +38,45 @@ import seq_basic_utilities
 # MAYBE-TODO would it be possible to also match the real hotspots and coldspots of the real dataset?
 
 
-### number of genes (with one, two, etc mutants) vs number of mutants (randomly chosen mutant subsets)
+### number of genes with 1+/2+/etc mutants vs number of mutants (randomly chosen mutant subsets)
 
-def gene_counts_for_mutant_subsets(dataset, step_size, repeat_N):
-    """ ____ """
-    # TODO implement!
-    pass
-
-
-### TODO all this starting here until the TESTING section is just code copied from another file! Rewrite it to make sense and be modular; some of it should probably go in mutant_plotting_utilities.py
-
-total_mutants = len(dataset)
-total_genes = dataset.summary.total_genes_in_genome
-
-def genes_with_N_mutants(mutants, N):
+def _genes_with_N_mutants(mutants, N):
+    """ Given a mutant list, return the number of genes with at least N mutants on the list. """
     gene_mutant_counts = defaultdict(int)
     for m in mutants:
         if m.gene not in mutant_analysis_classes.SPECIAL_GENE_CODES.all_codes:
             gene_mutant_counts[m.gene] += 1
     return len([1 for count in gene_mutant_counts.values() if count>=N])
    
-def genes_with_no_mutants(mutants):
-   return total_genes - genes_with_N_mutants(mutants, 1)
+def _genes_with_no_mutants(mutants, total_genes=17114):
+    """ Given a list of mutants, return the number of genes with no mutants on the list. 
+    The total number of genes can be given as an argument; default is 17114 (from Phytozome chlamy v4.3).
+    """
+    return total_genes - genes_with_N_mutants(mutants, 1)
+
    
+def gene_counts_for_mutant_subsets(dataset, step_size=100, max_N_mutants=3):
+    """ Return numbers of genes with N mutants for different-sized random subsets of dataset.
 
-def make_random_data():
-  random.shuffle(dataset._mutants_by_position.values())
-  gene_counts = {}
-  gene_counts[1] = [genes_with_N_mutants(mutants[:x], 1) for x in range(0, len(mutants), 100)]
-  gene_counts[2] = [genes_with_N_mutants(mutants[:x], 2) for x in range(0, len(mutants), 100)]
-  gene_counts[3] = [genes_with_N_mutants(mutants[:x], 3) for x in range(0, len(mutants), 100)]
-  return gene_counts
+    Dataset should be a mutant_analysis_classes.Insertional_mutant_pool_dataset instance, 
+     or a list of mutants (mutant_analysis_classes.Insertional_mutant instances).
 
-
-colors = {1: 'm', 2: 'c', 3: 'y'}
-
-# Plot it once with labels and make a legend:
-gene_counts_by_Nmutants = make_random_data()
-for N_mutants,gene_counts in gene_counts_by_Nmutants.items():
-  mplt.plot(gene_counts, '.', linewidth=0, c=colors[N_mutants], label = "genes with %s mutants"%N_mutants)
-
-mplt.legend(loc=2)
-
-# Plot it all again 10 times with new random mutant subsets, to make sure we have a good coverage of the random space 
-for _ in range(10):
-  gene_counts_by_Nmutants = make_random_data()
-  for N_mutants,gene_counts in gene_counts_by_Nmutants.items():
-    mplt.plot(gene_counts, '.', linewidth=0, c=colors[N_mutants])
-
-
-mplt.title('Number of genes hit vs number of mutants sequenced\n(chose random mutant subsets ten times, plotted all - they overlap)')
-mplt.ylabel("Number of genes hit (out of %s total chlamy nuclear genes)"%total_genes)
-mplt.yticks(mplt.yticks()[0], ["%i (%.0f%%)"%(x, x*100/total_genes) for x in mplt.yticks()[0]])
-mplt.xlabel("Number of mutants (randomly chosen out of %s total)\n(counting only unique-genomic mutants - 36%% of total reads, 49%% of \"good\" reads)"%total_mutants)
-mplt.xticks(mplt.xticks()[0], ["%i"%(x*100) for x in mplt.xticks()[0]])
-mplt.ylim(-100, 7500)
-mplt.xlim(-2, 140)
-savefig('genes-hit_vs_mutant-number.png')
+    Return a N:list_of_gene_numbers dictionary, where N is each value between 1 and max_N_mutants, 
+     and list_of_gene_numbers contains the number of genes with at least N mutants 
+      in randomly chosen subsets of dataset, starting at 0 and going up to the full dataset size in step_size steps.
+    (So if dataset contains 200 mutants, and step_size is 100, each list will have 3 values, for 0, 100 and 200 mutants.)
+    (Note that the last value is not for the full dataset size, but for the closest lower number divisible by step_size.)
+    """
+    # extract list of mutants from dataset; randomize the order
+    if isinstance(dataset, mutant_analysis_classes.Insertional_mutant_pool_dataset):    mutants = list(dataset)
+    else:                                                                               mutants = dataset
+    random.shuffle(mutants)
+    # get the gene counts for each mutant number
+    gene_counts = {}
+    for N_mutants in range(1,max_N_mutants+1):
+        gene_counts[N_mutants] = [_genes_with_N_mutants(mutants[:subset_size], N_mutants) 
+                                  for subset_size in range(0, len(mutants), step_size)]
+    return gene_counts
 
 
 ################################################# Testing etc ##################################################
