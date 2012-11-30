@@ -16,8 +16,11 @@ import scipy
 # my modules
 import mutant_analysis_classes
 import general_utilities
-import seq_basic_utilities
+import basic_seq_utilities
 
+DEFAULT_NUCLEAR_GENOME_FILE = '~/experiments/reference_data/genomes_and_indexes/Chlre4-nm.fa'
+DEFAULT_ALL_GENOME_FILE = '~/experiments/reference_data/genomes_and_indexes/Chlre4-nm_chl-mit.fa'
+DEFAULT_GENOME_CASSETTE_FILE = '~/experiments/reference_data/genomes_and_indexes/Chlre4-nm_chl-mit_cassette-pMJ013b.fa'
 
 ########################################### Mutant simulation functions ##########################################
 

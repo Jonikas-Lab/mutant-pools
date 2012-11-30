@@ -19,7 +19,7 @@ from matplotlib.font_manager import FontProperties
 import mutant_analysis_classes
 import mutant_simulations
 import general_utilities
-import seq_basic_utilities
+import basic_seq_utilities
 import plotting_utilities
 
 
@@ -213,10 +213,9 @@ def _get_mutant_positions_from_dataset(dataset, strand='both'):
 
 def _get_chromosome_lengths(genome_file=None):
     """ Return chromosome:length dictionary based on reading a genome fasta file. """
-    if genome_file is None:
-        genome_file = os.path.expanduser('~/experiments/reference_data/genomes_and_indexes/Chlre4-nm_chl-mit_cassette-pMJ013b.fa')
+    if genome_file is None:     genome_file = os.path.expanduser(mutant_simulations.DEFAULT_GENOME_CASSETTE_FILE)
     chromosome_lengths = defaultdict(int)
-    for header,seq in seq_basic_utilities.parse_fasta(genome_file):
+    for header,seq in basic_seq_utilities.parse_fasta(genome_file):
       chromosome_lengths[header] = len(seq)
     return dict(chromosome_lengths)
 
@@ -228,7 +227,7 @@ def _get_chromosomes_by_type(all_chromosomes, include_scaffolds, include_cassett
     """
     chosen_chromosomes = defaultdict(list)
     for chromosome in all_chromosomes:
-        chr_type = seq_basic_utilities.chromosome_type(chromosome)
+        chr_type = basic_seq_utilities.chromosome_type(chromosome)
         if (chr_type=='chromosome' or (chr_type=='scaffold' and include_scaffolds) or (chr_type=='cassette' and include_cassette) 
             or (chr_type in ('chloroplast', 'mitochondrial', 'other') and include_other)):
             chosen_chromosomes[chr_type].append(chromosome)
@@ -304,7 +303,7 @@ def mutant_positions_and_data(mutant_datasets=[], density=True, colors=None, nam
     # grab only the chromosome types we want
     all_chromosomes = _get_chromosomes_by_type(chromosome_lengths.keys(), include_scaffolds, include_cassette, include_other, False)
     # sort chromosomes properly by type and name
-    all_chromosomes.sort(key=seq_basic_utilities.chromosome_sort_key)
+    all_chromosomes.sort(key=basic_seq_utilities.chromosome_sort_key)
     # MAYBE-TODO for short chromosomes like scaffolds/chlor/mito/cassette, plot in multiple rows? Maybe change the scale to stretch them a bit, since some will probably be smaller than bin_size?  But then I'd have to normalize them separately or something...
 
     ### get a list of all datasets provided, converted to the same format, along with their extra args
@@ -430,7 +429,7 @@ def mutant_positions_and_data(mutant_datasets=[], density=True, colors=None, nam
             cax = mplt.gcf().add_axes((bbox.xmax + col_padding + col_width*column, row_bottoms[row], 0.012, row_height))
             colorbar_kwargs['cax'] = cax
         c = mplt.colorbar(plot, **colorbar_kwargs)
-        c.set_label("%s (per %s)"%(name,seq_basic_utilities.format_base_distance(bin_size)))
+        c.set_label("%s (per %s)"%(name,basic_seq_utilities.format_base_distance(bin_size)))
         # MAYBE-TODO put the heatmaps on the plot instead of on the side?  There's room...
         # we don't need as many colorbar ticks as matplotlib likes - leave only the full-number ones
         ticks_and_labels = []
@@ -469,13 +468,13 @@ def chromosome_density_scatterplot(mutant_dataset, include_scaffolds=True, inclu
                                                    output_dict=True)
 
     mutants_in_chromosomes_all = {}
-    for chr_type in sorted(chromosomes_by_type, key=seq_basic_utilities.chromosome_sort_key):
+    for chr_type in sorted(chromosomes_by_type, key=basic_seq_utilities.chromosome_sort_key):
         chr_list = chromosomes_by_type[chr_type]
         mutants_in_chromosomes = [mutant_dataset.summary.mutants_in_chromosome(c) for c in chr_list]
         mutants_in_chromosomes_all.update(dict(zip(chr_list, mutants_in_chromosomes)))
         if sum(mutants_in_chromosomes):
             mplt.plot([chromosome_lengths[c] for c in chr_list], mutants_in_chromosomes, 'o', 
-                      color=seq_basic_utilities.CHROMOSOME_TYPE_COLORS[chr_type], label=chr_type)
+                      color=basic_seq_utilities.CHROMOSOME_TYPE_COLORS[chr_type], label=chr_type)
 
     max_length = max(chromosome_lengths.values())
     max_N_mutants = max(mutants_in_chromosomes_all.values())
@@ -504,13 +503,13 @@ def chromosome_density_barchart(mutant_dataset, include_scaffolds=True, include_
         try:                chromosome_lengths['mitochondrial'] *= mito_multiplier
         except KeyError:    pass
     all_chromosomes = _get_chromosomes_by_type(chromosome_lengths.keys(), include_scaffolds, include_cassette, include_other, False)
-    all_chromosomes.sort(key=seq_basic_utilities.chromosome_sort_key)
+    all_chromosomes.sort(key=basic_seq_utilities.chromosome_sort_key)
 
     # calculate and plot mutant densities, colored by chromosome type
     mutant_densities = [mutant_dataset.summary.mutants_in_chromosome(c)/chromosome_lengths[c]*1000 for c in all_chromosomes]
 
     mplt.bar(range(len(all_chromosomes)), mutant_densities, 
-             color=[seq_basic_utilities.chromosome_color(c) for c in all_chromosomes], align='center', linewidth=0)
+             color=[basic_seq_utilities.chromosome_color(c) for c in all_chromosomes], align='center', linewidth=0)
     # MAYBE-TODO add error bars based on total mutant number?
     # MAYBE-TODO add a line/something showing the max mutants/20kb value for each chromosome?  But that would require more data processing (similar to what was done in mutant_positions_and_data)
 
