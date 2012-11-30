@@ -21,8 +21,7 @@ import HTSeq
 from BCBio import GFF
 # my modules
 from general_utilities import split_into_N_sets_by_counts, add_dicts_of_ints, sort_lists_inside_dict, keybased_defaultdict, value_and_percentages, FAKE_OUTFILE, NaN, nan_func, merge_values_to_unique
-from DNA_basic_utilities import SEQ_ENDS, SEQ_STRANDS, SEQ_DIRECTIONS, SEQ_ORIENTATIONS, position_test_contains, position_test_overlap, chromosome_sort_key
-from seq_basic_utilities import get_seq_count_from_collapsed_header
+from basic_seq_utilities import SEQ_ENDS, SEQ_STRANDS, SEQ_DIRECTIONS, SEQ_ORIENTATIONS, position_test_contains, position_test_overlap, chromosome_sort_key, get_seq_count_from_collapsed_header
 from deepseq_utilities import check_mutation_count_try_all_methods
 # there's a "from parse_annotation_file import parse_gene_annotation_file" in one function, not always needed
 
@@ -233,10 +232,32 @@ class Insertion_position(object):
     __delattr__ = exception_if_immutable(object.__delattr__)
 
 
-def get_insertion_pos_from_HTSeq_read_pos(HTSeq_pos, cassette_end, reads_are_reverse=False, immutable_position=True):
+def HTSeq_pos_to_tuple(HTSeq_pos):
+    """ Convert an HTSeq.GenomicPosition instance to a (chrom,start_pos,end_pos,strand) tuple. 
+    
+    Start_pos and end_pos are 1-based, inclusive (so in AATTGG, the position of AA is 1-2) - unlike in HTSeq!
+    """
+    try:
+        chrom = HTSeq_pos.chrom
+    except AttributeError:
+        raise MutantError("Invalid position %s! Need an HTSeq iv object. (If empty, maybe read wasn't aligned?)"%(HTSeq_pos,))
+    ### cassette strand is the same as read strand, OR the opposite if reads_are_reverse is True
+    strand = HTSeq_pos.strand
+    if strand not in SEQ_STRANDS:   raise MutantError("Invalid strand %s!"%strand)
+    # HTSeq is 0-based and I want 1-based, thus the +1; end has no +1 because in HTSeq end is the base AFTER the alignment.
+    start_pos = HTSeq_pos.start+1
+    end_pos = HTSeq_pos.end
+    if start_pos < 1:           raise MutantError("Sequence positions must be positive!")
+    if start_pos > end_pos:     raise MutantError("Sequence start can't be after end!")
+    return (chrom, start_pos, end_pos, strand)
+
+
+def get_insertion_pos_from_flanking_region_pos(flanking_region_pos, cassette_end, reads_are_reverse=False, immutable_position=True):
     """ Return a Insertion_position instance giving the cassette insertion position based on HTSeq read position. 
 
-    HTSeq_pos should be a HTSeq.GenomicPosition instance; cassette_end gives the side of the insertion that read is on; 
+    Flanking_region_Pos should be a HTSeq.GenomicPosition instance, or a (chrom,start_pos,end_pos,strand) tuple
+      (the tuple should have 1-based end-inclusive positions, so AA is 1-2 in AATT; HTSeq positions are 0-based end-exclusive); 
+     cassette_end gives the side of the insertion that read is on; 
      reads_are_reverse is True if the read is in reverse orientation to the cassette, False otherwise. 
 
     The cassette chromosome will be the same as read chromosome; the cassette strand will be the same as read strand, 
@@ -255,21 +276,20 @@ def get_insertion_pos_from_HTSeq_read_pos(HTSeq_pos, cassette_end, reads_are_rev
 
     If immutable_position is True, the position will be made immutable after creation (this is reversible).
     """
-    ### chromosome is always the same as read (also checking that the HTSeq_pos has a chrom attribute at all here)
-    try:
-        chrom = HTSeq_pos.chrom
-    except AttributeError:
-        raise ValueError("Invalid position %s! Need an HTSeq iv object. (If empty, maybe read wasn't aligned?)"%HTSeq_pos)
+    try:                                chrom, start_pos, end_pos, strand = flanking_region_pos
+    except (TypeError, ValueError):     chrom, start_pos, end_pos, strand = HTSeq_pos_to_tuple(flanking_region_pos) 
+    if strand not in SEQ_STRANDS:   raise MutantError("Invalid strand %s!"%strand)
+    if start_pos < 1:               raise MutantError("Flanking region positions must be positive!")
+    if start_pos > end_pos:         raise MutantError("Flanking region start can't be after end!")
+    ### chromosome is always the same as read, so just leave it as is
     ### cassette strand is the same as read strand, OR the opposite if reads_are_reverse is True
-    strand = HTSeq_pos.strand
     if reads_are_reverse:     strand = '+' if strand=='-' else '-'
     ### cassette position depends on the read position and cassette_end in a somewhat complex way 
     #   (see description in docstring, and ../notes.txt for even more detail)
-    # HTSeq is 0-based and I want 1-based, thus the +1; end has no +1 because in HTSeq end is the base AFTER the alignment.
     if (cassette_end=='5prime' and strand=='+') or (cassette_end=='3prime' and strand=='-'):      
-        pos_before, pos_after = HTSeq_pos.end, None
+        pos_before, pos_after = end_pos, None
     elif (cassette_end=='3prime' and strand=='+') or (cassette_end=='5prime' and strand=='-'):    
-        pos_before, pos_after = None, HTSeq_pos.start+1
+        pos_before, pos_after = None, start_pos
     else:                           
         raise ValueError("cassette_end argument must be one of %s."%SEQ_ENDS)
     return Insertion_position(chrom, strand, position_before=pos_before, position_after=pos_after, 
@@ -1290,8 +1310,8 @@ class Insertional_mutant_pool_dataset():
                 summ.non_aligned_read_count += read_count
                 continue
             # get the cassette insertion position (as an Insertion_position object) - USE IMMUTABLE POSITIONS BY DEFAULT
-            position = get_insertion_pos_from_HTSeq_read_pos(aln.iv, summ.cassette_end, summ.reads_are_reverse, 
-                                                             immutable_position=True)
+            position = get_insertion_pos_from_flanking_region_pos(aln.iv, summ.cassette_end, summ.reads_are_reverse, 
+                                                                  immutable_position=True)
             # if read is aligned to cassette and should be ignored, add to the right count and skip to the next read
             if ignore_cassette and is_cassette_chromosome(position.chromosome):
                 summ.ignored_region_read_counts[position.chromosome] += read_count
@@ -2607,46 +2627,70 @@ class Testing_position_functionality(unittest.TestCase):
             self.assertRaises(MutantError, dict, [(pos, 1)])
 
 
-    def test__get_insertion_pos_from_HTSeq_position(self):
-        # should raise exception for invalid HTSeq_pos argument
-        for bad_HTSeq_pos in [None, '', 'aaa', 0, 1, 0.65, [], {}, True, False]:
+    def test__HTSeq_pos_to_tuple(self):
+        ### should raise exception for argument that's not an HTSeq_pos
+        for bad_HTSeq_pos in [None, '', 'aaa', 0, 1, 0.65, [], {}, True, False, [1,2,3,4], ('C',4,6,'-')]:
+            self.assertRaises(MutantError, HTSeq_pos_to_tuple, bad_HTSeq_pos)
+        ### should raise exception for invalid HTSeq_pos argument (bad strand, or start not before end)
+        for strand,start,end in [('+',3,3), ('-',3,3), ('-',4,3), ('+',100,3), ('a',1,2), (1,1,2)]:
+            self.assertRaises(MutantError, HTSeq_pos_to_tuple, self.Fake_HTSeq_genomic_pos('C', strand, start, end))
+        ### testing normal functionality: should return a (chrom,start_pos,end_pos,strand) tuple with the same chromosome/strand, 
+        #    and start/end positions converted from 0-based end-exclusive to 1-based end-inclusive.
+        # (so the HTSeq position of AA in AATT would be 0-2, and converted would be 1-2; of TT, 2-4, and 3-4.)
+        for strand in '+-':
+            assert HTSeq_pos_to_tuple(self.Fake_HTSeq_genomic_pos('C', strand, 3, 7)) == ('C', 4, 7, strand)
+            for (start,end) in [(0,5), (0,100), (10,12), (5,44)]:
+                assert HTSeq_pos_to_tuple(self.Fake_HTSeq_genomic_pos('C', strand, start, end)) == ('C', start+1, end, strand)
+
+
+    def test__get_insertion_pos_from_flanking_region_pos(self):
+        # should raise exception for invalid argument (valid arguments: HTSeq position object or (chrom,start,end,strand) tuple
+        #  (strand must be +/-, and start can't be after end)
+        for bad_flanking_region in [None, '', 'aaa', 0, 1, 0.65, [], {}, True, False, ('C',2,3,4),('C',2,3,'x'),('C',3,2,'-')]:
             for cassette_end in SEQ_ENDS:
-                self.assertRaises(ValueError, get_insertion_pos_from_HTSeq_read_pos, None, cassette_end)
+                self.assertRaises(MutantError, get_insertion_pos_from_flanking_region_pos, bad_flanking_region, cassette_end)
         # should raise exception for invalid cassette_end
-        fake_pos = self.Fake_HTSeq_genomic_pos('C', '+', 0, 5)
         for bad_cassette_end in ['','aaa',0,1,[],{},None,True,False,'start','end','middle','read','leftmost','rightmost']:
-            self.assertRaises(ValueError, get_insertion_pos_from_HTSeq_read_pos, fake_pos, bad_cassette_end)
+            self.assertRaises(ValueError, get_insertion_pos_from_flanking_region_pos, ('C',1,5,'+'), bad_cassette_end)
+
         ### testing normal functionality: should return an Insertion_position instance with the same chromosome, 
         #    and strand/position depending on the arguments in a somewhat complicated way.
-        ## a few spot-checks outside the loop 
-        #   (based on the example at the end of "Possible read sides/directions" section in ../notes.txt)
-        # remember HTSeq position is 0-based and end-exclusive, and the position I want is 1-based end-inclusive!  
-        #  So in the end the two relevant 1-based numbers end up being the same as the 0-based positions,
-        #  because in the case of the start, min_position is actually start-1, and in the case of the end, we're adding 1
-        #  to switch from 0-based to 1-based but then subtracting 1 to make the end the last base instead of the base after
-        fake_pos_plus = self.Fake_HTSeq_genomic_pos('C', '+', 3, 7)
-        fake_pos_minus = self.Fake_HTSeq_genomic_pos('C', '-', 3, 7)
-        assert get_insertion_pos_from_HTSeq_read_pos(fake_pos_plus, '5prime',reads_are_reverse=False).min_position == 7
-        assert get_insertion_pos_from_HTSeq_read_pos(fake_pos_plus, '3prime',reads_are_reverse=False).min_position == 3
-        assert get_insertion_pos_from_HTSeq_read_pos(fake_pos_minus,'5prime',reads_are_reverse=True ).min_position == 7
-        assert get_insertion_pos_from_HTSeq_read_pos(fake_pos_minus,'3prime',reads_are_reverse=True ).min_position == 3
-        assert get_insertion_pos_from_HTSeq_read_pos(fake_pos_plus, '5prime',reads_are_reverse=True ).min_position == 3
-        assert get_insertion_pos_from_HTSeq_read_pos(fake_pos_plus, '3prime',reads_are_reverse=True ).min_position == 7
-        assert get_insertion_pos_from_HTSeq_read_pos(fake_pos_minus,'5prime',reads_are_reverse=False).min_position == 3
-        assert get_insertion_pos_from_HTSeq_read_pos(fake_pos_minus,'3prime',reads_are_reverse=False).min_position == 7
-        # more checks in a loop - see above for what we expect!
+        # Mostly I should be testing position-tuple inputs here, since HTSeq pos object conversion to position tuples 
+        #  is dealt with by HTSeq_pos_to_tuple and tested separately, but I can test some HTSeq inputs too.
+
+        ## 1) A few spot-checks, based on the example at the end of "Possible read sides/directions" section in ../notes.txt
+        #      (using HTSeq objects directly, because that's what the examples used)
+        #    remember HTSeq position is 0-based and end-exclusive, and the position I want is 1-based end-inclusive!  
+        #     So in the end the two relevant 1-based numbers end up being the same as the 0-based positions,
+        #     because in the case of the start, min_position is actually start-1, and in the case of the end, we're adding 1
+        #     to switch from 0-based to 1-based but then subtracting 1 to make the end the last base instead of the base after
+        fake_HTSeq_pos_plus = self.Fake_HTSeq_genomic_pos('C', '+', 3, 7)
+        fake_HTSeq_pos_minus = self.Fake_HTSeq_genomic_pos('C', '-', 3, 7)
+        assert get_insertion_pos_from_flanking_region_pos(fake_HTSeq_pos_plus, '5prime',reads_are_reverse=False).min_position == 7
+        assert get_insertion_pos_from_flanking_region_pos(fake_HTSeq_pos_plus, '3prime',reads_are_reverse=False).min_position == 3
+        assert get_insertion_pos_from_flanking_region_pos(fake_HTSeq_pos_minus,'5prime',reads_are_reverse=True ).min_position == 7
+        assert get_insertion_pos_from_flanking_region_pos(fake_HTSeq_pos_minus,'3prime',reads_are_reverse=True ).min_position == 3
+        assert get_insertion_pos_from_flanking_region_pos(fake_HTSeq_pos_plus, '5prime',reads_are_reverse=True ).min_position == 3
+        assert get_insertion_pos_from_flanking_region_pos(fake_HTSeq_pos_plus, '3prime',reads_are_reverse=True ).min_position == 7
+        assert get_insertion_pos_from_flanking_region_pos(fake_HTSeq_pos_minus,'5prime',reads_are_reverse=False).min_position == 3
+        assert get_insertion_pos_from_flanking_region_pos(fake_HTSeq_pos_minus,'3prime',reads_are_reverse=False).min_position == 7
+
+        ## 2) More checks in a loop, using position tuples and HTSeq_pos objects
         for (strand_in, if_reverse, strand_out) in [('+',False,'+'), ('-',False,'-'), ('+',True,'-'), ('-',True,'+')]:
-            for (start,end) in [(0,5), (0,100), (10,11), (5,44)]:
-                fake_pos = self.Fake_HTSeq_genomic_pos('C', strand_in, start, end)
-                result_5prime = get_insertion_pos_from_HTSeq_read_pos(fake_pos, '5prime', if_reverse)
-                result_3prime = get_insertion_pos_from_HTSeq_read_pos(fake_pos, '3prime', if_reverse)
+            for (start,end) in [(1,5), (1,100), (11,12), (6,44)]:
+                pos_tuple = ('C', start, end, strand_in)
+                fake_HTSeq_pos = self.Fake_HTSeq_genomic_pos('C', strand_in, start-1, end)
+                result_5prime = get_insertion_pos_from_flanking_region_pos(pos_tuple, '5prime', if_reverse)
+                result_3prime = get_insertion_pos_from_flanking_region_pos(pos_tuple, '3prime', if_reverse)
+                assert get_insertion_pos_from_flanking_region_pos(fake_HTSeq_pos, '5prime', if_reverse) == result_5prime
+                assert get_insertion_pos_from_flanking_region_pos(fake_HTSeq_pos, '3prime', if_reverse) == result_3prime
                 assert result_5prime.chromosome == result_3prime.chromosome == 'C'
                 assert result_5prime.strand == result_3prime.strand == strand_out
                 if strand_out=='+':
                     assert result_5prime.min_position == end
-                    assert result_3prime.min_position == start
+                    assert result_3prime.min_position == start-1
                 elif strand_out=='-':
-                    assert result_5prime.min_position == start
+                    assert result_5prime.min_position == start-1
                     assert result_3prime.min_position == end
 
 
