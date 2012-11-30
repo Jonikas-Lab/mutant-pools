@@ -523,7 +523,7 @@ def chromosome_density_barchart(mutant_dataset, include_scaffolds=True, include_
 ### number of genes with 1+/2+/etc mutants vs number of mutants (randomly chosen mutant subsets)
 
 def genes_with_N_mutants(dataset, step_size=100, max_N_mutants=3, N_mutants_colors=None, repeat_N_times=100, 
-                         total_genes=None, line_at_total_genes=False, mappable_percent=None, print_repeat_progress=10):
+                         total_genes=None, mappable_percent=None, print_repeat_progress=10):
     """ Plot % of all genes with N mutants for different-sized random subsets of dataset.
 
     Plot % of all genes that have between 1 and max_N_mutants mutants (separate line for each N); 
@@ -559,24 +559,21 @@ def genes_with_N_mutants(dataset, step_size=100, max_N_mutants=3, N_mutants_colo
         if print_repeat_progress:
             if not repeat % print_repeat_progress:  
                 print "repeat %s/%s..."%(repeat, repeat_N_times)
-        gene_counts_by_Nmutants = mutant_simulations.gene_counts_for_mutant_subsets(dataset, step_size, max_N_mutants)
+        gene_counts_by_Nmutants = mutant_simulations.gene_counts_for_mutant_subsets(dataset, max_N_mutants, step_size)
         for N_mutants,gene_counts in gene_counts_by_Nmutants.items():
             # use custom colors if given, otherwise let mplt choose colors
             plot_kwargs = {} if N_mutants_colors is None else {'color': N_mutants_colors[N_mutants-1]}
             # only label the lines in the first repeat, to avoid 100 repeats in the legend!
             if repeat==0:                   plot_kwargs['label'] = "genes with %s+ mutants"%N_mutants
-            mplt.plot(gene_counts, '.', linewidth=0, c=N_mutants_colors[N_mutants-1], **plot_kwargs)
+            mplt.plot(gene_counts, '.', linewidth=0, **plot_kwargs)
     # add a separate plot set for the actual full mutant count, with different style (black border), and put a line there
-   #gene_counts_by_N_mutants = mutants.get_gene_dict_by_mutant_number()
-   #for N_mutants in gene_counts_by_Nmutants.keys():
-   #    gene_count = sum([count for N,count in gene_counts_by_Nmutants.items() if N>=N_mutants])
-   #    # use custom colors if given, otherwise let mplt choose colors
-   #    plot_kwargs = {} if N_mutants_colors is None else {'color': N_mutants_colors[N_mutants-1]}
-   #    mplt.plot(len(mutants), [gene_count], 'o', linewidth=0, c=N_mutants_colors[N_mutants-1], **plot_kwargs)
-   #mplt.legend(loc='upper left', prop=FontProperties(size='medium'))
+    gene_counts_by_Nmutants = mutant_simulations.gene_counts_for_mutant_subsets(dataset, max_N_mutants, 
+                                                                                single_subset_size=len(dataset))
+    for N_mutants,gene_counts in gene_counts_by_Nmutants.items():
+        plot_kwargs = {} if N_mutants_colors is None else {'color': N_mutants_colors[N_mutants-1]}
+        mplt.plot(len(dataset)/step_size, gene_counts, '.', linewidth=0, markeredgecolor='black',**plot_kwargs)
     # add a line at the total gene number - TODO this doesn't work right... figure out sensible xmin/xmax values, reset xlim
-   #if line_at_total_genes:
-   #    mplt.hlines(total_genes, -1, len(dataset)/50, color='gray', linestyle=':')
+    mplt.legend(loc='upper left', prop=FontProperties(size='medium'))
 
     mplt.title('Number of genes hit vs number of mutants sequenced\n(plotted for %s random mutant subsets)'%repeat_N_times)
     mplt.ylabel("Number of genes hit (out of %s total chlamy nuclear genes)"%total_genes)

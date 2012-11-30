@@ -58,27 +58,40 @@ def _genes_with_no_mutants(mutants, total_genes=17114):
     return total_genes - genes_with_N_mutants(mutants, 1)
 
    
-def gene_counts_for_mutant_subsets(dataset, step_size=100, max_N_mutants=3):
-    """ Return numbers of genes with N mutants for different-sized random subsets of dataset.
+def gene_counts_for_mutant_subsets(dataset, max_N_mutants=3, step_size=100, single_subset_size=None):
+    """ Return numbers of genes with N mutants for different-sized random subsets of dataset, or a single subset size.
+
+    Return an N:list_of_gene_numbers dictionary, where N is each value between 1 and max_N_mutants, 
+     and list_of_gene_numbers contains the number of genes with at least N mutants 
+      in randomly chosen subsets of dataset, of sizes starting at 0 and going up to the full dataset size in step_size steps.
+     (So if dataset contains 200 mutants, and step_size is 100, each list will have 3 values, for 0, 100 and 200 mutants.)
+     (Note that the last value is not for the full dataset size, but for the closest lower number divisible by step_size.)
+    If single_subset_size is not None, ignore step_size, and just return an N:gene_number dictionary 
+     for a randomly chosen subset of size single_subset_size.
 
     Dataset should be a mutant_analysis_classes.Insertional_mutant_pool_dataset instance, 
      or a list of mutants (mutant_analysis_classes.Insertional_mutant instances).
-
-    Return a N:list_of_gene_numbers dictionary, where N is each value between 1 and max_N_mutants, 
-     and list_of_gene_numbers contains the number of genes with at least N mutants 
-      in randomly chosen subsets of dataset, starting at 0 and going up to the full dataset size in step_size steps.
-    (So if dataset contains 200 mutants, and step_size is 100, each list will have 3 values, for 0, 100 and 200 mutants.)
-    (Note that the last value is not for the full dataset size, but for the closest lower number divisible by step_size.)
     """
-    # extract list of mutants from dataset; randomize the order
+    # extract list of mutants from dataset
     if isinstance(dataset, mutant_analysis_classes.Insertional_mutant_pool_dataset):    mutants = list(dataset)
     else:                                                                               mutants = dataset
-    random.shuffle(mutants)
+    # get subset_sizes list based on either single_subset_size or step_size
+    if single_subset_size is not None:
+        subset_sizes = [single_subset_size]
+        step_size = 0
+    else:
+        subset_sizes = range(0, len(mutants), step_size)
+    if step_size > len(dataset) or single_subset_size > len(dataset):
+        raise ValueError("step_size and single_subset_size can't be greater than dataset size!")
+    # only shuffle the dataset if we're not going to be using the full one anyway
+    if not step_size == len(dataset) or single_subset_size == len(dataset):
+        random.shuffle(mutants)
     # get the gene counts for each mutant number
     gene_counts = {}
     for N_mutants in range(1,max_N_mutants+1):
-        gene_counts[N_mutants] = [_genes_with_N_mutants(mutants[:subset_size], N_mutants) 
-                                  for subset_size in range(0, len(mutants), step_size)]
+        gene_counts[N_mutants] = []
+        for subset_size in subset_sizes:
+            gene_counts[N_mutants].append(_genes_with_N_mutants(mutants[:subset_size], N_mutants))
     return gene_counts
 
 
