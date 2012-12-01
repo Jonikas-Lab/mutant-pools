@@ -313,8 +313,13 @@ def mutant_positions_and_data(mutant_datasets=[], density=True, colors=None, nam
     for dataset,d,c,n,s in zip(mutant_datasets, density, colors, names, strands):
         all_datasets_density_color_name.append((_get_mutant_positions_from_dataset(dataset, strand=s), d, c, n))
     for dataset,d,c,n in zip(other_datasets, other_density, other_colors, other_names):
-        all_datasets_density_color_name.append((other_dataset, other_density, other_color))
+        all_datasets_density_color_name.append((dataset, d, c, n))
     total_plotline_width = 0.6
+
+    # TODO need to implement some kind of absolute scaling for other_datasets!  Since for example for mappability, we want the colorbar max to be 100% mappability, NOT the maximum number found in practice. 
+
+    # TODO should probably merge mutant_datasets and other_datasets with all their respective variables!  Less code duplication, and it'll allow arbitrary order of datasets.
+    # MAYBE-TODO also add an option for histogram data to be given directly rather than calculated by numpy.histogram by binning single positions?  That way we could save the mappability data as a histogram and re-use it, rather than load the rather large raw data into memory all the time.  And it'd give flexibility for other applications. 
 
     ### plot all the datasets
     all_heatmaps = []
@@ -439,7 +444,7 @@ def mutant_positions_and_data(mutant_datasets=[], density=True, colors=None, nam
         c.set_ticks(zip(*ticks_and_labels)[0])
         c.set_ticklabels(zip(*ticks_and_labels)[1])
         mplt.draw()
-    # TODO it'd be nice if this actually returned the main axes object... (and maybe a list of colorbar axes too?)
+    # TODO it'd be nice if this actually returned the main axes object... (and maybe a list of colorbar axes too?)  And the numpy.histogram results for all the datasets might be nice too!
 
 
 def chromosome_density_scatterplot(mutant_dataset, include_scaffolds=True, include_cassette=True, include_other=True, 
