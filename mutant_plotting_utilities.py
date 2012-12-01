@@ -25,29 +25,84 @@ import plotting_utilities
 
 ########################################## Plotting mutant positions #############################################
 
-def _get_mutant_positions_from_dataset(dataset, strand='both'):
+STRAND_VAR_VALUES = ('+', '-', 'both', None)
+
+def get_mutant_positions_from_dataset(dataset, strand=None):
     """  Return chromosome_name:mutant_position_list for dataset.
 
-    Dataset must be a mutant_analysis_classes.Insertional_mutant_pool_dataset instance.
+    Dataset must be a mutant_analysis_classes.Insertional_mutant_pool_dataset instance, 
+     or a list/set/something of mutant_analysis_classes.Insertional_mutant instances.
     Use the (known or assumed) position of the base before the insertion (min_position).
-    If strand is 'both', take mutants regardless of strand; 
-     if it's '+' or '-', take only mutants on that strand; all other values are illegal.
+
+    If strand is None, take mutants regardless of strand; 
+     if it's '+', '-' or 'both', take only mutants on that strand (both-stranded mutants are opposite-tandems); 
+     all other strand values are illegal.
     """
+    if not strand in STRAND_VAR_VALUES:
+        raise ValueError("Illegal strand value %s! Must be one of %s"%(strand, STRAND_VAR_VALUES))
     chromosome_position_dict = defaultdict(list)
     for mutant in dataset:
         position = mutant.position
-        if strand=='both' or position.strand==strand:
+        if strand is None or position.strand==strand:
             chromosome_position_dict[position.chromosome].append(position.min_position)
     return chromosome_position_dict
 
 
-def _get_chromosome_lengths(genome_file=None):
+def get_histogram_data_from_positions(position_dict, bin_size, chromosome_lengths=None, chromosomes=None, 
+                                       special_last_bin=True, merge_last_bin_cutoff=0.5, normalize_last_bin=True):
+    """ Given a chromosome:position_list dict, return a chromosome:count_per_bin_list dict. 
+    
+    The positions in position_list will be binned into bin_size-sized bins over the length of each chromosome, 
+     giving count_per_bin_list, with length matching the number of bins in the chromosome. 
+    If chromosome_lengths is given, use those to decide how many bins there will be in the chromosome; 
+     otherwise use the highest position in position_dict for each chromosome as an approximate length. 
+
+    If a chromosome is shorter than a bin, make it a single bin anyway.
+    If add_last_bin is true, when the chromosome length isn't evenly divided into bin_size-sized bins, 
+     if the leftover is less than merge_last_bin_cutoff, merge it into the last bin, otherwise add it as an extra bin 
+    If normalize_last_bin is True, normalize the number of positions in the special last bin by its size, 
+     so that its value reflects the position density rather than raw count, to match all the other bins for heatmap display.
+
+    If chromosomes is not None, only include those chromosomes; 
+     otherwise include all chromosomes in chromosome_lengths if given, or in position_dict if not.
+    """
+    if chromosomes is None:   
+        if chromosome_lengths is None:  chromosomes = position_dict.keys()
+        else:                           chromosomes = chromosome_lengths.keys()
+    if chromosome_lengths is None:
+        chromosome_lengths = {chrom:max(pos_list) for (chrom, pos_list) in position_dict}
+    chromosome_bin_count_lists = {}
+    for chromosome in chromosomes:
+        chromosome_length = chromosome_lengths[chromosome]
+        position_list = position_dict[chromosome]
+        # divide the chromosome into bin_size-sized ranges, using an x.5 cutoff for clarity
+        bin_edges = [x-.5 for x in range(1, chromosome_length+1, bin_size)]
+        # make sure there's at least one bin, even if the total length is smaller than a bin!  (for scaffolds/etc)
+        last_bin_edge = chromosome_length-.5
+        if len(bin_edges)==1:                               bin_edges.append(last_bin_edge)
+        # there'll be a smaller-than-bin_size chunk left over at the end (if length doesn't divide evenly into bin_size), 
+        #  so add an extra bin for that if it's at least half a bin_size, otherwise make the last bin bigger to compensate.
+        if special_last_bin:
+            if (last_bin_edge - bin_edges[-1])/bin_size < merge_last_bin_cutoff:  bin_edges[-1] = last_bin_edge
+            else:                                                                 bin_edges.append(last_bin_edge)
+        bin_count_list, _  = numpy.histogram(position_list, bin_edges)
+        # for the last bin in each chromosome, the value should be scaled by the smaller/bigger bin-size...
+        if normalize_last_bin:
+            bin_count_list[-1] = bin_count_list[-1] / ((bin_edges[-1] - bin_edges[-2])/bin_size)
+        chromosome_bin_count_lists[chromosome] = bin_count_list
+    return chromosome_bin_count_lists
+    # TODO should probably unit-test this!
+
+
+def get_chromosome_lengths(genome_file=None):
     """ Return chromosome:length dictionary based on reading a genome fasta file. """
-    if genome_file is None:     genome_file = os.path.expanduser(mutant_simulations.DEFAULT_GENOME_CASSETTE_FILE)
+    if genome_file is None:
+        genome_file = os.path.expanduser(mutant_simulations.DEFAULT_GENOME_CASSETTE_FILE)
     chromosome_lengths = defaultdict(int)
     for header,seq in basic_seq_utilities.parse_fasta(genome_file):
-      chromosome_lengths[header] = len(seq)
+        chromosome_lengths[header] = len(seq)
     return dict(chromosome_lengths)
+    # MAYBE-TODO should this be in basic_seq_utilities or somewhere?  Except for the specific default value...
 
 
 def _get_chromosomes_by_type(all_chromosomes, include_scaffolds, include_cassette, include_other, output_dict=False):
@@ -73,7 +128,7 @@ def _get_plotline_pos(middle_pos, total_width, total_N, N):
     return left_pos, right_pos
 
 
-def mutant_positions_and_data(mutant_datasets=[], density=True, colors=None, names='mutants', strands='both', 
+def mutant_positions_and_data(mutant_datasets=[], density=True, colors=None, names='mutants', strands=None, 
                           other_datasets=[], other_density=False, other_colors=None, other_names='other', 
                           title='', bin_size=20000, chromosome_lengths=None, interpolate=False, condense_colorbars=True, 
                           include_scaffolds=False, include_cassette=False, include_other=False):
@@ -87,7 +142,8 @@ def mutant_positions_and_data(mutant_datasets=[], density=True, colors=None, nam
     The same applies to other_density, other_colors, other_names with respect to other_datasets; 
      otherwise the other_* arguments are the same as the first set, unless otherwise noted. 
     Strands is only needed for mutant_datasets - each mutant dataset will be converted to a chromosome:position_list dict, 
-     taking all mutants if the corresponding strands value is 'both', or only +strand/-strand mutants if it's '+' or '-'.
+     taking all mutants if the corresponding strands value is None, 
+     or only +strand/-strand/opposite-tandem mutants if it's '+'/'-'/'both'.
 
     For each dataset (mutant or other), if the corresponding density value is False, 
       each position will be plotted as a horizontal line (using the corresponding color value, or black if None); 
@@ -114,7 +170,7 @@ def mutant_positions_and_data(mutant_datasets=[], density=True, colors=None, nam
     if other_colors is None or isinstance(other_colors,str):    other_colors = [other_colors for _ in other_datasets]
     if isinstance(names,str):                                   names = [names for _ in mutant_datasets]
     if isinstance(other_names,str):                             other_names = [other_names for _ in other_datasets]
-    if isinstance(strands,str):                                 strands = [strands for _ in mutant_datasets]
+    if isinstance(strands,str) or strands is None:              strands = [strands for _ in mutant_datasets]
     imshow_kwargs = {} if interpolate else {'interpolation': 'none'}
     # set sensible default values for None colors (depends on whether it's color or colormap)
     old_colors, old_other_colors = colors, other_colors
@@ -129,7 +185,7 @@ def mutant_positions_and_data(mutant_datasets=[], density=True, colors=None, nam
     ### get the list of chromosomes to plot
     # get the chromosome lengths from a file, if filename or None was given
     if chromosome_lengths is None or isinstance(chromosome_lengths, str):
-        chromosome_lengths = _get_chromosome_lengths(chromosome_lengths)
+        chromosome_lengths = get_chromosome_lengths(chromosome_lengths)
     # grab only the chromosome types we want
     all_chromosomes = _get_chromosomes_by_type(chromosome_lengths.keys(), include_scaffolds, include_cassette, include_other, False)
     # sort chromosomes properly by type and name
@@ -137,16 +193,14 @@ def mutant_positions_and_data(mutant_datasets=[], density=True, colors=None, nam
     # MAYBE-TODO for short chromosomes like scaffolds/chlor/mito/cassette, plot in multiple rows? Maybe change the scale to stretch them a bit, since some will probably be smaller than bin_size?  But then I'd have to normalize them separately or something...
 
     ### get a list of all datasets provided, converted to the same format, along with their extra args
-    #  (for mutant_datasets, need to use _get_mutant_positions_from_dataset to convert each dataset 
+    #  (for mutant_datasets, need to use get_mutant_positions_from_dataset to convert each dataset 
     #   to a chromosome:position_list dict; other_datasets already come in that form)
     all_datasets_density_color_name = []
     for dataset,d,c,n,s in zip(mutant_datasets, density, colors, names, strands):
-        all_datasets_density_color_name.append((_get_mutant_positions_from_dataset(dataset, strand=s), d, c, n))
+        all_datasets_density_color_name.append((get_mutant_positions_from_dataset(dataset, strand=s), d, c, n))
     for dataset,d,c,n in zip(other_datasets, other_density, other_colors, other_names):
         all_datasets_density_color_name.append((dataset, d, c, n))
     total_plotline_width = 0.6
-
-    # TODO need to implement some kind of absolute scaling for other_datasets!  Since for example for mappability, we want the colorbar max to be 100% mappability, NOT the maximum number found in practice. 
 
     # TODO should probably merge mutant_datasets and other_datasets with all their respective variables!  Less code duplication, and it'll allow arbitrary order of datasets.
     # MAYBE-TODO also add an option for histogram data to be given directly rather than calculated by numpy.histogram by binning single positions?  That way we could save the mappability data as a histogram and re-use it, rather than load the rather large raw data into memory all the time.  And it'd give flexibility for other applications. 
@@ -170,25 +224,12 @@ def mutant_positions_and_data(mutant_datasets=[], density=True, colors=None, nam
                                 label = ('__nolegend__' if chr_N!=0 else curr_name))
         # if we're doing a density plot, bin the positions into counts, and plot as a heatmap.
         else:
-            chromosome_bin_count_lists = {}
-            for chr_N,chromosome in enumerate(all_chromosomes):
-                chromosome_length = chromosome_lengths[chromosome]
-                position_list = curr_dataset[chromosome]
-                # divide the chromosome into bin_size-sized ranges; 
-                bin_edges = [x-.5 for x in range(1, chromosome_length+1, bin_size)]
-                # make sure there's at least one bin, even if the total length is smaller than a bin!  (for scaffolds/etc)
-                last_bin_edge = chromosome_length-.5
-                if len(bin_edges)==1:                               bin_edges.append(last_bin_edge)
-                # there'll be a smaller-than-bin_size chunk left over at the end (if length doesn't divide evenly into bin_size), 
-                #  so add an extra bin for that if it's at least half a bin_size, otherwise make the last bin bigger to compensate.
-                if (last_bin_edge - bin_edges[-1])/bin_size < .5:   bin_edges[-1] = last_bin_edge
-                else:                                               bin_edges.append(last_bin_edge)
-                bin_count_list, _  = numpy.histogram(position_list, bin_edges)
-                # for the last bin in each chromosome, the value should be scaled by the smaller/bigger bin-size...
-                bin_count_list[-1] = bin_count_list[-1] / ((bin_edges[-1] - bin_edges[-2])/bin_size)
-                chromosome_bin_count_lists[chromosome] = bin_count_list
+            chromosome_bin_count_lists = get_histogram_data_from_positions(curr_dataset, bin_size, chromosome_lengths, 
+                                       all_chromosomes, special_last_bin=True, merge_last_bin_cutoff=0.5, normalize_last_bin=True)
             # now calculate the overall maximum bin-count over all chromosomes, so that they're all normalized to the same value
             max_count = max([max(chromosome_bin_count_lists[c]) for c in all_chromosomes])
+            # TODO need to implement some kind of absolute scaling for other_datasets!  Since for example for mappability, we want the colorbar max to be 100% mappability, NOT the maximum number found in practice. 
+
             for chr_N,chromosome in enumerate(all_chromosomes):
                 chromosome_length = chromosome_lengths[chromosome]
                 left_pos, right_pos = _get_plotline_pos(chr_N, total_plotline_width, len(all_datasets_density_color_name), N)
@@ -294,7 +335,7 @@ def chromosome_density_scatterplot(mutant_dataset, include_scaffolds=True, inclu
     # get the chromosome lengths from a file, if filename or None was given; grab only the chromosome types we want;
     #  apply chloro/mito multipliers
     if chromosome_lengths is None or isinstance(chromosome_lengths, str):
-        chromosome_lengths = _get_chromosome_lengths(chromosome_lengths)
+        chromosome_lengths = get_chromosome_lengths(chromosome_lengths)
         try:                chromosome_lengths['chloroplast'] *= chloroplast_multiplier
         except KeyError:    pass
         try:                chromosome_lengths['mitochondrial'] *= mito_multiplier
@@ -332,7 +373,7 @@ def chromosome_density_barchart(mutant_dataset, include_scaffolds=True, include_
     # get the chromosome lengths from a file, if filename or None was given; grab only the chromosome types we want; 
     #  apply chloro/mito multipliers; sort
     if chromosome_lengths is None or isinstance(chromosome_lengths, str):
-        chromosome_lengths = _get_chromosome_lengths(chromosome_lengths)
+        chromosome_lengths = get_chromosome_lengths(chromosome_lengths)
         try:                chromosome_lengths['chloroplast'] *= chloroplast_multiplier
         except KeyError:    pass
         try:                chromosome_lengths['mitochondrial'] *= mito_multiplier
