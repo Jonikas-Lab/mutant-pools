@@ -24,9 +24,7 @@ DEFAULT_NUCLEAR_GENOME_FILE = '~/experiments/reference_data/genomes_and_indexes/
 DEFAULT_ALL_GENOME_FILE = '~/experiments/reference_data/genomes_and_indexes/Chlre4-nm_chl-mit.fa'
 DEFAULT_GENOME_CASSETTE_FILE = '~/experiments/reference_data/genomes_and_indexes/Chlre4-nm_chl-mit_cassette-pMJ013b.fa'
 
-########################################### Mutant simulation functions ##########################################
-
-### mappability over genome
+######################################## Calculating mappability over genome #######################################
 
 ### MEMORY USAGE ISSUES
 # Keeping the full set of mappable/unmappable genome positions, in whatever form, takes a lot of memory!
@@ -36,47 +34,50 @@ DEFAULT_GENOME_CASSETTE_FILE = '~/experiments/reference_data/genomes_and_indexes
 #  - sets and dicts take 1-2x as much memory as the objects themselves.
 #  - lists actually take a lot less!  About 9 bits per int or char.
 # The genome's about 113M bases, and we already know that most of it's mappable, i.e. unique sequences.  
-#  - storing that many 21-strings in a set (say 1.5x the cost) will be 9G!  
 #  - that many ints in a set (say 1.5x the cost) will be 4G!  
+#  - storing that many 21-strings in a set (say 1.5x the cost) will be 9G!  
 #  - plus even more for the seq:pos dict, depending on details of pos format...
 
-### improvement options:
+### MAYBE-TODO Improvement options for memory issues:
+# For the second pass and returned value: Instead of a list of genome positions, keep a genome-sized list filled with 0s and 1s?  With 0/1 as normal ints that would still be about 1G, but I'm sure switching to a more efficient representation (bitstring.BitArray?) would make it a LOT smaller. 
+# For the first pass - NOT SURE!  How can I more efficiently store sets of strings?  MAYBE-TODO think about it more - it's currently the part that takes the most memory. 
+
+## Issues with python not releasing memory, or something
 # 
-# Make unique_seq_positions values contain only the start position, not start and end, since they're all the same length
-# Make unique_seq_positions values use a number for the chromosome instead of a name
-# -> these to get the dictionary down to 100M * (58+24+24) * 1.5 - about 15G.  Still too much!
+# Technically, on the whole genome, genome_mappable_slices should take 5-8GB, but RELEASE it once done (see "del" calls) - the output is only <1G.  But python seems to keep the memory, even if the output is about the size I expected!  So if I do two runs, say 20bp and 21bp flanks, I end up exceeding my 16G and going into swap... 
+# genome_mappable_insertion_sites* doesn't take as much memory to run, though still some; the output is actually 2x bigger than genome_mappable_slices for genome_mappable_insertion_sites, since there are two mappable insertion positions per slice, and 2Nx bigger for genome_mappable_insertion_sites_multi (4x for two slice lengths, etc - comes out to about 3G). 
 #
-# Change to keeping a genome-sized list filled with 0s and 1s?  That would be 1G, which is doable...  EXCEPT that I can't actually do that - I need to know which sequence corresponds to which position, otherwise if later I find a second copy of a given sequence, I won't know which position to mark as non-unique for the first sequence!
-#
-# I could do two passes over the genome... First just get a set of unique sequences (which is <9G, hopefully), THEN go over all the sequences again, check which ones are unique, and full the genome-sized 0/1 list based on that.
-#
-# Note for the genome-sized 0/1 list - I actually want just 0/1, not full ints, so I'm sure switching to a more efficient representation (bitstring.BitArray?) would make it a LOT smaller. 
+# So it's probably a good idea to pickle the output (after running genome_mappable_slices or genome_mappable_insertion_sites*), close python to release the memory (even though it'll take a LONG TIME, especially if there was swap space used), and open a new instance to unpickle the data and work on it.  
+# BUT if I pickle the output of any of those, and unpickle it in a new interactive python shell, again the output itself doesn't end up too huge (see sizes above), BUT the unpickling seems to take more memory and not release it again! Ugh. So maybe I really should convert it to bitarrays or something. 
+
 
 def genome_mappable_slices(slice_len, genome_seq=None, print_info=True):
-    """ Return a sequence:position dict giving the positions of all the unique seq slices. 
+    """ Return a chrom:position_list dict giving the positions of all the unique slice_len seq slices. 
     
-    Look at all the slices of length slice_len in each chromosome, both forward and reverse-complement;
-     return the positions of only the ones that showed up exactly once.
-    Positions are (chrom, slice_start, slice_end) tuples; start/end positions are 1-based inclusive
-     (i.e. in AATTGGCC, the position of AA is 1-2).
-    Positions are always given on the +strand; obviously if a +strand sequence is unique, 
-     the same start-end -strand sequence, which is its reverse-complement, is also unique. 
-     However, both strands are checked - palindromic sequences won't show up as unique.
+    Look at all slices of length slice_len in each chromosome (overlapping - for AATGG with len 2, look at AA, AT, TG, GG)
+     return the positions of only the ones that showed up exactly once (in forward or reverse-complement - 
+      sequences that have a reverse-complement version later in the genome, or that are palindromes, don't show up).
+    Positions are the 1-based position of the first base of each slice (i.e. in AATTGGCC, the position of AAT is 1).
 
     Genome_seq can be a chr_name:chr_seq dict, or the path to a fasta file containing the genome; default file will be used if None. 
+
+    CAVEAT: if you run this on the whole Chlamy genome, around 100Mb, it can take 5-8G of RAM, and returns a 1G data structure!
     """
-    # TODO this takes a LOT of memory!!! What to do?
+    # keep original genome_seq, because we'll want it for the second pass, and generators only work once
+    original_genome_seq = genome_seq
     if genome_seq is None:           genome_seq = os.path.expanduser(DEFAULT_ALL_GENOME_FILE)
     if isinstance(genome_seq, str):  genome_seq = basic_seq_utilities.parse_fasta(genome_seq)
     else:                            genome_seq = genome_seq.iteritems()
+    ### This is done in two passes over the whole genome, to improve memory usage. The original version was done in one pass.
+    ### First pass - go over all chromosome and get a set of unique and non-unique sequences. 
+    sequences_seen_once = set()
     sequences_seen_twice = set()
-    unique_seq_positions = {}
     chrom_names = set()
     N_total_slices = 0
-    # go over all chromosomes in genome file
+    if print_info:  print "PASS 1 - finding unique sequences (printing only chromosomes over 1Mb):"
     for chrom_name,chrom_seq in genome_seq:
         if print_info and len(chrom_seq)>1000000: 
-            print "processing %s (%sbp)...  %s"%(chrom_name, len(chrom_seq), time.ctime())
+            print "  %s (%s)...  %s"%(chrom_name, basic_seq_utilities.format_base_distance(len(chrom_seq)), time.ctime())
         if chrom_name in chrom_names:
             raise Exception("%s seen twice in genome_seq!"%(chrom_name))
         chrom_names.add(chrom_name)
@@ -84,102 +85,131 @@ def genome_mappable_slices(slice_len, genome_seq=None, print_info=True):
         for slice_start,slice_seq in basic_seq_utilities.generate_seq_slices(chrom_seq, slice_len, step=1):
             N_total_slices += 1
             # look at both the forward and the reverse-complement sequence of the current slice, 
-            #  but only store the forward (+strand) versions (no point in doing both)
+            #  but only store the forward (+strand) versions (no point in storing both if we're RC-ing each current sequence)
             slice_seq_RC = basic_seq_utilities.reverse_complement(slice_seq)
             # if a sequence is its own reverse-complement, it cannot be uniquely mappable - ignore
             #  (no point in even adding it to any dictionaries, since any future copies of that sequence will be caught here too)
             if slice_seq == slice_seq_RC:
                 continue
             # if this is the first time slice_seq shows up, save it, and save its position
-            #  (note - originally I did "{slice_seq,RC} & unique_seq_positions | sequences_seen_twice" here, HORRIBLY SLOW)
-            if not (slice_seq in unique_seq_positions or slice_seq_RC in unique_seq_positions 
+            #  (note - originally I did "{slice_seq,RC} & sequences_seen_once | sequences_seen_twice" here, HORRIBLY SLOW)
+            if not (slice_seq in sequences_seen_once or slice_seq_RC in sequences_seen_once 
                     or slice_seq in sequences_seen_twice or slice_seq_RC in sequences_seen_twice):
-                unique_seq_positions[slice_seq] = (chrom_name, slice_start, slice_start+slice_len-1)
+                sequences_seen_once.add(slice_seq)
             # if this is the second time slice_seq shows up, note it as non-unique, 
             #  and remove both it AND its RC from the unique set and the unique position dict.
-            #   (use set.discard(x) and dict.pop(x,None) to avoid raising an error when one of them isn't there)
-            elif (slice_seq in unique_seq_positions or slice_seq_RC in unique_seq_positions):
+            #   (use set.discard(x) to avoid raising an error when one of them isn't there)
+            elif (slice_seq in sequences_seen_once or slice_seq_RC in sequences_seen_once):
                 sequences_seen_twice.add(slice_seq)
-                unique_seq_positions.pop(slice_seq,None)
-                unique_seq_positions.pop(slice_seq_RC,None)
+                sequences_seen_once.discard(slice_seq)
+                sequences_seen_once.discard(slice_seq_RC)
             # if slice_seq is already known to be non-unique (in seen-twice but not seen-once), ignore
+    # this is a HUGE data structure, release it as soon as possible - MAYBE-TODO not sure if that works...
+    del sequences_seen_twice    
+
+    ### Second pass - go over all chromosomes again, and save the positions of known unique sequences.
+    # restart genome_seq generator
+    genome_seq = original_genome_seq
+    if genome_seq is None:              genome_seq = os.path.expanduser(DEFAULT_ALL_GENOME_FILE)
+    if isinstance(genome_seq, str):     genome_seq = basic_seq_utilities.parse_fasta(genome_seq)
+    else:                               genome_seq = genome_seq.iteritems()
+    unique_seq_positions_by_chrom = {}
+    if print_info:  print "PASS 2 - getting uniquely mappable positions (printing only chromosomes over 1Mb):"
+    for chrom_name,chrom_seq in genome_seq:
+        if print_info and len(chrom_seq)>1000000: 
+            print "  %s (%s)...  %s"%(chrom_name, basic_seq_utilities.format_base_distance(len(chrom_seq)), time.ctime())
+        unique_seq_positions_by_chrom[chrom_name] = []
+        # go over each slice_len-sized sequence slice and check if it's unique
+        for slice_start,slice_seq in basic_seq_utilities.generate_seq_slices(chrom_seq, slice_len, step=1):
+            # we already have the full set of unique sequences - now just store the position in unique_seq_positions_by_chrom
+            #  if it's a unique sequence.
+            if slice_seq in sequences_seen_once:
+                unique_seq_positions_by_chrom[chrom_name].append(slice_start)
+    # this is a HUGE data structure, release it as soon as possible - MAYBE-TODO not sure if that works...
+    del sequences_seen_once
+
     if print_info:
-        N_mappable_slices = len(unique_seq_positions)
+        N_mappable_slices = sum([len(pos_list) for pos_list in unique_seq_positions_by_chrom.values()])
         fraction_mappable = N_mappable_slices/N_total_slices if N_total_slices else float('NaN')
-        print("%s%% of %sbp slices are mappable (%s out of %s total, counting forward and reverse, on %s chromosomes)"
+        print("%.0f%% of %sbp slices are mappable (%s out of %s total on %s chromosomes)"
               %(fraction_mappable*100, slice_len, N_mappable_slices, N_total_slices, len(chrom_names)))
-    return unique_seq_positions
+    return unique_seq_positions_by_chrom
 
 
-def genome_mappable_insertion_positions(flanking_region_length=21, genome_seq=None, end_sequenced='5prime', print_info=True):
-    """ Return a set of all uniquely mappable genomic insertion position OBJECTS, given flanking_region_length. 
+def genome_mappable_insertion_sites(flanking_region_length=21, mappable_slice_pos_dict=None, genome_seq=None, 
+                                    include_strand=True, end_sequenced='5prime', print_info=True):
+    """ Return chromosome:position_list dict with all uniquely mappable genomic insertion sites, omitting strand, for plotting.
 
-    Insertion sites are mutant_analysis_classes.Insertion_position instances (with only one end known);
-     end_sequenced must be '5prime' or '3prime', specifying which end of the insertion has the mapped flanking region.
-    Give the length of the flanking regions - sometimes 21bp ones will be mappable but 20bp ones won't!
+    The mappability is based on the mappability of the flanking region, using flanking_region_length, 
+     on either side of the insertion (both sides are counted). 
+
+    The actual positions are the positions of the base BEFORE the insertion; the position lists are sorted. 
+    For example if the position 100-120 flanking region is mappable, that means an insertion at 99-100 is mappable, 
+     and one at 120-121 is mappable, depending on the orientation: 
+      if the flanking region is 5prime, then a +strand 120-121 and a -strand 99-100 insertion is mappable; 
+      if 3prime, the strands are inverted. 
+    Each position_list is sorted.  Each cassette orientation gets a separate entry.
+    If include_strand is True, position_list is a list of (pos_before, strand) tuples; 
+     if False, it's just a list of pos_before values, so if both a +strand and a -strand insertion as position X is mappable,
+      position X will just show up twice on the list; if it's mappable only in one orientation, it'll show up once.  
+       (This option is meant for plotting with mutant_plotting_utilities.mutant_positions_and_data, as an other_datasets element.)
+
+    If mappable_slice_pos_dict is not None, it'll be assumed to be the output of genome_mappable_slices (with slice_len 
+     the same as flanking_region_length), and genome_seq will be ignored; 
+     if it's None, genome_mappable_slices will be used to generate that data (takes a while, and a lot of memory!).
 
     Genome_seq can be a list of (chr_name,chr_seq) tuples, or the path to a fasta file containing the genome; 
      default file will be used if None. 
     """
-    # get a list of unique seq positions for all mappable slices
-    unique_flanking_region_positions = genome_mappable_slices(flanking_region_length, genome_seq, print_info).values()
-    # convert those into mutant_analysis_classes.Insertion_position objects - 
-    #  there will be two insertion_positions for each slice, one on each end.
-    ### convert the flanking region (chrom,start_pos,end_pos) list to a list of Insertion_position instances:
-    #   each flanking region should give TWO mappable positions, one on each side, with opposite strands
-    #    (with the insertion position strand depending on end_sequenced)
-    unique_insertion_positions = set()
     if end_sequenced not in basic_seq_utilities.SEQ_ENDS:
         raise Exception('Invalid end_sequenced %s! Must be in %s.'%(end_sequenced, basic_seq_utilities.SEQ_ENDS))
     reads_are_reverse = False if end_sequenced=='5prime' else True
-    for flanking_region_pos in unique_flanking_region_positions:
-        for strand in basic_seq_utilities.SEQ_STRANDS:
-            unique_insertion_positions.add(mutant_analysis_classes.get_insertion_pos_from_flanking_region_pos(
-                                                            flanking_region_pos + (strand,), end_sequenced, reads_are_reverse))
-    return unique_insertion_positions
+    # get a chromosome:mappable_slice_start_pos_list dict, if not provided already (this is the only use of genome_seq)
+    if mappable_slice_pos_dict is None:
+        mappable_slice_pos_dict = genome_mappable_slices(flanking_region_length, genome_seq, print_info)
+    # convert the mappable slice chromosome/position values into mappable insertion locations, 
+    #  treating them as end_sequenced flanking regions - each flanking region should give TWO mappable positions, 
+    #   one on each side, with opposite strands (with the insertion position strand depending on end_sequenced)
+    mappable_position_data = defaultdict(list)
+    for chrom,pos_list in mappable_slice_pos_dict.iteritems():
+        if print_info and len(pos_list)>500000: 
+            print "  %s (%s mappable slices)...  %s"%(chrom, len(pos_list), time.ctime())
+        for pos in pos_list:
+            flanking_region_pos = (chrom, pos, pos+flanking_region_length-1)
+            for strand in basic_seq_utilities.SEQ_STRANDS:
+                insertion_pos_object = mutant_analysis_classes.get_insertion_pos_from_flanking_region_pos(
+                                                            flanking_region_pos + (strand,), end_sequenced, reads_are_reverse)
+                if include_strand:
+                    mappable_position_data[chrom].append((insertion_pos_object.min_position, insertion_pos_object.strand))
+                else:
+                    mappable_position_data[chrom].append(insertion_pos_object.min_position)
+    return general_utilities.sort_lists_inside_dict(mappable_position_data)
 
 
-def genome_mappable_insertion_sites_by_chrom(flanking_region_lengths=[20,21], genome_seq=None, print_info=True,
-                                             position_sets=None):
-    """ Return chromosome:position_list dict with all uniquely mappable genomic insertion SITES, omitting strand, for plotting.
+def genome_mappable_insertion_sites_multi(flanking_region_lengths=[20,21], mappable_slice_pos_dicts=None, genome_seq=None, 
+                                          include_strand=True, end_sequenced='5prime', print_info=True):
+    """ Run genome_mappable_insertion_sites multiple times, with different flank length and optionally mappable dict values.
 
-    Based on genome_mappable_insertion_positions (see docstring for that!), but transformed to a chromosome:position_list dict, 
-     where the positions are the min_position of each Insertion_position instance.  Each position_list is sorted.
-    Strand information is discarded; if a given insertion position is mappable regardless of insertion orientation, 
-     it'll show up on the list twice; if it's mappable only in one orientation, it'll show up once.
-    This is to make it usable as other_dataset argument element for mutant_plotting_utilities.mutant_positions_and_data.
-
-    Two ways of providing input:
-     - provide flanking_region_lengths and genome_seq - genome_mappable_insertion_positions will be run
-        for each value in flanking_region_lengths
-     - provide position_sets - a list of outputs from genome_mappable_insertion_positions to be used directly 
-        to avoid re-running; flanking_region_lengths and genome_seq are ignored
-
-    If a single value is given as flanking_region_lengths, just run genome_mappable_insertion_positions with that; 
-     if a list of values is given, run genome_mappable_insertion_positions on each and add the results together.
-
-    There's no end_sequenced arg like in genome_mappable_insertion_positions - 5prime is always used,
-     since only strand information changes based on end_sequenced, and we're ignoring strand information anyway.
+    Flanking_region_lengths should be a list of flanking_region_length values; 
+     mappable_slice_pos_dicts can be None, or a same-length list of values. 
+    For each pair of those values, genome_mappable_insertion_sites will be run with the matching arguments. 
+    The final output will include the sum of position lists from all runs. 
+    See genome_mappable_insertion_sites docstring for more info.
     """
-    chromosome_position_lists = defaultdict(list)
-    # if position_sets are given (must be sets of mutant_analysis_classes.Insertion_position instances), 
-    #  just grab the min_position value of each Insertion_position, adding to appropriate chromosome list.
-    if position_sets is not None:
-        for position_set in position_sets:
-            for mappable_pos in position_set:
-                chromosome_position_lists[mappable_pos.chromosome].append(mappable_pos.min_position)
-    # if position_sets not given, generate them based on flanking_region_lengths and genome_seq.
-    else:
-        if isinstance(flanking_region_lengths, int):
-            flanking_region_lengths = [flanking_region_lengths]
-        for fl_len in flanking_region_lengths:
-            for mappable_pos in genome_mappable_insertion_positions(fl_len, genome_seq, '5prime', print_info):
-                chromosome_position_lists[mappable_pos.chromosome].append(mappable_pos.min_position)
-    # sort the positions!
-    return general_utilities.sort_lists_inside_dict(chromosome_position_lists)
+    if mappable_slice_pos_dicts == None:    mappable_slice_pos_dicts = [None for _ in flanking_region_lengths]
+    full_mappable_position_data = defaultdict(list)
+    # for each set of inputs, run genome_mappable_insertion_sites to generate new data, 
+    #  and then merge the new data into full_mappable_position_data
+    for flanking_region_length,mappable_slice_pos_dict in zip(flanking_region_lengths, mappable_slice_pos_dicts):
+        # get data for 
+        curr_mappable_position_data = genome_mappable_insertion_sites(flanking_region_length, mappable_slice_pos_dict, genome_seq, include_strand, end_sequenced, print_info)
+        for chrom,new_pos_list in curr_mappable_position_data.iteritems():
+            full_mappable_position_data[chrom].extend(new_pos_list)
+    # sort the final positions (also converts from defaultdict to dict)
+    return general_utilities.sort_lists_inside_dict(full_mappable_position_data)
 
 
-### simulate dataset with N randomly positioned mutants, taking into account mappable/unmappable positions!
+################################# Simulating random size-N dataset, various options #######################################
 
 def get_20bp_fraction(dataset):
     """ Return the fraction of mutants in dataset that only have 20bp flanking regions (no 21bp ones).
@@ -193,6 +223,7 @@ def get_20bp_fraction(dataset):
     # LATER-TODO should this be here, or a mutant_analysis_classes.Insertional_mutant_pool_dataset method or something?
 
 
+### simulate dataset with N randomly positioned mutants, taking into account mappable/unmappable positions!
 # TODO actual simulation function!  Use get_20bp_fraction to decide how many of the simulated mutants should be 20bp vs 21bp. 
 
 
@@ -201,6 +232,8 @@ def get_20bp_fraction(dataset):
 # LATER-TODO
 # MAYBE-TODO would it be possible to also match the real hotspots and coldspots of the real dataset?
 
+
+################################# Randomly chosen subsets of real dataset #######################################
 
 ### number of genes with 1+/2+/etc mutants vs number of mutants (randomly chosen mutant subsets)
 
@@ -264,17 +297,26 @@ class Testing(unittest.TestCase):
     def test__genome_mappable_everything(self):
         # testing three related functions in parallel, since they use the same cases
         #  - arguments to genome_mappable_slicesare (slice_len, genome_seq, print_info=True)
-        #  - arguments to genome_mappable_insertion_positions are 
-        #       (flanking_region_length=21, genome_seq=None, end_sequenced='5prime', print_info=True)
-        #  - arguments to genome_mappable_insertion_sites_by_chrom are (flanking_region_length=21, genome_seq=None, print_info=True)
+        #  - arguments to genome_mappable_insertion_sites are (flanking_region_length=21, mappable_slice_pos_dict=None, 
+        #           genome_seq=None, include_strand=True, end_sequenced='5prime', print_info=True):
 
         ### only testing whether there are 0 unique sequences, or a non-zero number
         def _test_all_empty(slice_len, genome):
             """ Test whether all the genome_mappable_* functions return empty sets/lists/dicts/whatever. """
-            outcomes = set([genome_mappable_slices(slice_len, genome, False) == {}])
-            for end in basic_seq_utilities.SEQ_ENDS:
-                outcomes.add(genome_mappable_insertion_positions(slice_len, genome, end, False) == set())
-            outcomes.add(genome_mappable_insertion_sites_by_chrom(slice_len, genome, False) == {})
+            def _test_empty(D): return sum([len(l) for l in D.values()])==0
+            outcomes = set()
+            # test genome_mappable_slices
+            slice_data = genome_mappable_slices(slice_len, genome_seq=genome, print_info=False)
+            outcomes.add(_test_empty(slice_data))
+            # test genome_mappable_insertion_sites and genome_mappable_insertion_sites_multi in all variants
+            for include_strand in (True,False):
+                for end in basic_seq_utilities.SEQ_ENDS:
+                    args = (include_strand,end, False)
+                    outcomes.add(_test_empty(genome_mappable_insertion_sites(slice_len, slice_data, None, *args)))
+                    outcomes.add(_test_empty(genome_mappable_insertion_sites(slice_len, None, genome, *args)))
+                    for N in (1,2,5):
+                        outcomes.add(_test_empty(genome_mappable_insertion_sites_multi([slice_len]*N, [slice_data]*N, None, *args)))
+                        outcomes.add(_test_empty(genome_mappable_insertion_sites_multi([slice_len]*N, None, genome, *args)))
             if len(outcomes) != 1:
                 raise Exception("Inconsistent outcomes in _test_all_empty in test__genome_mappable_everything!")
             return outcomes.pop()
@@ -312,57 +354,71 @@ class Testing(unittest.TestCase):
         assert not _test_all_empty(2, {'a':'AAT'})
 
         ### more detailed testing of actual non-empty outputs
-
-        # help functions for testing genome_mappable_insertion_positions, which has a complicated output format
-        def _I(*args, **kwargs):
-            return mutant_analysis_classes.Insertion_position(*args, immutable=True, **kwargs)
-        def _test_P(slice_len, genome, pos_list_5prime):
-            pos_list_5prime = [tuple(single.split(' ')) for single in pos_list_5prime.split(',  ')]
-            assert genome_mappable_insertion_positions(slice_len, genome, '5prime', False) == set([_I(*a) for a in pos_list_5prime])
-            pos_list_3prime = [(c, '+' if s=='-' else '-', p) for (c,s,p) in pos_list_5prime]
-            assert genome_mappable_insertion_positions(slice_len, genome, '3prime', False) == set([_I(*a) for a in pos_list_3prime])
-        # how genome_mappable_insertion_positions works if end is 5prime: 
+        # help functions for testing all the functions in parallel
+        def _read_raw_data(raw_data):
+            """ get a dict of lists of ints or (int.str) tuples from a raw string. """
+            formatted_data = {}
+            for chr_data in raw_data.split(', '):
+                chrom, pos_data = chr_data.strip().split(': ')
+                formatted_data[chrom] = []
+                # pos_data can be ints (1 25 301) or ints with strand info (1- 25+ 301+)
+                for x in pos_data.split(' '):
+                    try:                formatted_data[chrom].append(int(x))
+                    except ValueError:  formatted_data[chrom].append( (int(x[:-1]), x[-1]) )
+                    formatted_data[chrom] = sorted(formatted_data[chrom])
+            return formatted_data
+        def _test_all(slice_len, genome, raw_slice_data, raw_pos_data_5prime):
+            """ Test genome_mappable_slices and all variants of genome_mappable_insertion_sites* against expected output. """
+            # get the expected output data from the simplified string formats
+            slice_data = _read_raw_data(raw_slice_data)
+            pos_data_5prime = _read_raw_data(raw_pos_data_5prime)
+            # from pos_data_5prime, make pos_data_3prime (just switch all strands) and pos_data_no_strand (remove strand info)
+            pos_data_3prime, pos_data_no_strand = {}, {}
+            for chrom,pos_list in pos_data_5prime.items():
+                pos_data_no_strand[chrom] = [pos for (pos,strand) in pos_list]
+                pos_data_3prime[chrom] = sorted([(pos, '+' if strand=='-' else '-') for (pos,strand) in pos_list])
+            # check genome_mappable_slices output (and save it for later)
+            new_slice_data = genome_mappable_slices(slice_len, genome, False)
+            assert new_slice_data == slice_data
+            # now try running genome_mappable_insertion_sites with both the raw slice_len/genome data, and the new_slice_data; 
+            for include_strand,end,pos_data in ((True,'5prime',pos_data_5prime), (True,'3prime',pos_data_3prime), 
+                                                (False,'5prime',pos_data_no_strand), (False,'3prime',pos_data_no_strand)):
+                    args = (include_strand,end, False)
+                    assert genome_mappable_insertion_sites(slice_len, slice_data, None, *args) == pos_data
+                    assert genome_mappable_insertion_sites(slice_len, None, genome, *args) == pos_data
+                    assert genome_mappable_insertion_sites_multi([slice_len], None, genome, *args) == pos_data
+                    for extra in ([], [{}], [{}, {}, {}]):
+                        assert genome_mappable_insertion_sites_multi([slice_len]*(len(extra)+1), [slice_data]+extra, None, 
+                                                                     *args) == pos_data
+        # how genome_mappable_insertion_sites works if end is 5prime: 
         #   a mappable 1-2 flanking region means a +strand insertion at 2-? and a -strand insertion at ?-1 will be mappable;
         #  if end is 3prime, it's the same positions but opposite strands.
 
         # a single-base-repeat chromosome with slice size equal to chromosome size has all unique sequences;
         #  same for two such chromosomes that aren't reverse-complement
-        assert genome_mappable_slices(3, {'a':'AAA'}, False) == {'AAA':('a',1,3)}
-        _test_P(3, {'a':'AAA'}, 'a - ?-1,  a + 3-?')
-        assert genome_mappable_insertion_sites_by_chrom(3, {'a':'AAA'}, False) == {'a':[0,3]}
-
-        assert genome_mappable_slices(3, {'a':'AAA', 'b':'GGG'}, False) == {'AAA':('a',1,3), 'GGG':('b',1,3)}
-        _test_P(3, {'a':'AAA',  'b':'GGG'}, 'a - ?-1,  a + 3-?,  b - ?-1,  b + 3-?')
-        assert genome_mappable_insertion_sites_by_chrom(3, {'a':'AAA', 'b':'GGG'}, False) == {ch:[0,3] for ch in 'ab'}
+        _test_all(3, {'a':'AAA'},                  'a: 1',        'a: 0- 3+')
+        _test_all(3, {'a':'AAA', 'b':'GGG'},       'a: 1, b: 1',  'a: 0- 3+, b: 0- 3+')
+        # same test, but with the genome read from a fasta file
+        _test_all(3, 'test_data/INPUT_genome0.fa', 'a: 1, b: 1',  'a: 0- 3+, b: 0- 3+')
 
         # a single chromosome that's not a palindrome or a base-repeat has all unique sequences
         #  (or just some if slice_len is 1 and some bases show up twice)
         # (note - the first case here has two different-strand mappable insertions in one position, 
-        #  so the genome_mappable_insertion_sites_by_chrom has one position repeated twice - important to check that!)
+        #  so the genome_mappable_insertion_sites has one position repeated twice - important to check that!)
+        _test_all(1, {'a':'AG'},   'a: 1 2',  'a: 0- 1+ 1- 2+') 
+        _test_all(2, {'a':'AAT'},  'a: 1',    'a: 0- 2+')
+        curr_genome = {'a':'AGA'}
+        _test_all(1, curr_genome,  'a: 2',    'a: 1- 2+')
+        _test_all(2, curr_genome,  'a: 1 2',  'a: 0- 2+ 1- 3+')
 
-        assert genome_mappable_slices(1, {'a':'AG'}, False) == {'A':('a',1,1), 'G':('a',2,2)}
-        _test_P(1, {'a':'AG'}, 'a - ?-1,  a + 1-?,  a - ?-2,  a + 2-?')
-        assert genome_mappable_insertion_sites_by_chrom(1, {'a':'AG'}, False) == {'a':[0,1,1,2]}
-
-        assert genome_mappable_slices(1, {'a':'AGA'}, False) == {'G':('a',2,2)}
-        _test_P(1, {'a':'AGA'}, 'a - ?-2,  a + 2-?')
-        assert genome_mappable_insertion_sites_by_chrom(1, {'a':'AGA'}, False) == {'a':[1,2]}
-        assert genome_mappable_slices(2, {'a':'AGA'}, False) == {'AG':('a',1,2), 'GA':('a',2,3)}
-        _test_P(2, {'a':'AGA'}, 'a - ?-1,  a + 2-?,  a - ?-2,  a + 3-?')
-        assert genome_mappable_insertion_sites_by_chrom(2, {'a':'AGA'}, False) == {'a':[0,1,2,3]}
-        # same genome but with both flank lengths (results are added together)
-        assert genome_mappable_insertion_sites_by_chrom([1,2], {'a':'AGA'}, False) == {'a':[0,1,1,2,2,3]}
-        # also test that genome_mappable_insertion_sites_by_chrom works properly when provided position_sets directly:
-        pos_set_slice1 = genome_mappable_insertion_positions(1, {'a':'AGA'}, '5prime', False)
-        pos_set_slice2 = genome_mappable_insertion_positions(2, {'a':'AGA'}, '5prime', False)
-        assert genome_mappable_insertion_sites_by_chrom(position_sets=[pos_set_slice1], print_info=False) == {'a':[1,2]}
-        assert genome_mappable_insertion_sites_by_chrom(position_sets=[pos_set_slice2], print_info=False) == {'a':[0,1,2,3]}
-        for pos_slice_both in ([pos_set_slice1,pos_set_slice2], [pos_set_slice2,pos_set_slice1]):
-            assert genome_mappable_insertion_sites_by_chrom(position_sets=pos_slice_both, print_info=False) == {'a':[0,1,1,2,2,3]}
-
-        assert genome_mappable_slices(2, {'a':'AAT'}, False) == {'AA':('a',1,2)}
-        _test_P(2, {'a':'AAT'}, 'a - ?-1,  a + 2-?')
-        assert genome_mappable_insertion_sites_by_chrom(2, {'a':'AAT'}, False) == {'a':[0,2]}
+        # test genome_mappable_insertion_sites_multi on the two curr_genome cases added together, different flank sizes
+        #  (getting the data directly from genome, or from two genome_mappable_slices results)
+        #  (only testing the no-strand version for simplicity - MAYBE-TODO test all versions?)
+        assert genome_mappable_insertion_sites_multi([1,2], None, curr_genome, False, '5prime', False) == {'a':[0,1,1,2,2,3]}
+        slices_1 = genome_mappable_slices(1, curr_genome, False)
+        slices_2 = genome_mappable_slices(2, curr_genome, False)
+        for fl_both,slices_both in (([1,2],[slices_1,slices_2]), ([2,1],[slices_2,slices_1])):
+            assert genome_mappable_insertion_sites_multi(fl_both, slices_both, None, False, '5prime', False) == {'a':[0,1,1,2,2,3]}
 
         
     # LATER-TODO add unit-tests for other stuff!
