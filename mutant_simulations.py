@@ -30,8 +30,27 @@ DEFAULT_GENOME_CASSETTE_FILE = '~/experiments/reference_data/genomes_and_indexes
 
 ### MEMORY USAGE ISSUES
 # Keeping the full set of mappable/unmappable genome positions, in whatever form, takes a lot of memory!
-# Use sys.getsizeof to get the sizes of basic objects.  An int or bool takes 24 bytes; a 21-string takes 58, a 1-string takes 38.  Sets and dicts take 1-2x as much memory as the objects themselves.
-# The genome's about 113M bases, and we already know that most of it's mappable, i.e. unique sequences.  Storing that many 21-strings in a set (say 1.5x the cost) will be 9G!  Plus even more for the seq:pos dict...
+# Use sys.getsizeof to get the sizes of basic objects:  
+#  - an int or bool takes 24 bytes; 
+#  - a 21-string takes 58, a 1-string takes 38
+#  - sets and dicts take 1-2x as much memory as the objects themselves.
+#  - lists actually take a lot less!  About 9 bits per int or char.
+# The genome's about 113M bases, and we already know that most of it's mappable, i.e. unique sequences.  
+#  - storing that many 21-strings in a set (say 1.5x the cost) will be 9G!  
+#  - that many ints in a set (say 1.5x the cost) will be 4G!  
+#  - plus even more for the seq:pos dict, depending on details of pos format...
+
+### improvement options:
+# 
+# Make unique_seq_positions values contain only the start position, not start and end, since they're all the same length
+# Make unique_seq_positions values use a number for the chromosome instead of a name
+# -> these to get the dictionary down to 100M * (58+24+24) * 1.5 - about 15G.  Still too much!
+#
+# Change to keeping a genome-sized list filled with 0s and 1s?  That would be 1G, which is doable...  EXCEPT that I can't actually do that - I need to know which sequence corresponds to which position, otherwise if later I find a second copy of a given sequence, I won't know which position to mark as non-unique for the first sequence!
+#
+# I could do two passes over the genome... First just get a set of unique sequences (which is <9G, hopefully), THEN go over all the sequences again, check which ones are unique, and full the genome-sized 0/1 list based on that.
+#
+# Note for the genome-sized 0/1 list - I actually want just 0/1, not full ints, so I'm sure switching to a more efficient representation (bitstring.BitArray?) would make it a LOT smaller. 
 
 def genome_mappable_slices(slice_len, genome_seq=None, print_info=True):
     """ Return a sequence:position dict giving the positions of all the unique seq slices. 
@@ -50,7 +69,6 @@ def genome_mappable_slices(slice_len, genome_seq=None, print_info=True):
     if genome_seq is None:           genome_seq = os.path.expanduser(DEFAULT_ALL_GENOME_FILE)
     if isinstance(genome_seq, str):  genome_seq = basic_seq_utilities.parse_fasta(genome_seq)
     else:                            genome_seq = genome_seq.iteritems()
-    sequences_seen_once = set()
     sequences_seen_twice = set()
     unique_seq_positions = {}
     chrom_names = set()
@@ -73,22 +91,18 @@ def genome_mappable_slices(slice_len, genome_seq=None, print_info=True):
             if slice_seq == slice_seq_RC:
                 continue
             # if this is the first time slice_seq shows up, save it, and save its position
-            #  (note - originally I did "{slice_seq,RC} & sequences_seen_once | sequences_seen_once" here, HORRIBLY SLOW)
-            if not (slice_seq in sequences_seen_once or slice_seq_RC in sequences_seen_once 
+            #  (note - originally I did "{slice_seq,RC} & unique_seq_positions | sequences_seen_twice" here, HORRIBLY SLOW)
+            if not (slice_seq in unique_seq_positions or slice_seq_RC in unique_seq_positions 
                     or slice_seq in sequences_seen_twice or slice_seq_RC in sequences_seen_twice):
-                sequences_seen_once.add(slice_seq)
                 unique_seq_positions[slice_seq] = (chrom_name, slice_start, slice_start+slice_len-1)
             # if this is the second time slice_seq shows up, note it as non-unique, 
             #  and remove both it AND its RC from the unique set and the unique position dict.
             #   (use set.discard(x) and dict.pop(x,None) to avoid raising an error when one of them isn't there)
-            elif (slice_seq in sequences_seen_once or slice_seq_RC in sequences_seen_once):
+            elif (slice_seq in unique_seq_positions or slice_seq_RC in unique_seq_positions):
                 sequences_seen_twice.add(slice_seq)
-                sequences_seen_once.discard(slice_seq)
-                sequences_seen_once.discard(slice_seq_RC)
                 unique_seq_positions.pop(slice_seq,None)
                 unique_seq_positions.pop(slice_seq_RC,None)
             # if slice_seq is already known to be non-unique (in seen-twice but not seen-once), ignore
-    assert len(sequences_seen_once) == len(unique_seq_positions)
     if print_info:
         N_mappable_slices = len(unique_seq_positions)
         fraction_mappable = N_mappable_slices/N_total_slices if N_total_slices else float('NaN')
