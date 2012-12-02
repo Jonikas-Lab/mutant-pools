@@ -163,7 +163,9 @@ def mutant_positions_and_data(datasets=[], dataset_formats=0, density_plots=True
             (makes sense for values with a defined 0-100% range, like mappability or GC content)
      * strands is only needed for mutant datasets - each mutant dataset will be converted to a chromosome:position_list dict, 
         taking all mutants if the strands value is None, or only +strand/-strand/opposite-tandem mutants if it's '+'/'-'/'both'.
-     * The names values are used for the legend and colorbar labels.
+     * The names values are used as labels for the legend (if density=False) or colorbar (if density=True); 
+        if '' is given, that dataset won't be included in the legend or won't have a colorbar
+         (use for cases with multiple copies of similar datasets - they should use the same color as a labeled one!)
 
     The include_* True/False arguments govern which chromosome types (in addition to the 17 nuclear chromosomes) should be included.
     Chromosome_lengths can be either a chromosome:length dict, or the name of a genome fasta file to extract them from
@@ -176,6 +178,7 @@ def mutant_positions_and_data(datasets=[], dataset_formats=0, density_plots=True
     ### parse the arguments, set defaults, etc
     # for the arguments that should be lists, if a single value is given, change to a correct-length list filled with that value
     if isinstance(datasets, (dict, mutant_analysis_classes.Insertional_mutant_pool_dataset)):    datasets = [datasets]
+    if isinstance(dataset_formats, int):                                   dataset_formats = [dataset_formats for _ in datasets]
     if density_plots in (True,False):                                      density_plots = [density_plots for _ in datasets]
     if colors is None or isinstance(colors,str):                           colors = [colors for _ in datasets]
     if isinstance(names,str):                                              names = [names for _ in datasets]
@@ -193,11 +196,11 @@ def mutant_positions_and_data(datasets=[], dataset_formats=0, density_plots=True
             else:
                 if d_format==0:    colors[N]='black'
                 else:              colors[N]='blue'
-    # set sensible default values for None names ('mutants' for mutants, empty for other data, since we can't tell)
+    # set sensible default values for None names ('mutants' for mutants, more general for other data, since we can't tell)
     for N,(name,d_format) in enumerate(zip(list(names),dataset_formats)):
         if name is None:
             if d_format==0:    names[N]='mutants'
-            else:              names[N]=''
+            else:              names[N]='positions'
 
     ### get the list of chromosomes to plot
     # get the chromosome lengths from a file, if filename or None was given
@@ -255,7 +258,7 @@ def mutant_positions_and_data(datasets=[], dataset_formats=0, density_plots=True
                     inverted_positions = [chromosome_length - pos for pos in position_list]
                     # only give a label to one chromosome per dataset, so only one shows up in the legend
                     mplt.hlines(inverted_positions, left_pos, right_pos, color=color, 
-                                label = ('__nolegend__' if chr_N!=0 else name))
+                                label = ('__nolegend__' if (chr_N!=0 or name=='') else name))
             # if we're doing a density plot, bin the positions into counts, and plot as a heatmap.
             else:
                 # actually draw the heatmap image - this is tricky! Matplotlib tends to assume there's only a single heatmap.
@@ -268,7 +271,7 @@ def mutant_positions_and_data(datasets=[], dataset_formats=0, density_plots=True
                                  extent=(left_pos,right_pos,0,chromosome_length), cmap=mplt.get_cmap(color), 
                                  aspect='auto', norm=None, vmin=0, vmax=max_count, **imshow_kwargs)
                 # save info image to add colorbars: image, name, and if_normalized (True if max_per_base was given) 
-                if chr_N==0:    all_heatmaps.append((im, name, (max_per_base is not None)))
+                if chr_N==0 and name!='':  all_heatmaps.append((im, name, (max_per_base is not None)))
 
     ### set plot limits, ticks, labels, etc
     # it's important to do all this BEFORE colorbars, otherwise it'll apply to the colorbar instead of main axes!
