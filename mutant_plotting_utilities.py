@@ -26,6 +26,24 @@ import plotting_utilities
 ########################################## Plotting mutant positions #############################################
 
 STRAND_VAR_VALUES = ('+', '-', 'both', None)
+DEFAULT_BIN_SIZE = 20000
+
+
+def get_chromosome_lengths(genome_file=None):
+    """ Return chromosome:length dictionary based on reading a genome fasta file. """
+    original_input = genome_file
+    if genome_file is None:
+        genome_file = os.path.expanduser(mutant_simulations.DEFAULT_GENOME_CASSETTE_FILE)
+    chromosome_lengths = defaultdict(int)
+    try:
+        for header,seq in basic_seq_utilities.parse_fasta(genome_file):
+            chromosome_lengths[header] = len(seq)
+        return dict(chromosome_lengths)
+    except IOERror:
+        file_info = "default " if original_input is None else ""
+        raise ValueError("%sgenome fasta file $s not found! Provide filename."%(file_info, genome_file))
+    # MAYBE-TODO should this be in basic_seq_utilities or somewhere?  Except for the specific default value...
+
 
 def get_mutant_positions_from_dataset(dataset, strand=None):
     """  Return chromosome_name:mutant_position_list for dataset.
@@ -48,14 +66,14 @@ def get_mutant_positions_from_dataset(dataset, strand=None):
     return chromosome_position_dict
 
 
-def get_histogram_data_from_positions(position_dict, bin_size, chromosome_lengths=None, chromosomes=None, 
-                                       special_last_bin=True, merge_last_bin_cutoff=0.5, normalize_last_bin=True):
+def get_histogram_data_from_positions(position_dict, bin_size=DEFAULT_BIN_SIZE, chromosome_lengths=None, chromosomes=None, 
+                                      special_last_bin=True, merge_last_bin_cutoff=0.5, normalize_last_bin=True):
     """ Given a chromosome:position_list dict, return a chromosome:count_per_bin_list dict. 
     
     The positions in position_list will be binned into bin_size-sized bins over the length of each chromosome, 
      giving count_per_bin_list, with length matching the number of bins in the chromosome. 
-    If chromosome_lengths is given, use those to decide how many bins there will be in the chromosome; 
-     otherwise use the highest position in position_dict for each chromosome as an approximate length. 
+    Chromosome_lengths can be either a chromosome:length dict, or the name of a genome fasta file to extract them from
+     (if None, the default file will be used) - use the lengths to decide how many bins there will be in the chromosome.
 
     If a chromosome is shorter than a bin, make it a single bin anyway.
     If add_last_bin is true, when the chromosome length isn't evenly divided into bin_size-sized bins, 
@@ -64,13 +82,15 @@ def get_histogram_data_from_positions(position_dict, bin_size, chromosome_length
      so that its value reflects the position density rather than raw count, to match all the other bins for heatmap display.
 
     If chromosomes is not None, only include those chromosomes; 
-     otherwise include all chromosomes in chromosome_lengths if given, or in position_dict if not.
+     otherwise include all chromosomes in position_dict only.
     """
+    if chromosome_lengths is None or isinstance(chromosome_lengths, str):
+        chromosome_lengths = get_chromosome_lengths(chromosome_lengths)
+        chromosomes_no_lengths = set(position_dict) - set(chromosome_lengths)
+        if chromosomes_no_lengths:
+            raise Exception("some chromosomes have no length data! %s"%chromosomes_no_lengths)
     if chromosomes is None:   
-        if chromosome_lengths is None:  chromosomes = position_dict.keys()
-        else:                           chromosomes = chromosome_lengths.keys()
-    if chromosome_lengths is None:
-        chromosome_lengths = {chrom:max(pos_list) for (chrom, pos_list) in position_dict}
+        chromosomes = position_dict.keys()
     chromosome_bin_count_lists = {}
     for chromosome in chromosomes:
         chromosome_length = chromosome_lengths[chromosome]
@@ -92,17 +112,6 @@ def get_histogram_data_from_positions(position_dict, bin_size, chromosome_length
         chromosome_bin_count_lists[chromosome] = bin_count_list
     return chromosome_bin_count_lists
     # TODO should probably unit-test this!
-
-
-def get_chromosome_lengths(genome_file=None):
-    """ Return chromosome:length dictionary based on reading a genome fasta file. """
-    if genome_file is None:
-        genome_file = os.path.expanduser(mutant_simulations.DEFAULT_GENOME_CASSETTE_FILE)
-    chromosome_lengths = defaultdict(int)
-    for header,seq in basic_seq_utilities.parse_fasta(genome_file):
-        chromosome_lengths[header] = len(seq)
-    return dict(chromosome_lengths)
-    # MAYBE-TODO should this be in basic_seq_utilities or somewhere?  Except for the specific default value...
 
 
 def _get_chromosomes_by_type(all_chromosomes, include_scaffolds, include_cassette, include_other, output_dict=False):
@@ -128,59 +137,62 @@ def _get_plotline_pos(middle_pos, total_width, total_N, N):
     return left_pos, right_pos
 
 
-def mutant_positions_and_data(mutant_datasets=[], density=True, colors=None, names='mutants', strands=None, 
-                          other_datasets=[], other_density=False, other_colors=None, other_names='other', 
-                          title='', bin_size=20000, chromosome_lengths=None, interpolate=False, condense_colorbars=True, 
-                          include_scaffolds=False, include_cassette=False, include_other=False):
-    """ Plot multiple mutant datasets or other data as position lines or density heatmaps across chromosomes. 
+def mutant_positions_and_data(datasets=[], dataset_formats=0, density_plots=True, colors=None, names=None, strands=None, 
+                              title='', bin_size=DEFAULT_BIN_SIZE, chromosome_lengths=None, 
+                              interpolate=False, condense_colorbars=True, total_plotline_width=0.6, 
+                              include_scaffolds=False, include_cassette=False, include_other=False):
+    """ Plot multiple datasets (mutant,position,density) across chromosomes, as position lines or density heatmaps.
 
-    Mutant_datasets must be a list of mutant_analysis_classes.Insertional_mutant_pool_dataset instances (or a single instance).
-    Other_datasets must be a a list of chromosome:position_list dicts (with positions as integers) (or a single dict). 
+    Each element in datasets must match the corresponding value in dataset_formats (or the value if only one is given:
+     - format 0 - a mutant_analysis_classes.Insertional_mutant_pool_dataset instance
+     - format 1 - a chromosome:position_list dict (with positions as integers)
+     - format 2 - a chromosome:bin_density_list dict (with bin densities as numbers - generated with bin sizes matching bin_size.)
+    If datasets is a single instance of any of these things instead of a list, it'll be treated as a length-1 list.
 
-    Density, colors, names, strands must all be lists of the same length as mutant_datasets, or single values
-     (which will be converted to lists filled with those values). 
-    The same applies to other_density, other_colors, other_names with respect to other_datasets; 
-     otherwise the other_* arguments are the same as the first set, unless otherwise noted. 
-    Strands is only needed for mutant_datasets - each mutant dataset will be converted to a chromosome:position_list dict, 
-     taking all mutants if the corresponding strands value is None, 
-     or only +strand/-strand/opposite-tandem mutants if it's '+'/'-'/'both'.
-
-    For each dataset (mutant or other), if the corresponding density value is False, 
-      each position will be plotted as a horizontal line (using the corresponding color value, or black if None); 
-     if True, the positions will be converted to a density map by binning mutants into ranges (with bin_size bases per range), 
-      and plotted as a heatmap (using the corresponding color value as the colormap name, or the default colormap if None).
-
-    The names/other_names values are used for the legend and colorbar labels.
-
-    Chromosome_lengths can be either a chromosome:length dict, or the name of a genome fasta file to extract them from
-     (if None, the default file will be used).
-
-    Interpolate governs whether color blocks are drawn as rectangles or interpolated on density heatmaps. 
-    If condense_colorbars, if there is more than one colorbar to be drawn, they'll be condensed into two rows with reduced spacing.
+    Dataset_formats, density_plots, colors, names, and strands must all be lists of the same length as datasets, or single values
+     (which will be converted to lists filled with those values):
+     * For each dataset, if the corresponding density_plots value is False, 
+        each position will be plotted as a horizontal line (using the corresponding color value, or black if None); 
+         (this is impossible if format==2 for this dataset - in that case an error will be returned)
+       if True, the positions will be converted to a density map by binning mutants into ranges (with bin_size bases per range), 
+        and plotted as a heatmap (using the corresponding color value as the colormap name, or the default colormap if None).
+     * Strands is only needed for mutant datasets - each mutant dataset will be converted to a chromosome:position_list dict, 
+        taking all mutants if the strands value is None, or only +strand/-strand/opposite-tandem mutants if it's '+'/'-'/'both'.
+     * The names values are used for the legend and colorbar labels.
 
     The include_* True/False arguments govern which chromosome types (in addition to the 17 nuclear chromosomes) should be included.
+    Chromosome_lengths can be either a chromosome:length dict, or the name of a genome fasta file to extract them from
+     (if None, the default file will be used).
+    Interpolate governs whether color blocks are drawn as rectangles or interpolated on density heatmaps. 
+    If condense_colorbars, if there is more than one colorbar to be drawn, they'll be condensed into two rows with reduced spacing.
+    Title will be used for the plot title.
+    Total_plotline_width gives the fraction of x-axis space given to the chromosome plots vs spaces between chromosomes.
     """
     ### parse the arguments, set defaults, etc
     # for the arguments that should be lists, if a single value is given, change to a correct-length list filled with that value
-    if isinstance(mutant_datasets, mutant_analysis_classes.Insertional_mutant_pool_dataset):    mutant_datasets = [mutant_datasets]
-    if isinstance(other_datasets, dict):                                                        other_datasets = [other_datasets]
-    if density in (True,False):                                 density = [density for _ in mutant_datasets]
-    if other_density in (True,False):                           other_density = [other_density for _ in other_datasets]
-    if colors is None or isinstance(colors,str):                colors = [colors for _ in mutant_datasets]
-    if other_colors is None or isinstance(other_colors,str):    other_colors = [other_colors for _ in other_datasets]
-    if isinstance(names,str):                                   names = [names for _ in mutant_datasets]
-    if isinstance(other_names,str):                             other_names = [other_names for _ in other_datasets]
-    if isinstance(strands,str) or strands is None:              strands = [strands for _ in mutant_datasets]
+    if isinstance(datasets, (dict, mutant_analysis_classes.Insertional_mutant_pool_dataset)):    
+        datasets = [datasets]
+    if density_plots in (True,False):                           density_plots = [density_plots for _ in datasets]
+    if colors is None or isinstance(colors,str):                colors = [colors for _ in datasets]
+    if isinstance(names,str):                                   names = [names for _ in datasets]
+    if isinstance(strands,str) or strands is None:              strands = [strands for _ in datasets]
     imshow_kwargs = {} if interpolate else {'interpolation': 'none'}
-    # set sensible default values for None colors (depends on whether it's color or colormap)
-    old_colors, old_other_colors = colors, other_colors
-    colors, other_colors = [], []
-    for old_color_list,new_color_list,density_list in [(old_colors,colors,density), (old_other_colors,other_colors,other_density)]:
-        for curr_color,curr_density in zip(old_color_list,density_list):
-            if curr_color is not None:  new_color_list.append(curr_color)
-            else:   # see http://matplotlib.org/examples/pylab_examples/show_colormaps.html for all colormaps; *_r means reverse
-                if curr_density:        new_color_list.append('gist_earth')
-                else:                   new_color_list.append('black')
+    # set sensible default values for None colors (different for mutant and other datasets)
+    #  - if density is True, use a colorbar (see ~/computers_and_programming/colormaps_all_matplotlib.png; *_r means reverse)
+    #  - otherwise use a single color name
+    for N,(color,density_plot,d_format) in enumerate(zip(list(colors),density_plots,dataset_formats)):
+        if color is None:
+            if density_plot:        
+                if d_format==0:    colors[N]='gist_earth'
+                else:              colors[N]='Oranges'
+            else:
+                if d_format==0:    colors[N]='black'
+                else:              colors[N]='blue'
+    # set sensible default values for None names ('mutants' for mutants, empty for other data, since we can't tell)
+    for N,(name,d_format) in enumerate(zip(list(names),dataset_formats)):
+        if name is None:
+            if d_format==0:    names[N]='mutants'
+            else:              names[N]=''
 
     ### get the list of chromosomes to plot
     # get the chromosome lengths from a file, if filename or None was given
@@ -192,58 +204,61 @@ def mutant_positions_and_data(mutant_datasets=[], density=True, colors=None, nam
     all_chromosomes.sort(key=basic_seq_utilities.chromosome_sort_key)
     # MAYBE-TODO for short chromosomes like scaffolds/chlor/mito/cassette, plot in multiple rows? Maybe change the scale to stretch them a bit, since some will probably be smaller than bin_size?  But then I'd have to normalize them separately or something...
 
-    ### get a list of all datasets provided, converted to the same format, along with their extra args
-    #  (for mutant_datasets, need to use get_mutant_positions_from_dataset to convert each dataset 
-    #   to a chromosome:position_list dict; other_datasets already come in that form)
-    all_datasets_density_color_name = []
-    for dataset,d,c,n,s in zip(mutant_datasets, density, colors, names, strands):
-        all_datasets_density_color_name.append((get_mutant_positions_from_dataset(dataset, strand=s), d, c, n))
-    for dataset,d,c,n in zip(other_datasets, other_density, other_colors, other_names):
-        all_datasets_density_color_name.append((dataset, d, c, n))
-    total_plotline_width = 0.6
-
-    # TODO should probably merge mutant_datasets and other_datasets with all their respective variables!  Less code duplication, and it'll allow arbitrary order of datasets.
-    # MAYBE-TODO also add an option for histogram data to be given directly rather than calculated by numpy.histogram by binning single positions?  That way we could save the mappability data as a histogram and re-use it, rather than load the rather large raw data into memory all the time.  And it'd give flexibility for other applications. 
+    ### get a list of all datasets provided, converted to the appropriate format for plotting, along with their extra args:
+    #    - chrom:position_list format if density_plot is False
+    #    - chrom:bin_density_list format if density_plot is True
+    all_datasets_and_info = []
+    for dataset,d_format,density_plot,color,name,strand in zip(datasets, dataset_formats, density_plots, colors, names, strands):
+        # for mutant datasets, use get_mutant_positions_from_dataset to convert each dataset to a chromosome:position_list dict
+        if d_format==0:
+            dataset = get_mutant_positions_from_dataset(dataset, strand=strand)
+            d_format = 1
+        # now convert each dataset to the appropriate format based on density_plot and format, or raise exception if impossible
+        if (density_plot is False and d_format==1) or (density_plot is True and d_format==2):
+            pass
+        elif density_plot is False and d_format==2:
+            raise ValueError("Dataset %s was provided in density_plot format - cannot plot as lines!"%name)
+        elif density_plot is True and d_format==1:
+            dataset = get_histogram_data_from_positions(dataset, bin_size, chromosome_lengths, all_chromosomes, 
+                                                        special_last_bin=True, merge_last_bin_cutoff=0.5, normalize_last_bin=True)
+        all_datasets_and_info.append((dataset, density_plot, color, name))
 
     ### plot all the datasets
     all_heatmaps = []
-    for N,(curr_dataset,curr_density,curr_color,curr_name) in enumerate(all_datasets_density_color_name):
-        # if we're not doing a density plot, just plot the positions as lines
-        if not curr_density:
-            for chr_N,chromosome in enumerate(all_chromosomes):
-                chromosome_length = chromosome_lengths[chromosome]
-                left_pos, right_pos = _get_plotline_pos(chr_N, total_plotline_width, len(all_datasets_density_color_name), N)
+    for N,(dataset,density_plot,color,name) in enumerate(all_datasets_and_info):
+        # calculate the overall maximum bin-count over all chromosomes, so that they're all normalized to the same value
+        if density_plot:
+            max_count = max([max(dataset[c]) for c in all_chromosomes])
+            # TODO need to implement some kind of absolute scaling for other_datasets!  Since for example for mappability, we want the colorbar max to be 100% mappability, NOT the maximum number found in practice. 
+
+        # plot data for each chromosome
+        for chr_N,chromosome in enumerate(all_chromosomes):
+            chromosome_length = chromosome_lengths[chromosome]
+            left_pos, right_pos = _get_plotline_pos(chr_N, total_plotline_width, len(all_datasets_and_info), N)
+            # if we're not doing a density plot, just plot the positions as lines
+            if not density_plot:
                 mplt.vlines(chr_N, left_pos, chromosome_length)
-                position_list = curr_dataset[chromosome]
+                position_list = dataset[chromosome]
                 # only plot the lines if there are any mutants
                 if position_list:
                     # inverting positions, so that position 0 is at the top, not the bottom - easier to read that way
                     inverted_positions = [chromosome_length - pos for pos in position_list]
                     # only give a label to one chromosome per dataset, so only one shows up in the legend
-                    mplt.hlines(inverted_positions, left_pos, right_pos, color=curr_color, 
-                                label = ('__nolegend__' if chr_N!=0 else curr_name))
-        # if we're doing a density plot, bin the positions into counts, and plot as a heatmap.
-        else:
-            chromosome_bin_count_lists = get_histogram_data_from_positions(curr_dataset, bin_size, chromosome_lengths, 
-                                       all_chromosomes, special_last_bin=True, merge_last_bin_cutoff=0.5, normalize_last_bin=True)
-            # now calculate the overall maximum bin-count over all chromosomes, so that they're all normalized to the same value
-            max_count = max([max(chromosome_bin_count_lists[c]) for c in all_chromosomes])
-            # TODO need to implement some kind of absolute scaling for other_datasets!  Since for example for mappability, we want the colorbar max to be 100% mappability, NOT the maximum number found in practice. 
-
-            for chr_N,chromosome in enumerate(all_chromosomes):
-                chromosome_length = chromosome_lengths[chromosome]
-                left_pos, right_pos = _get_plotline_pos(chr_N, total_plotline_width, len(all_datasets_density_color_name), N)
+                    mplt.hlines(inverted_positions, left_pos, right_pos, color=color, 
+                                label = ('__nolegend__' if chr_N!=0 else name))
+            # if we're doing a density plot, bin the positions into counts, and plot as a heatmap.
+            else:
                 # actually draw the heatmap image - this is tricky! Matplotlib tends to assume there's only a single heatmap.
                 #  - the reshape call is to make the densities from a 1D array into a 2D Nx1 array, for imshow to work properly
                 #  - aspect='auto' is to prevent matplotlib from reshaping the entire plot to fit the image shape
                 #  - norm=None, vmin=0, vmax=1 are to prevent matplotlib from normalizing the values to a 0-1 range!
                 #    (which would be BAD, because then each chromosome would be normalized separately, and have a different scale)
                 #  - DON'T give those a label, so that mplt.legend() will only work on line-plots - colorbars will be separate
-                im = mplt.imshow(chromosome_bin_count_lists[chromosome].reshape(-1,1), 
-                                 extent=(left_pos,right_pos,0,chromosome_length), cmap=mplt.get_cmap(curr_color), 
+                im = mplt.imshow(dataset[chromosome].reshape(-1,1), 
+                                 extent=(left_pos,right_pos,0,chromosome_length), cmap=mplt.get_cmap(color), 
                                  aspect='auto', norm=None, vmin=0, vmax=max_count, **imshow_kwargs)
                 # save the info to plot colorbars later
-                if chr_N==0:    all_heatmaps.append((im, curr_name))
+                if chr_N==0:    all_heatmaps.append((im, name))
 
     ### set plot limits, ticks, labels, etc
     # it's important to do all this BEFORE colorbars, otherwise it'll apply to the colorbar instead of main axes!
@@ -274,7 +289,7 @@ def mutant_positions_and_data(mutant_datasets=[], density=True, colors=None, nam
 
     ### add legends
     # normal legend for the line-plots (only if there's more than one dataset - if there's just one, presumably the title says it)
-    if len(all_datasets_density_color_name)>1:
+    if len(all_datasets_and_info)>1:
         mplt.legend(prop=FontProperties(size='small'))
         # MAYBE-TODO nicer legend formatting?  Get rid of frame, thicker line, line up with colorbars or something?
     # if desired, figure out sensible positioning to put smaller colorbars in two rows rather than have the default big ones
