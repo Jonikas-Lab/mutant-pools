@@ -138,7 +138,7 @@ def genome_mappable_slices(slice_len, genome_seq=None, print_info=True):
 
 def genome_mappable_insertion_sites(flanking_region_length=21, mappable_slice_pos_dict=None, genome_seq=None, 
                                     include_strand=True, end_sequenced='5prime', print_info=True):
-    """ Return chromosome:position_list dict with all uniquely mappable genomic insertion sites, omitting strand, for plotting.
+    """ Return all uniquely mappable genomic insertion sites, as dict with chrom or (chrom,strand) keys and pos_list values.
 
     The mappability is based on the mappability of the flanking region, using flanking_region_length, 
      on either side of the insertion (both sides are counted). 
@@ -148,11 +148,15 @@ def genome_mappable_insertion_sites(flanking_region_length=21, mappable_slice_po
      and one at 120-121 is mappable, depending on the orientation: 
       if the flanking region is 5prime, then a +strand 120-121 and a -strand 99-100 insertion is mappable; 
       if 3prime, the strands are inverted. 
-    Each position_list is sorted.  Each cassette orientation gets a separate entry.
-    If include_strand is True, position_list is a list of (pos_before, strand) tuples; 
-     if False, it's just a list of pos_before values, so if both a +strand and a -strand insertion as position X is mappable,
-      position X will just show up twice on the list; if it's mappable only in one orientation, it'll show up once.  
-       (This option is meant for plotting with mutant_plotting_utilities.mutant_positions_and_data, as an other_datasets element.)
+    Each dict value is a list of the base positions before the mappable insertion site (1-based).
+    Each dict value (position_list) is sorted.  Each cassette orientation gets a separate entry in it.
+    If include_strand is True, all positions are separated by strand, so the keys in the returned dictionary are
+     (chromosome,strand) tuples - so if both a +strand and a -strand insertion at position X of chr1 is mappable, 
+      position X will show up once in the ('chr1','+') list and once in ('chr1','-').
+     If include_strand is False, the positions are merged, and the return dict keys are just chromosome names,
+      so in the same example, position X will just show up twice on the 'chr1' list; 
+      if position X is mappable only in one orientation, it'll show up once in the list.
+     (The False option is meant for plotting, e.g. with mutant_plotting_utilities.mutant_positions_and_data)
 
     If mappable_slice_pos_dict is not None, it'll be assumed to be the output of genome_mappable_slices (with slice_len 
      the same as flanking_region_length), and genome_seq will be ignored; 
@@ -175,12 +179,14 @@ def genome_mappable_insertion_sites(flanking_region_length=21, mappable_slice_po
         if print_info and len(pos_list)>500000: 
             print "  %s (%s mappable slices)...  %s"%(chrom, len(pos_list), time.ctime())
         for pos in pos_list:
-            flanking_region_pos = (chrom, pos, pos+flanking_region_length-1)
             for strand in basic_seq_utilities.SEQ_STRANDS:
-                insertion_pos_object = mutant_analysis_classes.get_insertion_pos_from_flanking_region_pos(
-                                                            flanking_region_pos + (strand,), end_sequenced, reads_are_reverse)
+                flanking_region_pos = (chrom, pos, pos+flanking_region_length-1, strand)
+                # the easiest way of getting the right insertion position is to just use the same function I normally use
+                #  for making actual Insertion_position objects from sequenced flanking region position data
+                insertion_pos_object = mutant_analysis_classes.get_insertion_pos_from_flanking_region_pos(flanking_region_pos, 
+                                                                                              end_sequenced, reads_are_reverse)
                 if include_strand:
-                    mappable_position_data[chrom].append((insertion_pos_object.min_position, insertion_pos_object.strand))
+                    mappable_position_data[chrom,insertion_pos_object.strand].append((insertion_pos_object.min_position))
                 else:
                     mappable_position_data[chrom].append(insertion_pos_object.min_position)
     return general_utilities.sort_lists_inside_dict(mappable_position_data)
@@ -194,6 +200,7 @@ def genome_mappable_insertion_sites_multi(flanking_region_lengths=[20,21], mappa
      mappable_slice_pos_dicts can be None, or a same-length list of values. 
     For each pair of those values, genome_mappable_insertion_sites will be run with the matching arguments. 
     The final output will include the sum of position lists from all runs. 
+
     See genome_mappable_insertion_sites docstring for more info.
     """
     if mappable_slice_pos_dicts == None:    mappable_slice_pos_dicts = [None for _ in flanking_region_lengths]
@@ -357,26 +364,27 @@ class Testing(unittest.TestCase):
         # help functions for testing all the functions in parallel
         def _read_raw_data(raw_data):
             """ get a dict of lists of ints or (int.str) tuples from a raw string. """
-            formatted_data = {}
+            formatted_data = defaultdict(list)
             for chr_data in raw_data.split(', '):
                 chrom, pos_data = chr_data.strip().split(': ')
-                formatted_data[chrom] = []
                 # pos_data can be ints (1 25 301) or ints with strand info (1- 25+ 301+)
                 for x in pos_data.split(' '):
-                    try:                formatted_data[chrom].append(int(x))
-                    except ValueError:  formatted_data[chrom].append( (int(x[:-1]), x[-1]) )
-                    formatted_data[chrom] = sorted(formatted_data[chrom])
-            return formatted_data
+                    if x[-1] in '+-':   formatted_data[chrom,x[-1]].append(int(x[:-1]))
+                    else:               formatted_data[chrom].append(int(x))
+            for val in formatted_data.values():
+                val.sort()
+            return dict(formatted_data)
         def _test_all(slice_len, genome, raw_slice_data, raw_pos_data_5prime):
             """ Test genome_mappable_slices and all variants of genome_mappable_insertion_sites* against expected output. """
             # get the expected output data from the simplified string formats
             slice_data = _read_raw_data(raw_slice_data)
             pos_data_5prime = _read_raw_data(raw_pos_data_5prime)
             # from pos_data_5prime, make pos_data_3prime (just switch all strands) and pos_data_no_strand (remove strand info)
-            pos_data_3prime, pos_data_no_strand = {}, {}
-            for chrom,pos_list in pos_data_5prime.items():
-                pos_data_no_strand[chrom] = [pos for (pos,strand) in pos_list]
-                pos_data_3prime[chrom] = sorted([(pos, '+' if strand=='-' else '-') for (pos,strand) in pos_list])
+            pos_data_3prime, pos_data_no_strand = {}, defaultdict(list)
+            for (chrom,strand),pos_list in pos_data_5prime.items():
+                pos_data_3prime[chrom, '+' if strand=='-' else '-'] = pos_list
+                pos_data_no_strand[chrom] += pos_list
+                pos_data_no_strand[chrom].sort()
             # check genome_mappable_slices output (and save it for later)
             new_slice_data = genome_mappable_slices(slice_len, genome, False)
             assert new_slice_data == slice_data
