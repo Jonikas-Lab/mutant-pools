@@ -11,6 +11,7 @@ import glob
 import os
 from collections import defaultdict
 import math
+import random
 # other packages
 import numpy
 import matplotlib.pyplot as mplt
@@ -39,7 +40,7 @@ def get_chromosome_lengths(genome_file=None):
         for header,seq in basic_seq_utilities.parse_fasta(genome_file):
             chromosome_lengths[header] = len(seq)
         return dict(chromosome_lengths)
-    except IOERror:
+    except IOError:
         file_info = "default " if original_input is None else ""
         raise ValueError("%sgenome fasta file $s not found! Provide filename."%(file_info, genome_file))
     # MAYBE-TODO should this be in basic_seq_utilities or somewhere?  Except for the specific default value...
@@ -351,6 +352,93 @@ def mutant_positions_and_data(datasets=[], dataset_formats=0, density_plots=True
         c.set_ticklabels(zip(*ticks_and_labels)[1])
         mplt.draw()
     # TODO it'd be nice if this actually returned the main axes object... (and maybe a list of colorbar axes too?)  And the numpy.histogram results for all the datasets might be nice too!
+
+
+def get_gap_sizes(dataset):
+    """ Given a dataset, get a list of all the gap sizes between mutant positions, UNSORTED. 
+    
+    Go over each chromosome, take each pair of adjacent mutants (regardless of strand), get gap size.
+
+    Dataset can be either a mutant_analysis_classes.Insertional_mutant_pool_dataset instance, 
+     or a chrom:position_list dict.
+    """
+    # convert dataset to chrom:position_list dict if needed
+    if isinstance(dataset, mutant_analysis_classes.Insertional_mutant_pool_dataset):
+        dataset = get_mutant_positions_from_dataset(dataset, strand=None)
+    all_gap_sizes = []
+    # go over each chromosome and give the gaps between each adjacent pair of mutants
+    for chrom,pos_list in dataset.items():
+        pos_list.sort()
+        for pos1,pos2 in zip(pos_list, pos_list[1:]):
+            all_gap_sizes.append(pos2-pos1)
+    return all_gap_sizes
+
+
+def gap_size_QQ_plot(reference_dataset, simulated_datasets=None, 
+                     N_simulations=None, mappable_positions_20bp=None, mappable_positions_21bp=None, 
+                     logscale=True, different_colors=False, markersize=6, plot_padding=(0.1, 0.1)):
+    """ Quantile-quantile plot of gap sizes between mutants in real vs simulated reference_dataset (repeated N times). 
+
+    Provide either a list of simulated_datasets (chrom:pos_list dicts), OR information to generate them:
+     N_simulations, and the two mappable_positions_* args (output of mutant_simulations.genome_mappable_insertion_sites).
+    
+    """
+    reference_gap_sizes = get_gap_sizes(reference_dataset)
+    # Problem: since the genome's separated into chromosomes, simulated datasets with the same number of mutants
+    #   can have different numbers of gap sizes!  2 mutants on chr1 and chr2 - 2 gaps; 4 and 0 - 3 gaps. 
+    #  This difference can't be more than the number of chromosomes, and likely much less. 
+    #  So just remove 10 random gap sizes just in case.  MAYBE-TODO come up with a better solution?
+    random.shuffle(reference_gap_sizes)
+    reference_gap_sizes = sorted(reference_gap_sizes[:-10])
+    max_gap = max(reference_gap_sizes)
+    # if simulated datasets were provided, just use them; otherwise generate data to do the simulations
+    if simulated_datasets is not None:
+        N_simulations = len(simulated_datasets)
+    else:
+        N_mutants = len(reference_dataset)
+        fraction_20bp = mutant_simulations.get_20bp_fraction(reference_dataset)
+        # TODO mutant_simulations.get_20bp_fraction only works on a full mutant dataset, not on a chrom:pos_list dict - either require reference_dataset to be real, or add an option to give that separately
+    if different_colors:    plot_kwargs = {}
+    else:                   plot_kwargs = {'color': 'blue'}
+    for N in range(N_simulations):
+        # if simulated datasets were provided, use the next one;
+        #  otherwise make a new one for each repetition (and discard it afterward, to avoid taking up memory)
+        if simulated_datasets is not None:
+            simulated_dataset = simulated_datasets[N]
+        else:
+            simulated_dataset = mutant_simulations.simulate_dataset_mappability(N_mutants, fraction_20bp, 
+                                                                                mappable_positions_20bp, mappable_positions_21bp)
+        simulated_gap_sizes = get_gap_sizes(simulated_dataset)
+        # make sure the number of simulated gap sizes matches the number of reference ones
+        #   (see "Problem" comment section up top for why this can happen)
+        if len(simulated_gap_sizes) < len(reference_gap_sizes):
+            raise Exception("Fewer simulated than real gap sizes! Remove more from the real ones?")
+        random.shuffle(simulated_gap_sizes)
+        simulated_gap_sizes = sorted(simulated_gap_sizes[:len(reference_gap_sizes)])
+        max_gap = max(max_gap, max(simulated_gap_sizes))
+        if N==0:    label = "real vs simulated,\nrepeated %s times"%N_simulations
+        else:       label = '__nolegend__'
+        mplt.plot(reference_gap_sizes, simulated_gap_sizes, '.', markeredgecolor='none', label=label, markersize=markersize, **plot_kwargs)
+    mplt.title("Real vs simulated gap sizes between insertions (%s scale),"%('log' if logscale else 'linear')
+               +"\nquantile-quantile plot (comparing sorted gap-size lists)"
+               +"\n(simulation taking mappability into account, repeated %s times)"%N_simulations)
+    mplt.xlabel('Real gap sizes')
+    mplt.ylabel('Simulated gap sizes')
+    if logscale:
+        # use symlog instead of log to deal with gap size 0 - the range between -1 and 1 will be linear
+        mplt.xscale('symlog',linthreshx=1)
+        mplt.yscale('symlog',linthreshy=1)
+        # MAYBE-TODO are those sensible edges?  
+        #  Could come up with some way of taking plot_padding[0] into account, but it's tricky on a symlog plot
+        plot_edges = (-0.5, 10**((1+plot_padding[1])*math.log10(max_gap)) )
+    else:
+        plot_edges = (-plot_padding[0]*max_gap, (1+plot_padding[1])*max_gap)
+    # make the plot square even if the data isn't; plot a diagonal line to show what identical datasets would look like
+    mplt.plot(plot_edges, plot_edges, c='grey', label='if both were identical')
+    mplt.xlim(plot_edges)
+    mplt.ylim(plot_edges)
+    mplt.legend(loc=2)
+    # TODO those plots should be square!  How do I square an axes instance?
 
 
 def chromosome_density_scatterplot(mutant_dataset, include_scaffolds=True, include_cassette=True, include_other=True, 
