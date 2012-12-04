@@ -340,7 +340,12 @@ def find_hot_cold_spots(dataset, window_size, mappable_positions_20bp, mappable_
         window_raw_pvalues[chrom] = [scipy.stats.binom_test(x=N_mutants_in_window, n=total_N_mutants, p=window_probability) 
                      for (N_mutants_in_window, window_probability) in zip(window_mutant_count_list, window_probabilities)]
         # adjust the p-values for FDR, using the total N_samples (rather than just the number of samples in this chromosome)
-        window_adjusted_pvalues[chrom] = list(R_stats.p_adjust(FloatVector(window_raw_pvalues[chrom]), method='BH', n=N_samples))
+        #  (if there are no windows on a given chromosome (it was too short for the size+offset), 
+        #   just set the lists to empty and skip rather than running statistics on empty lists, which can give warnings)
+        if len(window_mutant_count_list):
+            window_adjusted_pvalues[chrom] = list(R_stats.p_adjust(FloatVector(window_raw_pvalues[chrom]), method='BH', n=N_samples))
+        else:
+            window_adjusted_pvalues[chrom] = []
     return window_adjusted_pvalues, window_raw_pvalues, window_which_side_values, window_mutant_count_lists
     # TODO unit-test this? How?
 
