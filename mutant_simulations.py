@@ -15,10 +15,15 @@ from collections import defaultdict
 # other packages
 import numpy
 import scipy
+import scipy.stats
+from rpy2.robjects.packages import importr
+from rpy2.robjects.vectors import FloatVector
 # my modules
-import mutant_analysis_classes
 import general_utilities
 import basic_seq_utilities
+import mutant_analysis_classes
+from mutant_plotting_utilities import get_histogram_data_from_positions, get_mutant_positions_from_dataset, get_chromosome_lengths
+# MAYBE-TODO this is now a circular import with mutant_plotting_utilities - is that a problem?  Move things needed by both to a new file, or to basic_seq_utilities or mutant_utilities or something?
 
 DEFAULT_NUCLEAR_GENOME_FILE = '~/experiments/reference_data/genomes_and_indexes/Chlre4-nm.fa'
 DEFAULT_ALL_GENOME_FILE = '~/experiments/reference_data/genomes_and_indexes/Chlre4-nm_chl-mit.fa'
@@ -27,28 +32,28 @@ DEFAULT_GENOME_CASSETTE_FILE = '~/experiments/reference_data/genomes_and_indexes
 ######################################## Calculating mappability over genome #######################################
 
 ### MEMORY USAGE ISSUES
-# Keeping the full set of mappable/unmappable genome positions, in whatever form, takes a lot of memory!
-# Use sys.getsizeof to get the sizes of basic objects:  
-#  - an int or bool takes 24 bytes; 
-#  - a 21-string takes 58, a 1-string takes 38
-#  - sets and dicts take 1-2x as much memory as the objects themselves.
-#  - lists actually take a lot less!  About 9 bits per int or char.
-# The genome's about 113M bases, and we already know that most of it's mappable, i.e. unique sequences.  
-#  - that many ints in a set (say 1.5x the cost) will be 4G!  
-#  - storing that many 21-strings in a set (say 1.5x the cost) will be 9G!  
-#  - plus even more for the seq:pos dict, depending on details of pos format...
+    # Keeping the full set of mappable/unmappable genome positions, in whatever form, takes a lot of memory!
+    # Use sys.getsizeof to get the sizes of basic objects:  
+    #  - an int or bool takes 24 bytes; 
+    #  - a 21-string takes 58, a 1-string takes 38
+    #  - sets and dicts take 1-2x as much memory as the objects themselves.
+    #  - lists actually take a lot less!  About 9 bits per int or char.
+    # The genome's about 113M bases, and we already know that most of it's mappable, i.e. unique sequences.  
+    #  - that many ints in a set (say 1.5x the cost) will be 4G!  
+    #  - storing that many 21-strings in a set (say 1.5x the cost) will be 9G!  
+    #  - plus even more for the seq:pos dict, depending on details of pos format...
 
-### MAYBE-TODO Improvement options for memory issues:
-# For the second pass and returned value: Instead of a list of genome positions, keep a genome-sized list filled with 0s and 1s?  With 0/1 as normal ints that would still be about 1G, but I'm sure switching to a more efficient representation (bitstring.BitArray?) would make it a LOT smaller. 
-# For the first pass - NOT SURE!  How can I more efficiently store sets of strings?  MAYBE-TODO think about it more - it's currently the part that takes the most memory. 
+    ### MAYBE-TODO Improvement options for memory issues:
+    # For the second pass and returned value: Instead of a list of genome positions, keep a genome-sized list filled with 0s and 1s?  With 0/1 as normal ints that would still be about 1G, but I'm sure switching to a more efficient representation (bitstring.BitArray?) would make it a LOT smaller. 
+    # For the first pass - NOT SURE!  How can I more efficiently store sets of strings?  MAYBE-TODO think about it more - it's currently the part that takes the most memory. 
 
-## Issues with python not releasing memory, or something
-# 
-# Technically, on the whole genome, genome_mappable_slices should take 5-8GB, but RELEASE it once done (see "del" calls) - the output is only <1G.  But python seems to keep the memory, even if the output is about the size I expected!  So if I do two runs, say 20bp and 21bp flanks, I end up exceeding my 16G and going into swap... 
-# genome_mappable_insertion_sites* doesn't take as much memory to run, though still some; the output is actually 2x bigger than genome_mappable_slices for genome_mappable_insertion_sites, since there are two mappable insertion positions per slice, and 2Nx bigger for genome_mappable_insertion_sites_multi (4x for two slice lengths, etc - comes out to about 3G). 
-#
-# So it's probably a good idea to pickle the output (after running genome_mappable_slices or genome_mappable_insertion_sites*), close python to release the memory (even though it'll take a LONG TIME, especially if there was swap space used), and open a new instance to unpickle the data and work on it.  
-# BUT if I pickle the output of any of those, and unpickle it in a new interactive python shell, again the output itself doesn't end up too huge (see sizes above), BUT the unpickling seems to take more memory and not release it again! Ugh. So maybe I really should convert it to bitarrays or something. 
+    ## Issues with python not releasing memory, or something
+    # 
+    # Technically, on the whole genome, genome_mappable_slices should take 5-8GB, but RELEASE it once done (see "del" calls) - the output is only <1G.  But python seems to keep the memory, even if the output is about the size I expected!  So if I do two runs, say 20bp and 21bp flanks, I end up exceeding my 16G and going into swap... 
+    # genome_mappable_insertion_sites* doesn't take as much memory to run, though still some; the output is actually 2x bigger than genome_mappable_slices for genome_mappable_insertion_sites, since there are two mappable insertion positions per slice, and 2Nx bigger for genome_mappable_insertion_sites_multi (4x for two slice lengths, etc - comes out to about 3G). 
+    #
+    # So it's probably a good idea to pickle the output (after running genome_mappable_slices or genome_mappable_insertion_sites*), close python to release the memory (even though it'll take a LONG TIME, especially if there was swap space used), and open a new instance to unpickle the data and work on it.  
+    # BUT if I pickle the output of any of those, and unpickle it in a new interactive python shell, again the output itself doesn't end up too huge (see sizes above), BUT the unpickling seems to take more memory and not release it again! Ugh. So maybe I really should convert it to bitarrays or something. 
 
 
 def genome_mappable_slices(slice_len, genome_seq=None, print_info=True):
@@ -216,6 +221,174 @@ def genome_mappable_insertion_sites_multi(flanking_region_lengths=[20,21], mappa
     return general_utilities.sort_lists_inside_dict(full_mappable_position_data)
 
 
+############################# Using mappability to finding hotspots/coldspots in real data #############################
+
+### STATISTICAL NOTES (originally from ~/experiments/mutant_pool_screens/1211_positions_Ru-screen1-for-paper/notes.txt)
+    # Basic idea - trying to figure out the specific locations of statistically significant hotspots and coldspots:
+    # Go over the genome in a sliding window of some size, see how many mutants are there and whether that's statistically significantly different than expected from a random distribution of the same density, INCUDING MAPPABILITY DATA (easiest to do by just comparing to a large number of random datasets, probably).  Figure out if we have any clear hot or cold spots - then we can see if they have anything in common.
+    #
+    # What statistical test to use for each window?  What we're comparing is the mutant count in the window, X, against one of two things:
+    #  A) the mappability % of that window
+    #  B) the mutant count in that window for each of the 1000 simulated datasets
+    # Which of these things would be the better choice?  Probably A, really, since B is just a random simulation that's entirely based on A.  In either case, REMEMBER TO DO FALSE DISCOVERY RATE CORRECTION after getting the p-values!
+    #
+    # A) How would I go about getting the p-value for A?  Basically I want to know the probability of getting X mutants in that window randomly, when inserting N mutants in the genome.  That should be mathematically pretty straightforward, right?  All I need is the total mappable size of the genome, and the total mappable size of that window, and I should be able to calculate the actual distribution... That's the binomial distribution - " the discrete probability distribution of the number of successes in a sequence of n independent yes/no experiments, each of which yields success with probability p."  
+    # Trying the binomial distribution: the corresponding statistical significance test is the binomial test (https://en.wikipedia.org/wiki/Binomial_test), scipy.stats.binom_test in python.  Say we want the p-value for getting 25 mutants in a 20kb window, out of a total of 12061 mutants, with the probability around 20kb divided by the genome size (really it should be the mappable lengths of that window and the genome, not the total lengths, but let's go with the approximation for now).  The genome size is 113MB, so:
+    #     >>> import scipy.stats
+    #     >>> scipy.stats.binom_test(25,12061,20000/113000000)
+    #     1.3921234115131231e-18
+    # (That's pretty significant!  But we'll see how it looks with FDR correction, of course.)
+    # How long does this take?  For 50k it takes <1min, and the whole genome in 20bk windows, 113Mb/20kb, is about 5k - not bad.
+    #     >>> time.ctime(); _ = [ scipy.stats.binom_test(random.randrange(30),12061,20000/113000000) for x in range(50000)]; time.ctime()
+    #     'Sun Dec  2 19:03:25 2012'
+    #     'Sun Dec  2 19:04:12 2012'
+    # With a reasonably high N (around 1000), the binomial distribution can be modeled by the Poisson distribution (https://en.wikipedia.org/wiki/Poisson_distribution#Derivation_of_Poisson_distribution_.E2.80.94_The_law_of_rare_events).  My N is the number of mutants in the dataset, which is 12k, so I could do that to speed things up - MAYBE-TODO. 
+    #
+    # B) Alternatively, for option B - I'm trying to test whether the mean of two distributions (real and simulated mutant counts over a window) are the same or different...  So T-test (scipy.stats.ttest_ind, I think), or Welch's t-test (doesn't assume equal variances - apparently present in a newer scipy version), or Mann-Whitney U test (doesn't assume the data is normally distributed).  I'd say it's pretty likely to be randomly distributed, idk about the variances...  Well, I'm only giving a single number for the real dataset, so there's no variance in that - and if anything, the variance of the real dataset may be smaller than of the simulated ones, not larger, so I think we're good with the Student's T-test.
+    #
+    # How to do FDR correction?  According to the Handbook of Biological Statistics (https://udel.edu/~mcdonald/statmultcomp.html), Benjamini-Hochberg correction is probably what I want.  They describe a procedure, but it's slightly odd, because it doesn't give a p-value (q-value?) for each window, just a yes/no significance result based on the p-value and the desired false discovery rate. 
+    # I didn't find any obvious way of doing this directly in python, but there's an R function "p.adjust" (http://stat.ethz.ch/R-manual/R-devel/library/stats/html/p.adjust.html), which I can use in python with rpy2 (http://stackoverflow.com/questions/7450957/how-to-implement-rs-p-adjust-in-python).  Trying that, with just a few test values:
+    #  * get the p_values for a few mutant counts per bin, between 0 and 15:
+    #     >>> p_values = [scipy.stats.binom_test(x,12061,20000/113000000) for x in (0,0,1,2,5,10,10,25,25)]
+    #     >>> p_values
+    #     [0.28620628492789102, 0.28620628492789102, 0.73047985928763548, 1.0, 0.065605526425554839, 7.8933016187778668e-05, 7.8933016187778668e-05, 1.3921234115131231e-18, 1.3921234115131231e-18]
+    #  * try the FDR adjustment with default options - the p-values increase a bit:
+    #     >>> from rpy2.robjects.packages import importr
+    #     >>> R_stats = importr('stats')
+    #     >>> from rpy2.robjects.vectors import FloatVector
+    #     >>> p_adjusted = R_stats.p_adjust(FloatVector(p_values), method = 'BH')
+    #     >>> list(p_adjusted)
+    #     [0.36797950919300276, 0.36797950919300276, 0.8217898416985899, 1.0, 0.1180899475659987, 0.000177599286422502, 0.000177599286422502, 6.264555351809054e-18, 6.264555351809054e-18]
+    #  * same, but using the correct N - I'm reporting 9 random p-values here, but we actually did 50000 tests (50000 windows), not just 9!  The values went down further - good.
+    #     >>> p_adjusted2 = R_stats.p_adjust(FloatVector(p_values), method = 'BH', n=50000)
+    #     >>> list(p_adjusted2)
+    #     [1.0, 1.0, 1.0, 1.0, 1.0, 0.9866627023472333, 0.9866627023472333, 3.4803085287828076e-14, 3.4803085287828076e-14]
+
+def find_hot_cold_spots(dataset, window_size, mappable_positions_20bp, mappable_positions_21bp, window_offset=0, N_samples=None, 
+                        chromosome_lengths=None):
+    """ Find statistically significant hotspots and coldspots in dataset mutant positions, based on genome mappability. 
+
+    Divides the genome into window_size-sized windows, and for each of them compares 
+     the number of mutants in that window in dataset to the number expected using the BINOMIAL DISTRIBUTION, 
+      given the total number of mutants in dataset and the genome mappability information
+      (the probability of a mutant landing in the window is the number of mappable positions in the window 
+       divided by the number of mappable positions in the entire genome - these numbers will be different for 20bp 
+       and 21bp mappability, so calculate for both, and get a weighted average based on how many mutants in dataset
+       have only 20bp flanking region sequences.)
+      FALSE DISCOVERY RATE CORRECTION using the Benjamini-Hochberg method is used on all p-values, 
+       with the total number of windows tested used as N_samples, unless another N_samples is provided
+       (which you may or may not want to do if doing multiple find_hot_cold_spots runs 
+        with different window sizes/offsets over the same dataset: you'll be under-correcting if you don't, 
+        but since the results for overlapping windows are positively correlated, you'll be over-correcting if you do!)
+
+    Window_offset defines at which position of each chromosome to start: if a chromosome is 500 long and window_size is 200, 
+     - with window_offset 0, the windows checked will be 1-200 and 201-400;
+     - with window_offset 100, the windows checked will be 101-300 and 301-500.
+    Chromosome_lengths can be either a chromosome:length dict, or the name of a genome fasta file to extract them from
+     (if None, the default chlamy file will be used) - need the lengths because the dataset positions and mappability data
+     don't give the end position of each chromosome.
+
+    Return a 3-tuple of FDR-adjusted p-values, raw p-values, and sides (1 if we had more mutants than expected, -1 if fewer), 
+      with each of these items being a chromosome:list_of_values_per_window dictionary 
+     the caller/recipient must take care of keeping track of the window size and offset in order for this data to be meaningful.
+
+    Dataset should be a mutant_analysis_classes.Insertional_mutant_pool_dataset instance. 
+
+    The two mappable_positions_* arguments should be (chrom,strand):position_list dictionaries 
+     giving all the mappable positions, as generated by genome_mappable_insertion_sites with include_strand==True.
+    """
+    if chromosome_lengths is None or isinstance(chromosome_lengths, str):
+        chromosome_lengths = get_chromosome_lengths(chromosome_lengths)
+    fraction_20bp = get_20bp_fraction(dataset)
+    total_N_mutants = len(dataset)
+    R_stats = importr('stats')
+    mappable_position_data = {20: mappable_positions_20bp, 21: mappable_positions_21bp}
+    # if mappable position data is given in with-strand format, i.e. (chrom,strand):pos_list dict, 
+    #  convert to chrom:pos_list dict by merging the two strands (no need to sort)
+    for mappable_position_d in mappable_position_data.values():
+        if not isinstance(mappable_position_d.keys()[0], str):
+            chromosomes = set(chrom for (chrom,strand) in mappable_position_d.keys())
+            for chrom in chromosomes:
+                mappable_position_d[chrom] = mappable_position_d[(chrom,'+')] + mappable_position_d[(chrom,'-')]
+                mappable_position_d.pop((chrom,'+'))
+                mappable_position_d.pop((chrom,'-'))
+    # get total mappable genome lengths (for 20 and 21bp cases separately)
+    genome_mappable_lengths = {flank_len: sum(len(pos_list) for pos_list in mappable_positions.values())
+                               for (flank_len,mappable_positions) in mappable_position_data.items()}
+    # get mappable lengths per window, for 20 and 21bp cases separately, with the right window size and offset; 
+    #  don't include special_last_bin to avoid complications (so the last part of each chromosome that doesn't 
+    #   fit the window size will be ignored - same as the first part before offset)
+    #   (chromosomes smaller than window_size+offset will be ignored entirely!)
+    window_kwargs = {'bin_size':window_size, 'chromosome_lengths':chromosome_lengths, 
+                     'first_bin_offset': window_offset, 'special_last_bin':False}
+    window_mappable_length_lists = {flank_len: get_histogram_data_from_positions(mappable_positions, **window_kwargs) 
+                                    for (flank_len,mappable_positions) in mappable_position_data.items()}
+    # similarly, get mutant counts per window
+    window_mutant_count_lists = get_histogram_data_from_positions(get_mutant_positions_from_dataset(dataset), **window_kwargs)
+    total_N_windows = sum(len(len_list) for len_list in window_mutant_count_lists.values())
+    if N_samples is None:   N_samples = total_N_windows
+    window_raw_pvalues = {}
+    window_adjusted_pvalues = {}
+    window_which_side_values = {}
+    # average mutants per window should only count the mutants covered by any of the windows 
+    #  (exclude ones skipped due to non-zero offset at chromosome start or a non-full window at chromosome end)
+    average_mutants_per_window = sum(sum(counts) for counts in window_mutant_count_lists.values()) / total_N_windows
+    print "%s window (offset %s) - average %.2g mutants per window "%(basic_seq_utilities.format_base_distance(window_size, False), 
+                                          basic_seq_utilities.format_base_distance(window_offset, False), average_mutants_per_window)
+    for chrom, window_mutant_count_list in window_mutant_count_lists.items():
+        # get the probability of a mutant landing in the window, 
+        #  given the mappable lengths of the window and the total genome for 20 and 21bp cases, 
+        #  and the fraction of mutants that is 20bp-only.
+        # note that all the values in the histogram dicts are numpy arrays, not lists, so they can be operated on directly
+        window_probabilities_20 = window_mappable_length_lists[20][chrom] / genome_mappable_lengths[20]
+        window_probabilities_21 = window_mappable_length_lists[21][chrom] / genome_mappable_lengths[21]
+        window_probabilities = window_probabilities_20 * fraction_20bp + window_probabilities_21 * (1-fraction_20bp)
+        window_which_side_values[chrom] = [-1 if m < average_mutants_per_window else 1 for m in window_mutant_count_list]
+        # calculate p-value for each window, using the binomial distribution 
+        #  based on the window probability and window mutant number
+        window_raw_pvalues[chrom] = [scipy.stats.binom_test(x=N_mutants_in_window, n=total_N_mutants, p=window_probability) 
+                     for (N_mutants_in_window, window_probability) in zip(window_mutant_count_list, window_probabilities)]
+        # adjust the p-values for FDR, using the total N_samples (rather than just the number of samples in this chromosome)
+        window_adjusted_pvalues[chrom] = list(R_stats.p_adjust(FloatVector(window_raw_pvalues[chrom]), method='BH', n=N_samples))
+    return window_adjusted_pvalues, window_raw_pvalues, window_which_side_values
+    # TODO unit-test this? How?
+
+
+def get_hot_cold_spot_list(pvalue_data_window_size_offset_dict, side_data_window_size_offset_dict, 
+                           pval_cutoff=0.05, print_info=True):
+    """ Transform p-value and side (low/high) info into a list of (chrom, start, end, pvalue, kind) tuples with pvalue<=cutoff.
+
+    Both arguments should be window_size:(window_offset:(chromosome:list_of_window_values))) triple nested dictionaries.
+      - the p-values should be 0-1, and you should probably get FDR correction done on them first; 
+      - the sides should be -1 for coldspots and 1 for hotspots. 
+    Pval_cutoff should be a number between 0 and 1. 
+
+    In the output, kind is 'hotspot' or 'coldspot'. 
+    Sort the output data by chromosome/position;  If print_info, print the output data.
+    """
+    hc_data_list = []
+    for window_size, pvalue_data_window_offset_dict in pvalue_data_window_size_offset_dict.items():
+        for window_offset, pvalue_data in pvalue_data_window_offset_dict.items():
+            side_data = side_data_window_size_offset_dict[window_size][window_offset]
+            for chrom, pvalues in pvalue_data.items():
+                sides = side_data[chrom]
+                color_values = []
+                for N,(pvalue,side) in enumerate(zip(pvalues,sides)):
+                    if pvalue <= pval_cutoff:
+                        kind = 'hotspot' if side>0 else 'coldspot'
+                        start_pos = N*window_size + window_offset
+                        end_pos = (N+1)*window_size + window_offset
+                        hc_data_list.append((chrom, start_pos, end_pos, pvalue, kind))
+    hc_data_list.sort(key=lambda (c,s,e,p,k): (basic_seq_utilities.chromosome_sort_key(c), s,e,p,k))
+    if print_info:
+        format_bp = lambda x: basic_seq_utilities.format_base_distance(x, False)    # the False is to not approximate
+        for (chrom, start_pos, end_pos, pvalue, kind) in hc_data_list:
+            print "%s %s-%s (window size %s) - %s, %.3g adjusted p-value"%(chrom, format_bp(start_pos), format_bp(end_pos), 
+                                                                           format_bp(end_pos-start_pos), kind, pvalue)
+    return hc_data_list
+    # TODO should unit-test this!
+
+
 ################################# Simulating random size-N dataset, various options #######################################
 
 def get_20bp_fraction(dataset):
@@ -245,7 +418,7 @@ def weighted_random_choice(value_weight_list):
 
 
 def simulate_dataset_mappability(N_mutants, fraction_20bp, mappable_positions_20bp, mappable_positions_21bp, 
-                     include_strand=False, fraction_plus_strand=0.5):
+                                 all_chromosomes=None, include_strand=False, fraction_plus_strand=0.5):
     """ Return position info from simulating inserting N mutants into the genome randomly, taking mappability into account. 
     
     Return a (chrom,strand):position_list dictionary if include_strand, or else just a chrom:position_list one...
@@ -256,17 +429,24 @@ def simulate_dataset_mappability(N_mutants, fraction_20bp, mappable_positions_20
     Fraction_plus_strand is the fraction of mutants on the +strand (vs the -strand); 
      note that this is STILL RELEVANT even if include_strand is False, because mappability differs slightly between strands!
 
-    The two mappable_positions_20bp arguments should be (chrom,strand):position_list dictionaries given all the mappable positions,
+    All_chromosomes should give a list of chromosomes to include (e.g. if trying to simulate a dataset without chloroplast/mito
+     genomes, don't put those on a list!); if None, all chromosomes in mappable_positions_20bp will be used.
+
+    The two mappable_positions_* arguments should be (chrom,strand):position_list dictionaries given all the mappable positions,
      as generated by genome_mappable_insertion_sites with include_strand==True.
     """
     simulated_positions = defaultdict(list)
     mappable_position_data = {20: mappable_positions_20bp, 21: mappable_positions_21bp}
+    if all_chromosomes is None:
+        all_chromosomes = set(chrom for chrom,s in mappable_positions_20bp) | set(chrom for chrom,s in mappable_positions_21bp)
     # chromosome mappable lengths - a list of (chrom,mappable_lengths) tuples for each (flank_length,chrom,strand) combination, 
-    #  to use as a list of values and weights when randomly choosing a chromosome
+    #  to use as a list of values and weights when randomly choosing a chromosome - only include ones in all_chromosomes!
     chrom_mappable_len = defaultdict(list)
     for flank_len,mappable_positions in mappable_position_data.iteritems():
         for (chrom,strand),pos_list in mappable_positions.iteritems():
-            chrom_mappable_len[flank_len,strand].append((chrom, len(pos_list)))
+            if chrom in all_chromosomes:
+                chrom_mappable_len[flank_len,strand].append((chrom, len(pos_list)))
+    print chrom_mappable_len[20,'-']
     for _ in range(N_mutants):
         # first choose a length (20 or 21bp) based on Fraction_20bp, and a strand based on fraction_plus_strand.
         #   random.random() gives a value x in the interval [0, 1) (including 0, excluding 1).

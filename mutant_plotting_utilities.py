@@ -68,22 +68,22 @@ def get_mutant_positions_from_dataset(dataset, strand=None):
 
 
 def get_histogram_data_from_positions(position_dict, bin_size=DEFAULT_BIN_SIZE, chromosome_lengths=None, chromosomes=None, 
-                                      special_last_bin=True, merge_last_bin_cutoff=0.5, normalize_last_bin=True):
-    """ Given a chromosome:position_list dict, return a chromosome:count_per_bin_list dict. 
+                                      first_bin_offset=0, special_last_bin=True, merge_last_bin_cutoff=0.5, normalize_last_bin=True):
+    """ Given a chromosome:position_list dict, return a chromosome:counts_per_bin dict, with counts_per_bin a numpy array. 
     
     The positions in position_list will be binned into bin_size-sized bins over the length of each chromosome, 
-     giving count_per_bin_list, with length matching the number of bins in the chromosome. 
+     giving counts_per_bin numpy array, with length matching the number of bins in the chromosome. 
     Chromosome_lengths can be either a chromosome:length dict, or the name of a genome fasta file to extract them from
      (if None, the default file will be used) - use the lengths to decide how many bins there will be in the chromosome.
 
-    If a chromosome is shorter than a bin, make it a single bin anyway.
-    If add_last_bin is true, when the chromosome length isn't evenly divided into bin_size-sized bins, 
+    Skip and ignore the first first_bin_offset of each chromosome.
+    If special_last_bin is true, when the chromosome length isn't evenly divided into bin_size-sized bins, 
      if the leftover is less than merge_last_bin_cutoff, merge it into the last bin, otherwise add it as an extra bin 
-    If normalize_last_bin is True, normalize the number of positions in the special last bin by its size, 
-     so that its value reflects the position density rather than raw count, to match all the other bins for heatmap display.
+      (this also ensures that if a chromosome is shorter than a bin, it'll be treated as single bin anyway).
+     If normalize_last_bin is also True, normalize the number of positions in the special last bin by its size, 
+      so that its value reflects the position density rather than raw count, to match all the other bins for heatmap display.
 
-    If chromosomes is not None, only include those chromosomes; 
-     otherwise include all chromosomes in position_dict only.
+    If chromosomes is not None, only include those chromosomes; otherwise include all chromosomes in position_dict only.
     """
     if chromosome_lengths is None or isinstance(chromosome_lengths, str):
         chromosome_lengths = get_chromosome_lengths(chromosome_lengths)
@@ -97,18 +97,21 @@ def get_histogram_data_from_positions(position_dict, bin_size=DEFAULT_BIN_SIZE, 
         chromosome_length = chromosome_lengths[chromosome]
         position_list = position_dict[chromosome]
         # divide the chromosome into bin_size-sized ranges, using an x.5 cutoff for clarity
-        bin_edges = [x-.5 for x in range(1, chromosome_length+1, bin_size)]
-        # make sure there's at least one bin, even if the total length is smaller than a bin!  (for scaffolds/etc)
-        last_bin_edge = chromosome_length-.5
-        if len(bin_edges)==1:                               bin_edges.append(last_bin_edge)
-        # there'll be a smaller-than-bin_size chunk left over at the end (if length doesn't divide evenly into bin_size), 
+        bin_edges = [x-.5 for x in range(first_bin_offset+1, chromosome_length+1, bin_size)]
+        # Make sure there's at least one bin, even if the total length is smaller than a bin!  (for scaffolds/etc)
+        # There'll be a smaller-than-bin_size chunk left over at the end (if length doesn't divide evenly into bin_size), 
         #  so add an extra bin for that if it's at least half a bin_size, otherwise make the last bin bigger to compensate.
         if special_last_bin:
+            last_bin_edge = chromosome_length-.5
+            if len(bin_edges)==1:                               bin_edges.append(last_bin_edge)
             if (last_bin_edge - bin_edges[-1])/bin_size < merge_last_bin_cutoff:  bin_edges[-1] = last_bin_edge
             else:                                                                 bin_edges.append(last_bin_edge)
-        bin_count_list, _  = numpy.histogram(position_list, bin_edges)
+        # use numpy.histogram to get the actual bin counts, IF we have any bins - otherwise the counts are an empty array
+        #  (using numpy.array instead of list just to make sure the types match)
+        if len(bin_edges)>1:    bin_count_list, _  = numpy.histogram(position_list, bin_edges)
+        else:                   bin_count_list     = numpy.array([])
         # for the last bin in each chromosome, the value should be scaled by the smaller/bigger bin-size...
-        if normalize_last_bin:
+        if special_last_bin and normalize_last_bin and len(bin_count_list):
             bin_count_list[-1] = bin_count_list[-1] / ((bin_edges[-1] - bin_edges[-2])/bin_size)
         chromosome_bin_count_lists[chromosome] = bin_count_list
     return chromosome_bin_count_lists
@@ -182,7 +185,7 @@ def mutant_positions_and_data(datasets=[], dataset_formats=0, density_plots=True
     if isinstance(dataset_formats, int):                                   dataset_formats = [dataset_formats for _ in datasets]
     if density_plots in (True,False):                                      density_plots = [density_plots for _ in datasets]
     if colors is None or isinstance(colors,str):                           colors = [colors for _ in datasets]
-    if isinstance(names,str):                                              names = [names for _ in datasets]
+    if names is None or isinstance(names,str):                             names = [names for _ in datasets]
     if maxes_per_base is None or isinstance(maxes_per_base,(int,float)):   maxes_per_base = [maxes_per_base for _ in datasets]
     if isinstance(strands,str) or strands is None:                         strands = [strands for _ in datasets]
     imshow_kwargs = {} if interpolate else {'interpolation': 'none'}
@@ -268,7 +271,7 @@ def mutant_positions_and_data(datasets=[], dataset_formats=0, density_plots=True
                 #  - norm=None, vmin=0, vmax=1 are to prevent matplotlib from normalizing the values to a 0-1 range!
                 #    (which would be BAD, because then each chromosome would be normalized separately, and have a different scale)
                 #  - DON'T give those a label, so that mplt.legend() will only work on line-plots - colorbars will be separate
-                im = mplt.imshow(dataset[chromosome].reshape(-1,1), 
+                im = mplt.imshow(numpy.array(dataset[chromosome]).reshape(-1,1), 
                                  extent=(left_pos,right_pos,0,chromosome_length), cmap=mplt.get_cmap(color), 
                                  aspect='auto', norm=None, vmin=0, vmax=max_count, **imshow_kwargs)
                 # save info image to add colorbars: image, name, and if_normalized (True if max_per_base was given) 
@@ -352,6 +355,53 @@ def mutant_positions_and_data(datasets=[], dataset_formats=0, density_plots=True
         c.set_ticklabels(zip(*ticks_and_labels)[1])
         mplt.draw()
     # TODO it'd be nice if this actually returned the main axes object... (and maybe a list of colorbar axes too?)  And the numpy.histogram results for all the datasets might be nice too!
+
+
+def get_hot_cold_spot_colors(pvalue_data, side_data, window_size, window_offset, pval_cutoffs=[0.05, 0.01, 0.005, 0.001], 
+                             min_zero=False, print_info=True):
+    """ Transform p-value and side (low/high) chrom:value_list dicts into plottable chrom:value lists.
+
+    Both arguments should be chromosome:list_of_window_values, with any number of windows, with given window size and offset. 
+      - the p-values should be 0-1, and you should probably get FDR correction done on them first; 
+      - the sides should be -1 for coldspots and 1 for hotspots. 
+    These can be generated by mutant_simulations.find_hot_cold_spots (return values 1 and 3)
+
+    Pval_cutoffs should be a list of 0-1 values of any length, sorted reverse.
+    The output will be a chrom:heatmap_value_list, with the value 0 for p-values over pval_cutoffs[1], 
+     1 or -1 for p-values under pval_cutoffs[1] but over [2], and so on, with the maximum being len(pval_cutoffs), 
+     and the minimum the negative of that.  Negative values indicate coldspots, and positive hotspots. 
+    If min_zero is True, len(pval_cutoffs) will be added to each value, to make the lowest possible value 0
+     (can be easier for plotting).
+    Suitable for plotting with mutant_positions_and_data, format 2, using a blue-white-red colormap or similar, 
+     IF the offset and the remainder at the end of the chromosome are relatively small!  Otherwise may end up messy.
+
+    If print_info, print a line giving the number of somewhat significant results, just to give a general idea.
+    """
+    # TODO modify mutant_positions_and_data to deal with negative values, and to customize colorbar ticklabels for p-values! Add that to docstring both there and here when done
+    # TODO implement refactoring the whole list to deal with offsets so it gets plotted correctly, if we see anything worth plotting (right now the positions for different offsets are the same, and the missing chunks at chromosome starts/ends are ignored)
+    format_bp = lambda x: basic_seq_utilities.format_base_distance(x, False)    # the False is to not approximate
+    color_value_dict = {}
+    N_significant = 0
+    for chrom, pvalues in pvalue_data.items():
+        sides = side_data[chrom]
+        color_values = []
+        for N,(pvalue,side) in enumerate(zip(pvalues,sides)):
+            curr_val = 0
+            for cutoff_N,cutoff in enumerate(pval_cutoffs):
+                if pvalue<cutoff:
+                    curr_val = cutoff_N+1
+            if curr_val>0 and print_info:
+                N_significant += 1
+            curr_val *= side
+            if min_zero:    curr_val += len(pval_cutoffs)
+            color_values.append(curr_val)
+        color_value_dict[chrom] = color_values
+    if print_info:
+        print "%s results below adjusted p-value %s for data with %s window (offset %s)"%(N_significant, pval_cutoffs[0], 
+                                                                               format_bp(window_size), format_bp(window_offset))
+    return color_value_dict
+    # TODO should unit-test this!
+
 
 
 def get_gap_sizes(dataset):
