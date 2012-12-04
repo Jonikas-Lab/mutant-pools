@@ -29,6 +29,7 @@ import plotting_utilities
 STRAND_VAR_VALUES = ('+', '-', 'both', None)
 DEFAULT_BIN_SIZE = 20000
 
+######### help functions
 
 def get_chromosome_lengths(genome_file=None):
     """ Return chromosome:length dictionary based on reading a genome fasta file. """
@@ -67,10 +68,15 @@ def get_mutant_positions_from_dataset(dataset, strand=None):
     return chromosome_position_dict
 
 
+######### Plotting mutant/other positions over chromosomes as heatmaps/lines (and help functions for that)
+
 def get_histogram_data_from_positions(position_dict, bin_size=DEFAULT_BIN_SIZE, chromosome_lengths=None, chromosomes=None, 
                                       first_bin_offset=0, special_last_bin=True, merge_last_bin_cutoff=0.5, normalize_last_bin=True):
     """ Given a chromosome:position_list dict, return a chromosome:counts_per_bin dict, with counts_per_bin a numpy array. 
     
+    The input can actually be either a chromosome:position_list or a (chromosome,strand):position_list dict - 
+     the results will be the same for either, the different-strand lists will just be added together. 
+
     The positions in position_list will be binned into bin_size-sized bins over the length of each chromosome, 
      giving counts_per_bin numpy array, with length matching the number of bins in the chromosome. 
     Chromosome_lengths can be either a chromosome:length dict, or the name of a genome fasta file to extract them from
@@ -85,17 +91,26 @@ def get_histogram_data_from_positions(position_dict, bin_size=DEFAULT_BIN_SIZE, 
 
     If chromosomes is not None, only include those chromosomes; otherwise include all chromosomes in position_dict only.
     """
+    # get chromosome list from position_dict - also take care of the case if position_dict keys are (chrom,strand) tuples
+    if isinstance(position_dict.keys()[0], str): 
+        chromosomes_in_position_dict = position_dict.keys()
+    else:                                        
+        chromosomes_in_position_dict = set(chrom for (chrom,strand) in position_dict.keys())
+    if chromosomes is None:   
+        chromosomes = chromosomes_in_position_dict
+    # get chromosome lengths, make sure we have them for all chromosomes
     if chromosome_lengths is None or isinstance(chromosome_lengths, str):
         chromosome_lengths = get_chromosome_lengths(chromosome_lengths)
-        chromosomes_no_lengths = set(position_dict) - set(chromosome_lengths)
+        chromosomes_no_lengths = chromosomes - set(chromosome_lengths)
         if chromosomes_no_lengths:
             raise Exception("some chromosomes have no length data! %s"%chromosomes_no_lengths)
-    if chromosomes is None:   
-        chromosomes = position_dict.keys()
     chromosome_bin_count_lists = {}
     for chromosome in chromosomes:
         chromosome_length = chromosome_lengths[chromosome]
-        position_list = position_dict[chromosome]
+        # position_dict can be either just chromosome or (chromosome,strand)
+        #  - get all the positions on the chromosome in either case, by just adding together the two strand lists if needed.
+        try:                position_list = position_dict[chromosome]
+        except KeyError:    position_list = position_dict[(chromosome,'+')] + position_dict[(chromosome,'-')]
         # divide the chromosome into bin_size-sized ranges, using an x.5 cutoff for clarity
         bin_edges = [x-.5 for x in range(first_bin_offset+1, chromosome_length+1, bin_size)]
         # Make sure there's at least one bin, even if the total length is smaller than a bin!  (for scaffolds/etc)
@@ -194,12 +209,8 @@ def mutant_positions_and_data(datasets=[], dataset_formats=0, density_plots=True
     #  - otherwise use a single color name
     for N,(color,density_plot,d_format) in enumerate(zip(list(colors),density_plots,dataset_formats)):
         if color is None:
-            if density_plot:        
-                if d_format==0:    colors[N]='gist_earth'
-                else:              colors[N]='Oranges'
-            else:
-                if d_format==0:    colors[N]='black'
-                else:              colors[N]='blue'
+            if density_plot:   colors[N]='gist_earth'     
+            else:              colors[N]='black'
     # set sensible default values for None names ('mutants' for mutants, more general for other data, since we can't tell)
     for N,(name,d_format) in enumerate(zip(list(names),dataset_formats)):
         if name is None:
@@ -244,7 +255,7 @@ def mutant_positions_and_data(datasets=[], dataset_formats=0, density_plots=True
         #  (need to use maximum bin-count over all chromosomes, so that they're all normalized to the same value!)
         if density_plot:
             if max_per_base is None:
-                max_count = max([max(dataset[c]) for c in all_chromosomes])
+                max_count = max([max(dataset[c]) for c in all_chromosomes if c in dataset])
             else:
                 max_count = max_per_base*bin_size
 
@@ -258,20 +269,22 @@ def mutant_positions_and_data(datasets=[], dataset_formats=0, density_plots=True
                 position_list = dataset[chromosome]
                 # only plot the lines if there are any mutants
                 if position_list:
-                    # inverting positions, so that position 0 is at the top, not the bottom - easier to read that way
-                    inverted_positions = [chromosome_length - pos for pos in position_list]
                     # only give a label to one chromosome per dataset, so only one shows up in the legend
-                    mplt.hlines(inverted_positions, left_pos, right_pos, color=color, 
+                    mplt.hlines(position_list, left_pos, right_pos, color=color, 
                                 label = ('__nolegend__' if (chr_N!=0 or name=='') else name))
             # if we're doing a density plot, bin the positions into counts, and plot as a heatmap.
             else:
+                # inverting the bin value list so that 0 is at the bottom, since otherwise the scale makes no sense;
+                #  if no data for this chromosome, no need to plot anything.
+                try:                inverted_data = numpy.array(list(reversed(dataset[chromosome])))
+                except KeyError:    continue
                 # actually draw the heatmap image - this is tricky! Matplotlib tends to assume there's only a single heatmap.
                 #  - the reshape call is to make the densities from a 1D array into a 2D Nx1 array, for imshow to work properly
                 #  - aspect='auto' is to prevent matplotlib from reshaping the entire plot to fit the image shape
                 #  - norm=None, vmin=0, vmax=1 are to prevent matplotlib from normalizing the values to a 0-1 range!
                 #    (which would be BAD, because then each chromosome would be normalized separately, and have a different scale)
                 #  - DON'T give those a label, so that mplt.legend() will only work on line-plots - colorbars will be separate
-                im = mplt.imshow(numpy.array(dataset[chromosome]).reshape(-1,1), 
+                im = mplt.imshow(inverted_data.reshape(-1,1), 
                                  extent=(left_pos,right_pos,0,chromosome_length), cmap=mplt.get_cmap(color), 
                                  aspect='auto', norm=None, vmin=0, vmax=max_count, **imshow_kwargs)
                 # save info image to add colorbars: image, name, and if_normalized (True if max_per_base was given) 
@@ -296,12 +309,11 @@ def mutant_positions_and_data(datasets=[], dataset_formats=0, density_plots=True
         mplt.xticks(range(len(all_chromosomes)), all_chromosomes, rotation=90)
     # MAYBE-TODO it'd be nice to get rid of the actual ticks and just keep the labels, the ticks only obscure the data
     # modify yticks to be in Mb - and for some reason this resets ylim, so save it and set it back to previous value
-    mplt.ylabel('chromosome position (in MB) (chromosomes start at the top)')
+    mplt.ylabel('chromosome position (in Mb) (chromosomes start at the bottom)')
     ylim = mplt.ylim()
     yticks = mplt.yticks()[0]
     mplt.yticks(yticks, [x/1000000 for x in yticks])
     mplt.ylim(ylim)
-    # TODO the y scale/direction is inconsistent!  If chromosomes start at the top, they should be lined up on top instead of bottom... Ask Martin what the best way is.
     plotting_utilities.remove_half_frame()
 
     ### add legends
@@ -357,6 +369,13 @@ def mutant_positions_and_data(datasets=[], dataset_formats=0, density_plots=True
     # TODO it'd be nice if this actually returned the main axes object... (and maybe a list of colorbar axes too?)  And the numpy.histogram results for all the datasets might be nice too!
 
 
+######### Hotspot/coldspot related plots
+
+def _lowest_cutoff_matched(val, cutoff_list):
+    """ Given x and a list of cutoffs, return how many of them x is lower than. """
+    return sum(val<cutoff for cutoff in cutoff_list)
+
+
 def get_hot_cold_spot_colors(pvalue_data, side_data, window_size, window_offset, pval_cutoffs=[0.05, 0.01, 0.005, 0.001], 
                              min_zero=False, print_info=True):
     """ Transform p-value and side (low/high) chrom:value_list dicts into plottable chrom:value lists.
@@ -386,10 +405,7 @@ def get_hot_cold_spot_colors(pvalue_data, side_data, window_size, window_offset,
         sides = side_data[chrom]
         color_values = []
         for N,(pvalue,side) in enumerate(zip(pvalues,sides)):
-            curr_val = 0
-            for cutoff_N,cutoff in enumerate(pval_cutoffs):
-                if pvalue<cutoff:
-                    curr_val = cutoff_N+1
+            curr_val = _lowest_cutoff_matched(pvalue, pval_cutoffs)
             if curr_val>0 and print_info:
                 N_significant += 1
             curr_val *= side
@@ -403,6 +419,63 @@ def get_hot_cold_spot_colors(pvalue_data, side_data, window_size, window_offset,
     # TODO should unit-test this!
 
 
+def plot_hot_cold_spot_hlines(hc_spot_list, pval_cutoffs, all_chromosomes=None, min_offset=0, max_offset=0.4, 
+                              linewidth=2, min_height=10000, pval_cutoff_colors=None, chrom_numbers=None):
+    """ Plot hot/cold spots as horizontal lines, colored by pvalue by chromosome position. 
+    
+    Hc_spot_list should be a list of (chrom, start, end, pvalue, kind, window_offset) tuples 
+     as generated by mutant_simulations.get_hot_cold_spot_list (with kind being 'hotspot' or 'coldspot', 
+     and window_offset along with start-end size used to separate potentially overlapping data into lines),
+    Pval_cutoffs should be a reverse-sorted list of cutoffs, 0-1, to be used when coloring the data. 
+
+    Min/max offset give the x-axis range relative to the middle of each chromosome over which to spread all the data
+     (1 is the distance between two chromosomes on the x axis, so the full range would be about -.4 to .4)
+    Min_height is the minimum height 
+
+    Pval_cutoff_colors should be a kind:color_list dict, with each color_list the length of pval_cutoffs, 
+     or default if None.
+
+    All_chromosomes can be a list of all chromosomes to include on the plot, 
+     in case you want to leave space for any that DON'T have any hc_spot_list entries.
+    Chrom_numbers should be a chromosome_name:number dictionary to give each chromosome a unique position on the x axis; 
+     if None, we'll just sort them all sensibly and assign numbers that way. 
+    """
+    if pval_cutoff_colors is None:
+        if len(pval_cutoffs) == 3:
+            pval_cutoff_colors = {'hotspot': 'salmon red darkred'.split(), 'coldspot': 'skyblue steelblue darkblue'.split()}
+        else:
+            raise Exception("If pval_cutoffs isn't length 3, must provide pval_cutoff_colors, no default!")
+    if all_chromosomes is None:
+        all_chromosomes = list(set(chrom for (chrom, start, end, pvalue, kind, offset) in hc_spot_list))
+    else:
+        all_chromosomes = list(all_chromosomes)
+    if chrom_numbers is None:
+        all_chromosomes.sort(key=basic_seq_utilities.chromosome_sort_key)
+        print "Sorted chromosomes: %s"%(', '.join(all_chromosomes))
+        chrom_numbers = {chrom:N for (N,chrom) in enumerate(all_chromosomes)}
+    # figure out how many potentially overlapping (window_size, window_offset) sets we have, 
+    #  give each of them a separate x axis position
+    all_lines = sorted(set((end-start, offset) for (chrom, start, end, pvalue, kind, offset) in hc_spot_list))
+    x_offset_range = max_offset-min_offset
+    x_offset_per_line = x_offset_range/len(all_lines)
+    x_line_offsets = {line: (min_offset)+x_offset_per_line*N for (N,line) in enumerate(all_lines)}
+    for (chrom, start, end, pvalue, kind, offset) in hc_spot_list:
+        # plot only the lines with a pvalue that matches at least the highest cutoff
+        cutoff_matched = _lowest_cutoff_matched(pvalue, pval_cutoffs)
+        if cutoff_matched>0:
+            x_offset = x_line_offsets[(end-start,offset)]
+            # if min_height is specified, make sure the line height is at least that
+            if min_height is not None:
+                height = end-start
+                missing_height = min_height - height
+                if missing_height>0:
+                    start, end = start - missing_height/2, end + missing_height/2
+            # line color depends on lowest pvalue cutoff matched
+            color = pval_cutoff_colors[kind][cutoff_matched-1]
+            mplt.vlines(chrom_numbers[chrom]+x_offset, start, end, color=color, linewidth=linewidth)
+
+
+######### Gap size plots
 
 def get_gap_sizes(dataset):
     """ Given a dataset, get a list of all the gap sizes between mutant positions, UNSORTED. 
@@ -490,6 +563,8 @@ def gap_size_QQ_plot(reference_dataset, simulated_datasets=None,
     mplt.legend(loc=2)
     # TODO those plots should be square!  How do I square an axes instance?
 
+
+######### Chromosome mutant density plots
 
 def chromosome_density_scatterplot(mutant_dataset, include_scaffolds=True, include_cassette=True, include_other=True, 
                                         chromosome_lengths=None, chloroplast_multiplier=1, mito_multiplier=1):
