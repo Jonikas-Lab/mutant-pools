@@ -37,7 +37,7 @@ DEFAULT_GENOME_CASSETTE_FILE = '~/experiments/reference_data/genomes_and_indexes
     #  - an int or bool takes 24 bytes; 
     #  - a 21-string takes 58, a 1-string takes 38
     #  - sets and dicts take 1-2x as much memory as the objects themselves.
-    #  - lists actually take a lot less!  About 9 bits per int or char.
+    #  - lists actually take a lot less!  About 9 bits per int or char (TODO is that really true? Geoffrey says not. Did I test it with big ints and non-identical chars?).
     # The genome's about 113M bases, and we already know that most of it's mappable, i.e. unique sequences.  
     #  - that many ints in a set (say 1.5x the cost) will be 4G!  
     #  - storing that many 21-strings in a set (say 1.5x the cost) will be 9G!  
@@ -55,6 +55,7 @@ DEFAULT_GENOME_CASSETTE_FILE = '~/experiments/reference_data/genomes_and_indexes
     # So it's probably a good idea to pickle the output (after running genome_mappable_slices or genome_mappable_insertion_sites*), close python to release the memory (even though it'll take a LONG TIME, especially if there was swap space used), and open a new instance to unpickle the data and work on it.  
     # BUT if I pickle the output of any of those, and unpickle it in a new interactive python shell, again the output itself doesn't end up too huge (see sizes above), BUT the unpickling seems to take more memory and not release it again! Ugh. So maybe I really should convert it to bitarrays or something. 
 
+# TODO try saving things as numpy arrays instead of lists!  Geoffrey says they'll be smaller.
 
 def genome_mappable_slices(slice_len, genome_seq=None, print_info=True):
     """ Return a chrom:position_list dict giving the positions of all the unique slice_len seq slices. 
