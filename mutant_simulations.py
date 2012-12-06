@@ -96,6 +96,14 @@ def genome_mappable_slices(slice_len, genome_seq=None, print_info=True):
         # go over each slice_len-sized sequence slice and check if it's unique
         for slice_start,slice_seq in basic_seq_utilities.generate_seq_slices(chrom_seq, slice_len, step=1):
             N_total_slices += 1
+            # make sure everything's uppercase
+            slice_seq = slice_seq.upper()
+            # if there are Ns in the sequence, just consider it unmappable
+            #  MAYBE-TODO do something more complicated?  Technically sequences with one N might be unique,
+            #  line ANA if there are no AAA, AGA, ACA or ATA in the whole genome...  Ignoring that for now.  
+            #  I'm not even sure if bowtie ever considers genome sequences with Ns mappable...
+            if 'N' in slice_seq:
+                continue
             # look at both the forward and the reverse-complement sequence of the current slice, 
             #  but only store the forward (+strand) versions (no point in storing both if we're RC-ing each current sequence)
             slice_seq_RC = basic_seq_utilities.reverse_complement(slice_seq)
