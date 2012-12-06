@@ -470,6 +470,67 @@ def simulate_dataset_mappability(N_mutants, fraction_20bp, mappable_positions_20
 # MAYBE-TODO would it be possible to also match the real hotspots and coldspots of the real dataset?
 
 
+def find_genes_for_mutants(self, genefile, detailed_features=True, N_run_groups=3, verbosity_level=1):
+    """ To each mutant in the dataset, add the gene it's in (look up gene positions for each mutant using genefile).
+
+    If detailed_features is True, also look up whether the mutant is in an exon/intron/UTR (NOT IMPLEMENTED); 
+    Read the file in N_run_groups passes to avoid using up too much memory/CPU.
+
+    Based on mutant_analysis_classes.Insertional_mutant_pool_dataset.find_genes_for_mutants,
+     but acts on simple position tuples instead of mutant objects, and just returns the list of genes.
+
+    
+
+    """ 
+    gene_list = []
+    ### go over all mutants on each chromosome, figure out which gene they're in (if any), keep track of totals
+    # keep track of all the mutant and reference chromosomes to catch chromosomes that are absent in reference
+    with open(genefile) as GENEFILE:
+        for chromosome_record in GFF.parse(GENEFILE, limit_info=genefile_parsing_limits):
+            self.total_genes_in_genome += len(chromosome_record.features)
+            # TODO TODO TODO implement this bit!
+            for mutant in mutants_by_chromosome[chromosome_record.id]:
+                gene_ID, orientation, feature = find_gene_by_pos(mutant.position, chromosome_record, 
+                                                                 detailed_features, quiet=(verbosity_level==0))
+                mutant.gene, mutant.orientation, mutant.gene_feature = gene_ID, orientation, feature
+
+    # for mutants in chromosomes that weren't listed in the genefile, use special values
+    for chromosome in set(mutants_by_chromosome.keys())-set(all_reference_chromosomes):
+        if not is_cassette_chromosome(chromosome):
+            print 'Warning: chromosome "%s" not found in genefile data!'%(chromosome)
+        for mutant in mutants_by_chromosome[chromosome]:
+            mutant.gene,mutant.orientation,mutant.gene_feature = SPECIAL_GENE_CODES.chromosome_not_in_reference,'-','-'
+
+
+def dataset_object_from_simulated(simulated_dataset, get_gene_info=True, 
+                  gene_info_file=os.path.expanduser("~/experiments/reference_data/chlamy_annotation/Creinhardtii_169_gene.gff3")):
+    """ Convert a simulated dataset position dictionary into an Insertional_mutant_pool_dataset object, with optional gene info.
+    
+    Output will be a mutant_analysis_classes.Insertional_mutant_pool_dataset object, with all readcounts set to 1.
+
+    If get_gene_info is True, get the gene information for the positions (from gene_info_file if given, otherwise the default).
+
+    Input should be a (chrom,strand):position_list dictionary, like from simulate_dataset_mappability with include_strand True.
+
+    Warning: can take a LOT of time/memory if the simulated dataset is large!  May be best to avoid if possible.
+    """
+    new_dataset = mutant_analysis_classes.Insertional_mutant_pool_dataset()
+    # Go over all the simulated read positions, add them to dataset
+    for (chrom,strand),pos_list in simulated_dataset.items():
+        for pos in pos_list:
+            read_count = 1
+            # make a simple position - just always specify position_before, regardless of strand
+            position = mutant_analysis_classes.Insertion_position(chrom, strand, position_before=pos, immutable=True)
+            # grab the right mutant based on the position, and add the reads to it; 
+            curr_mutant = new_dataset.get_mutant(position)
+            # just add 1 readcount, and don't bother with the sequences etc
+            curr_mutant.add_counts(1,0,1)
+    # Add gene info to dataset if desired
+    if get_gene_info:
+        new_dataset.find_genes_for_mutants(gene_info_file, detailed_features=True)
+    return new_dataset
+
+
 ################################# Randomly chosen subsets of real dataset #######################################
 
 ### number of genes with 1+/2+/etc mutants vs number of mutants (randomly chosen mutant subsets)
@@ -503,6 +564,7 @@ def gene_counts_for_mutant_subsets(dataset, max_N_mutants=3, step_size=100, sing
     Dataset should be a mutant_analysis_classes.Insertional_mutant_pool_dataset instance, 
      or a list of mutants (mutant_analysis_classes.Insertional_mutant instances).
     """
+    # TODO TODO TODO modify this to just extract a list of GENES and work on that!
     # extract list of mutants from dataset
     if isinstance(dataset, mutant_analysis_classes.Insertional_mutant_pool_dataset):    mutants = list(dataset)
     else:                                                                               mutants = dataset
