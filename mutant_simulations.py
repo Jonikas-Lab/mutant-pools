@@ -680,30 +680,35 @@ class Testing(unittest.TestCase):
             for val in formatted_data.values():
                 val.sort()
             return dict(formatted_data)
+        def _compare_dicts(numpy_array_dict, list_dict):
+            """ Compare a key:val_numpy_array dict to a key:val_list dict, make sure they match. """
+            assert numpy_array_dict.keys() == list_dict.keys()
+            for key,val in numpy_array_dict.iteritems():
+                assert list(val) == list_dict[key]
         def _test_all(slice_len, genome, raw_slice_data, raw_pos_data_5prime):
             """ Test genome_mappable_slices and all variants of genome_mappable_insertion_sites* against expected output. """
             # get the expected output data from the simplified string formats
             slice_data = _read_raw_data(raw_slice_data)
             pos_data_5prime = _read_raw_data(raw_pos_data_5prime)
             # from pos_data_5prime, make pos_data_3prime (just switch all strands) and pos_data_no_strand (remove strand info)
-            pos_data_3prime, pos_data_no_strand = {}, defaultdict(list)
+            pos_data_3prime, pos_data_no_strand = {}, collections.defaultdict(list)
             for (chrom,strand),pos_list in pos_data_5prime.items():
                 pos_data_3prime[chrom, '+' if strand=='-' else '-'] = pos_list
                 pos_data_no_strand[chrom] += pos_list
                 pos_data_no_strand[chrom].sort()
             # check genome_mappable_slices output (and save it for later)
             new_slice_data = genome_mappable_slices(slice_len, genome, False)
-            assert new_slice_data == slice_data
+            _compare_dicts(new_slice_data, slice_data)
             # now try running genome_mappable_insertion_sites with both the raw slice_len/genome data, and the new_slice_data; 
             for include_strand,end,pos_data in ((True,'5prime',pos_data_5prime), (True,'3prime',pos_data_3prime), 
                                                 (False,'5prime',pos_data_no_strand), (False,'3prime',pos_data_no_strand)):
                     args = (include_strand,end, False)
-                    assert genome_mappable_insertion_sites(slice_len, slice_data, None, *args) == pos_data
-                    assert genome_mappable_insertion_sites(slice_len, None, genome, *args) == pos_data
-                    assert genome_mappable_insertion_sites_multi([slice_len], None, genome, *args) == pos_data
+                    _compare_dicts(genome_mappable_insertion_sites(slice_len, slice_data, None, *args), pos_data)
+                    _compare_dicts(genome_mappable_insertion_sites(slice_len, None, genome, *args), pos_data)
+                    _compare_dicts(genome_mappable_insertion_sites_multi([slice_len], None, genome, *args), pos_data)
                     for extra in ([], [{}], [{}, {}, {}]):
-                        assert genome_mappable_insertion_sites_multi([slice_len]*(len(extra)+1), [slice_data]+extra, None, 
-                                                                     *args) == pos_data
+                        _compare_dicts(genome_mappable_insertion_sites_multi([slice_len]*(len(extra)+1), [slice_data]+extra, 
+                                                                                    None, *args), pos_data)
         # how genome_mappable_insertion_sites works if end is 5prime: 
         #   a mappable 1-2 flanking region means a +strand insertion at 2-? and a -strand insertion at ?-1 will be mappable;
         #  if end is 3prime, it's the same positions but opposite strands.
@@ -728,11 +733,12 @@ class Testing(unittest.TestCase):
         # test genome_mappable_insertion_sites_multi on the two curr_genome cases added together, different flank sizes
         #  (getting the data directly from genome, or from two genome_mappable_slices results)
         #  (only testing the no-strand version for simplicity - MAYBE-TODO test all versions?)
-        assert genome_mappable_insertion_sites_multi([1,2], None, curr_genome, False, '5prime', False) == {'a':[0,1,1,2,2,3]}
+        _compare_dicts(genome_mappable_insertion_sites_multi([1,2], None, curr_genome, False, '5prime', False), {'a':[0,1,1,2,2,3]})
         slices_1 = genome_mappable_slices(1, curr_genome, False)
         slices_2 = genome_mappable_slices(2, curr_genome, False)
         for fl_both,slices_both in (([1,2],[slices_1,slices_2]), ([2,1],[slices_2,slices_1])):
-            assert genome_mappable_insertion_sites_multi(fl_both, slices_both, None, False, '5prime', False) == {'a':[0,1,1,2,2,3]}
+            _compare_dicts(genome_mappable_insertion_sites_multi(fl_both, slices_both, None, False, '5prime', False), 
+                           {'a':[0,1,1,2,2,3]})
 
         
     # LATER-TODO add unit-tests for other stuff!
