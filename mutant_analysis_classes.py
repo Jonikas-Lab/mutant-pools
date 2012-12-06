@@ -83,6 +83,11 @@ class Insertion_position(object):
          It's not perfect immutability, it can be gotten around by using object.__setitem__ etc, but it's good enough.
     """
 
+    # TODO really, do I ever need those to be mutable?  I could just make a new one whenever I need to modify one, instead...  I don't think it happens often, does it?
+
+    # TODO use __slots__  is to optimize memory usage!  This would be good to make work, but it gives me trouble with pickle!  Also it requires changes in make_mutable_REMEMBER_CLEANUP_FIRST - see TODO comments there.
+    #__slots__ = ['chromosome', 'strand', 'position_before', 'position_after', 'immutable']
+
     # NOTE: originally I used biopython SeqFeature objects for position_before and position_after (specifically SeqFeature.ExactPosition(min_val) for exactly positions and SeqFeature.WithinPosition(min_val, min_val-max_val) for ambiguous ones), but then I realized I'm not using that and it's over-complicated and hard to make immutable and may not be what I need anyway even if I do need immutable positions, so I switched to just integers. The function to generate those was called make_position_range, and I removed it on 2012-04-23, if I ever want to look it up again later.
 
     def __init__(self, chromosome, strand, full_position=None, position_before=None, position_after=None, immutable=False):
@@ -207,6 +212,9 @@ class Insertion_position(object):
         # UNSET the flag to make object immutable and hashable - need to do it in a roundabout way,
         #  because the immutability prevents simply "self.immutable = False" from working!
         self.__dict__['immutable'] = False
+        # but if I put __slots__ in, self.__dict__ won't exist any more... TODO Options for then:
+        # setattr(self, 'immutable', False)  -  doesn't seem to work?
+        # object.__setattr__(self, 'immutable', False)  -   does that work?
 
     def __hash__(self):
         """ If self.hashable is True, use private _hash method, otherwise raise exception. """
@@ -472,6 +480,8 @@ class Insertional_mutant():
          Some methods may not have multi-dataset functionality implemented, if I didn't think it would be useful.
     """
     # MAYBE-TODO rewrite this with subclassing, so that multi-dataset mutants don't HAVE some methods (only the read-related sub-mutants have these methods, etc?  Instead of adding a dataset arg to each method to make it work on both multi and single, just require the caller to call mutant.read_info(dataset).method for multi-mutants, for read-related methods.
+
+    # TODO add a __slots__ to this to optimize memory usage for when there's tens of thousands of mutants!  But that may cause issues with pickling, etc...
 
     def __init__(self, insertion_position=None, multi_dataset=False, readcount_related_only=False):
         """ Set self.position based on argument; initialize read/sequence counts to 0 and gene-info to unknown. 
@@ -3879,6 +3889,7 @@ class Testing_Insertional_mutant_pool_dataset(unittest.TestCase):
         input_file = 'test_data/count-aln__cassette-end-5prime.txt'
         data = Insertional_mutant_pool_dataset(infile=input_file)
         self._check_infile1(data)
+        # MAYBE-TODO the pickling/unpickling should probably use the general_utilities convenience functions
         with open(picklefile, 'w') as PICKLE:    pickle.dump(data, PICKLE)
         with open(picklefile) as PICKLE:         data_new = pickle.load(PICKLE)
         self._check_infile1(data_new)
