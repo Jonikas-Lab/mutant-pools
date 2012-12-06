@@ -38,14 +38,21 @@ DEFAULT_GENOME_CASSETTE_FILE = '~/experiments/reference_data/genomes_and_indexes
     #  - a 21-string takes 58, a 1-string takes 38
     #  - sets and dicts take 1-2x as much memory as the objects themselves.
     #  - lists actually take a lot less!  About 9 bits per int or char (TODO is that really true? Geoffrey says not. Did I test it with big ints and non-identical chars?).
+    #  - numpy arrays take a lot less, but I think sys.getsizeof lies about them because they're objects... Still, in practice on    real mappability data they seem to take about 2x less than lists, which gets it down to something manageable.  They're also about 2x bigger than the non-numpy version when pickled (1.3G vs 800M), but that's not as big an issue, I'd say.
+    # 
     # The genome's about 113M bases, and we already know that most of it's mappable, i.e. unique sequences.  
     #  - that many ints in a set (say 1.5x the cost) will be 4G!  
     #  - storing that many 21-strings in a set (say 1.5x the cost) will be 9G!  
     #  - plus even more for the seq:pos dict, depending on details of pos format...
 
     ### MAYBE-TODO Improvement options for memory issues:
-    # For the second pass and returned value: Instead of a list of genome positions, keep a genome-sized list filled with 0s and 1s?  With 0/1 as normal ints that would still be about 1G, but I'm sure switching to a more efficient representation (bitstring.BitArray?) would make it a LOT smaller. 
-    # For the first pass - NOT SURE!  How can I more efficiently store sets of strings?  MAYBE-TODO think about it more - it's currently the part that takes the most memory. 
+    # 
+    # For the second pass and returned value: Instead of a list of genome positions, keep a genome-sized list filled with 0s and 1s?  With 0/1 as normal ints that would still be about 1G, but I'm sure switching to a more efficient representation (bitstring.BitArray?) would make it a LOT smaller.  Actually it might be smaller as a numpy array too, those may account for element size...
+    # 
+    # Could I do everything as numpy arrays instead of making lists (with append/extend) and then converting to numpy arrays?  NOT SURE.  I could write the list-creation as a generator, but you can't make numpy arrays from generators without converting to a list first, I checked...
+    # 
+    # For the first pass - NOT SURE!  How can I more efficiently store sets of strings?  One thing I could do would be use ints or bitarrays or something instead of strings, since all my strings are actually just made of ACTG, with 2 bits per character, not the full range of characters (well, there may be Ns, but I can skip those...). 
+    # MAYBE-TODO think about it more - it's currently the part that takes the most memory.  But I only run it once, so that's not really a big issue - it's mostly the returned values that are important.
 
     ## Issues with python not releasing memory, or something
     # 
@@ -53,12 +60,11 @@ DEFAULT_GENOME_CASSETTE_FILE = '~/experiments/reference_data/genomes_and_indexes
     # genome_mappable_insertion_sites* doesn't take as much memory to run, though still some; the output is actually 2x bigger than genome_mappable_slices for genome_mappable_insertion_sites, since there are two mappable insertion positions per slice, and 2Nx bigger for genome_mappable_insertion_sites_multi (4x for two slice lengths, etc - comes out to about 3G). 
     #
     # So it's probably a good idea to pickle the output (after running genome_mappable_slices or genome_mappable_insertion_sites*), close python to release the memory (even though it'll take a LONG TIME, especially if there was swap space used), and open a new instance to unpickle the data and work on it.  
-    # BUT if I pickle the output of any of those, and unpickle it in a new interactive python shell, again the output itself doesn't end up too huge (see sizes above), BUT the unpickling seems to take more memory and not release it again! Ugh. So maybe I really should convert it to bitarrays or something. 
+    # BUT if I pickle the output of any of those, and unpickle it in a new interactive python shell, again the output itself doesn't end up too huge (see sizes above), BUT the unpickling seems to take more memory and not release it again! Ugh. So maybe I really should convert it to bitarrays or something.  Although numpy arrays helped some. 
 
-# TODO try saving things as numpy arrays instead of lists!  Geoffrey says they'll be smaller.
 
 def genome_mappable_slices(slice_len, genome_seq=None, print_info=True):
-    """ Return a chrom:position_list dict giving the positions of all the unique slice_len seq slices. 
+    """ Return a chrom:position_array dict giving the positions of all the unique slice_len seq slices. 
     
     Look at all slices of length slice_len in each chromosome (overlapping - for AATGG with len 2, look at AA, AT, TG, GG)
      return the positions of only the ones that showed up exactly once (in forward or reverse-complement - 
@@ -139,29 +145,33 @@ def genome_mappable_slices(slice_len, genome_seq=None, print_info=True):
         fraction_mappable = N_mappable_slices/N_total_slices if N_total_slices else float('NaN')
         print("%.0f%% of %sbp slices are mappable (%s out of %s total on %s chromosomes)"
               %(fraction_mappable*100, slice_len, N_mappable_slices, N_total_slices, len(chrom_names)))
+
+    # Convert the result to a numpy array, it's way faster!  But I have to convert it afterward rather than doing it
+    #  as a numpy array to start with, because you can't append to numpy arrays.
+    unique_seq_positions_by_chrom = {chrom: numpy.array(pos_list) for (chrom, pos_list) in unique_seq_positions_by_chrom.items()}
     return unique_seq_positions_by_chrom
 
 
 def genome_mappable_insertion_sites(flanking_region_length=21, mappable_slice_pos_dict=None, genome_seq=None, 
                                     include_strand=True, end_sequenced='5prime', print_info=True):
-    """ Return all uniquely mappable genomic insertion sites, as dict with chrom or (chrom,strand) keys and pos_list values.
+    """ Return all uniquely mappable genomic insertion sites, as dict with chrom or (chrom,strand) keys and pos_array values.
 
     The mappability is based on the mappability of the flanking region, using flanking_region_length, 
      on either side of the insertion (both sides are counted). 
 
-    The actual positions are the positions of the base BEFORE the insertion; the position lists are sorted. 
+    The actual positions are the positions of the base BEFORE the insertion, 1-based; 
+     the positions are given as numpy arrays (less memory usage than lists), and are sorted. 
     For example if the position 100-120 flanking region is mappable, that means an insertion at 99-100 is mappable, 
      and one at 120-121 is mappable, depending on the orientation: 
       if the flanking region is 5prime, then a +strand 120-121 and a -strand 99-100 insertion is mappable; 
       if 3prime, the strands are inverted. 
-    Each dict value is a list of the base positions before the mappable insertion site (1-based).
-    Each dict value (position_list) is sorted.  Each cassette orientation gets a separate entry in it.
+    Each cassette orientation gets a separate entry in the position array.
     If include_strand is True, all positions are separated by strand, so the keys in the returned dictionary are
      (chromosome,strand) tuples - so if both a +strand and a -strand insertion at position X of chr1 is mappable, 
-      position X will show up once in the ('chr1','+') list and once in ('chr1','-').
+      position X will show up once in the ('chr1','+') array and once in ('chr1','-').
      If include_strand is False, the positions are merged, and the return dict keys are just chromosome names,
-      so in the same example, position X will just show up twice on the 'chr1' list; 
-      if position X is mappable only in one orientation, it'll show up once in the list.
+      so in the same example, position X will just show up twice on the 'chr1' array; 
+      if position X is mappable only in one orientation, it'll show up once in the array.
      (The False option is meant for plotting, e.g. with mutant_plotting_utilities.mutant_positions_and_data)
 
     If mappable_slice_pos_dict is not None, it'll be assumed to be the output of genome_mappable_slices (with slice_len 
@@ -195,7 +205,13 @@ def genome_mappable_insertion_sites(flanking_region_length=21, mappable_slice_po
                     mappable_position_data[chrom,insertion_pos_object.strand].append((insertion_pos_object.min_position))
                 else:
                     mappable_position_data[chrom].append(insertion_pos_object.min_position)
-    return general_utilities.sort_lists_inside_dict(mappable_position_data)
+
+    # make sure the data is sorted (MAYBE-TODO does it really matter?)
+    mappable_position_data = general_utilities.sort_lists_inside_dict(mappable_position_data)
+    # Convert the result to a numpy array, it's way faster!  But I have to convert it afterward rather than doing it
+    #  as a numpy array to start with, because you can't append to numpy arrays.  MAYBE-TODO or could I do it in-place somehow?  
+    mappable_position_data = {key: numpy.array(pos_list) for (key, pos_list) in mappable_position_data.items()}
+    return mappable_position_data
 
 
 def genome_mappable_insertion_sites_multi(flanking_region_lengths=[20,21], mappable_slice_pos_dicts=None, genome_seq=None, 
@@ -210,16 +226,22 @@ def genome_mappable_insertion_sites_multi(flanking_region_lengths=[20,21], mappa
     See genome_mappable_insertion_sites docstring for more info.
     """
     if mappable_slice_pos_dicts == None:    mappable_slice_pos_dicts = [None for _ in flanking_region_lengths]
+    # need to start with lists, not arrays, because arrays can't be appended/extended to
     full_mappable_position_data = defaultdict(list)
     # for each set of inputs, run genome_mappable_insertion_sites to generate new data, 
     #  and then merge the new data into full_mappable_position_data
     for flanking_region_length,mappable_slice_pos_dict in zip(flanking_region_lengths, mappable_slice_pos_dicts):
         # get data for 
-        curr_mappable_position_data = genome_mappable_insertion_sites(flanking_region_length, mappable_slice_pos_dict, genome_seq, include_strand, end_sequenced, print_info)
+        curr_mappable_position_data = genome_mappable_insertion_sites(flanking_region_length, mappable_slice_pos_dict, genome_seq, 
+                                                                      include_strand, end_sequenced, print_info)
         for chrom,new_pos_list in curr_mappable_position_data.iteritems():
             full_mappable_position_data[chrom].extend(new_pos_list)
-    # sort the final positions (also converts from defaultdict to dict)
-    return general_utilities.sort_lists_inside_dict(full_mappable_position_data)
+    # make sure the data is sorted (MAYBE-TODO does it really matter?) (also converts from defaultdict to dict)
+    full_mappable_position_data = general_utilities.sort_lists_inside_dict(full_mappable_position_data)
+    # Convert the result to a numpy array, it's way faster!  But I have to convert it afterward rather than doing it
+    #  as a numpy array to start with, because you can't append to numpy arrays.  
+    full_mappable_position_data = {key: numpy.array(pos_list) for (key, pos_list) in full_mappable_position_data.items()}
+    return full_mappable_position_data
 
 
 ############################# Using mappability to finding hotspots/coldspots in real data #############################
@@ -414,8 +436,8 @@ def weighted_random_choice(value_weight_list):
     # LATER-TODO move this to general_utilities?
 
 
-def simulate_dataset_mappability(N_mutants, fraction_20bp, mappable_positions_20bp, mappable_positions_21bp, 
-                                 all_chromosomes=None, include_strand=False, fraction_plus_strand=0.5):
+def simulate_dataset_from_mappability(N_mutants, fraction_20bp, mappable_positions_20bp, mappable_positions_21bp, 
+                                      all_chromosomes=None, include_strand=False, fraction_plus_strand=0.5):
     """ Return position info from simulating inserting N mutants into the genome randomly, taking mappability into account. 
     
     Return a (chrom,strand):position_list dictionary if include_strand, or else just a chrom:position_list one...
@@ -459,6 +481,7 @@ def simulate_dataset_mappability(N_mutants, fraction_20bp, mappable_positions_20
         # save the data
         if include_strand:  simulated_positions[(chrom,strand)].append(pos)
         else:               simulated_positions[chrom].append(pos)
+    # TODO convert output to numpy arrays for speed and memory efficiency?
     return simulated_positions
     # TODO how would I test this sensibly??  Complicated... But I did run it, visualize the results, and compare to a real dataset, and it looked all right.  (../1211_positions_Ru-screen1-for-paper/positions_over_chromosomes/*simulated*)
     # MAYBE-TODO add a way of copying N_mutants and fraction_* from an existing dataset instead of putting them in separately?  Could do that by putting it here as an argument, or with a help function or something
@@ -510,7 +533,7 @@ def dataset_object_from_simulated(simulated_dataset, get_gene_info=True,
 
     If get_gene_info is True, get the gene information for the positions (from gene_info_file if given, otherwise the default).
 
-    Input should be a (chrom,strand):position_list dictionary, like from simulate_dataset_mappability with include_strand True.
+    Input should be a (chrom,strand):position_list dictionary, like from simulate_dataset_from_mappability with include_strand True.
 
     Warning: can take a LOT of time/memory if the simulated dataset is large!  May be best to avoid if possible.
     """
