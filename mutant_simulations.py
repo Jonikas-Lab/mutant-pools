@@ -1,6 +1,6 @@
 #! /usr/bin/env python
 """
-Plotting utilities specifically for mutant datasets and related things.  Module - running it directly just runs tests.
+Simulation functions for mutant datasets and related things.  Module - running it directly just runs tests.
  -- Weronika Patena, 2012
 """
 
@@ -22,12 +22,7 @@ from rpy2.robjects.vectors import FloatVector
 import general_utilities
 import basic_seq_utilities
 import mutant_analysis_classes
-from mutant_plotting_utilities import get_histogram_data_from_positions, get_mutant_positions_from_dataset, get_chromosome_lengths
-# MAYBE-TODO this is now a circular import with mutant_plotting_utilities - is that a problem?  Move things needed by both to a new file, or to basic_seq_utilities or mutant_utilities or something?
-
-DEFAULT_NUCLEAR_GENOME_FILE = '~/experiments/reference_data/genomes_and_indexes/Chlre4-nm.fa'
-DEFAULT_ALL_GENOME_FILE = '~/experiments/reference_data/genomes_and_indexes/Chlre4-nm_chl-mit.fa'
-DEFAULT_GENOME_CASSETTE_FILE = '~/experiments/reference_data/genomes_and_indexes/Chlre4-nm_chl-mit_cassette-pMJ013b.fa'
+from mutant_utilities import get_histogram_data_from_positions, get_mutant_positions_from_dataset, get_chromosome_lengths, get_20bp_fraction
 
 ######################################## Calculating mappability over genome #######################################
 
@@ -417,18 +412,6 @@ def get_hot_cold_spot_list(pvalue_data_window_size_offset_dict, side_data_window
 
 
 ################################# Simulating random size-N dataset, various options #######################################
-
-def get_20bp_fraction(dataset):
-    """ Return the fraction of mutants in dataset that only have 20bp flanking regions (no 21bp ones).
-
-    Dataset should be a mutant_analysis_classes.Insertional_mutant_pool_dataset instance, 
-     or a list of mutants (mutant_analysis_classes.Insertional_mutant instances).
-    """
-    max_lengths = [max([len(s) for s in mutant.sequences_and_counts.keys()]) for mutant in dataset]
-    assert max_lengths.count(20) + max_lengths.count(21) == len(dataset), "Some sequences are outside the 20-21bp range!"
-    return max_lengths.count(20)/len(dataset)
-    # LATER-TODO should this be here, or a mutant_analysis_classes.Insertional_mutant_pool_dataset method or something?
-
 
 def weighted_random_choice(value_weight_list):
     """ Given a list of (value, weight) tuples, pick a random value, with probability=weight for each value. """
