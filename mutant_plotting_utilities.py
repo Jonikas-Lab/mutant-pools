@@ -647,7 +647,7 @@ def chromosome_density_barchart(mutant_dataset, include_scaffolds=True, include_
 ### number of genes with 1+/2+/etc mutants vs number of mutants (randomly chosen mutant subsets)
 
 def genes_with_N_mutants(dataset, step_size=100, max_N_mutants=3, N_mutants_colors=None, repeat_N_times=100, 
-                         total_genes=None, mappable_percent=None, print_repeat_progress=10):
+                         total_genes=None, mappable_percent=None, plot_full_count=True, print_repeat_progress=10):
     """ Plot % of all genes with N mutants for different-sized random subsets of dataset.
 
     Plot % of all genes that have between 1 and max_N_mutants mutants (separate line for each N); 
@@ -662,14 +662,16 @@ def genes_with_N_mutants(dataset, step_size=100, max_N_mutants=3, N_mutants_colo
      or a list of mutants (mutant_analysis_classes.Insertional_mutant instances).
 
     Redo repeat_N_times, with different random subsets each time, to see the full representation.
+    If plot_full_count is True, also plot dots for the full dataset (in case its size is not divisible by step_size), 
+     in a different style (black borders around the dots).
 
     Mappable_percent is the approximate % of mutants that are mappable, just to put in the xlabel; if None, don't print it. 
     """
     # TODO update to show simulated data in parallel to real data, once we have simulated data!  (Simulated data can go to higher total mutant numbers than we have in dataset)  Simulated lines should be paler colors or different markers or something.
 
     # nice default color schemes only defined for some max_N_mutants values
-    if max_N_mutants==3 and N_mutants_colors is None:
-        N_mutants_colors = ['magenta','cyan','yellow']
+    if max_N_mutants<=3 and N_mutants_colors is None:
+        N_mutants_colors = 'magenta cyan orange'.split()
 
     # default total_genes: extract from dataset if possible; 
     #  if not (dataset missing that attribute, dataset is a mutant list, or dataset value is None as well), use hardcoded default. 
@@ -690,12 +692,13 @@ def genes_with_N_mutants(dataset, step_size=100, max_N_mutants=3, N_mutants_colo
             # only label the lines in the first repeat, to avoid 100 repeats in the legend!
             if repeat==0:                   plot_kwargs['label'] = "genes with %s+ mutants"%N_mutants
             mplt.plot(gene_counts, '.', linewidth=0, **plot_kwargs)
-    # add a separate plot set for the actual full mutant count, with different style (black border), and put a line there
-    gene_counts_by_Nmutants = mutant_simulations.gene_counts_for_mutant_subsets(dataset, max_N_mutants, 
+    # add a separate plot set for the actual full mutant count, with different style (black border)
+    if plot_full_count:
+        gene_counts_by_Nmutants = mutant_simulations.gene_counts_for_mutant_subsets(dataset, max_N_mutants, 
                                                                                 single_subset_size=len(dataset))
-    for N_mutants,gene_counts in gene_counts_by_Nmutants.items():
-        plot_kwargs = {} if N_mutants_colors is None else {'color': N_mutants_colors[N_mutants-1]}
-        mplt.plot(len(dataset)/step_size, gene_counts, '.', linewidth=0, markeredgecolor='black',**plot_kwargs)
+        for N_mutants,gene_counts in gene_counts_by_Nmutants.items():
+            plot_kwargs = {} if N_mutants_colors is None else {'color': N_mutants_colors[N_mutants-1]}
+            mplt.plot(len(dataset)/step_size, gene_counts, '.', linewidth=0, markeredgecolor='black',**plot_kwargs)
     # add a line at the total gene number - TODO this doesn't work right... figure out sensible xmin/xmax values, reset xlim
     mplt.legend(loc='upper left', prop=FontProperties(size='medium'))
 
