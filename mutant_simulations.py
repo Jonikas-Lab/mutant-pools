@@ -11,7 +11,7 @@ import time
 import os
 import math
 import random
-from collections import defaultdict
+import collections
 # other packages
 import numpy
 import scipy
@@ -193,7 +193,7 @@ def genome_mappable_insertion_sites(flanking_region_length=21, mappable_slice_po
     # convert the mappable slice chromosome/position values into mappable insertion locations, 
     #  treating them as end_sequenced flanking regions - each flanking region should give TWO mappable positions, 
     #   one on each side, with opposite strands (with the insertion position strand depending on end_sequenced)
-    mappable_position_data = defaultdict(list)
+    mappable_position_data = collections.defaultdict(list)
     for chrom,pos_list in mappable_slice_pos_dict.iteritems():
         if print_info and len(pos_list)>500000: 
             print "  %s (%s mappable slices)...  %s"%(chrom, len(pos_list), time.ctime())
@@ -230,7 +230,7 @@ def genome_mappable_insertion_sites_multi(flanking_region_lengths=[20,21], mappa
     """
     if mappable_slice_pos_dicts == None:    mappable_slice_pos_dicts = [None for _ in flanking_region_lengths]
     # need to start with lists, not arrays, because arrays can't be appended/extended to
-    full_mappable_position_data = defaultdict(list)
+    full_mappable_position_data = collections.defaultdict(list)
     # for each set of inputs, run genome_mappable_insertion_sites to generate new data, 
     #  and then merge the new data into full_mappable_position_data
     for flanking_region_length,mappable_slice_pos_dict in zip(flanking_region_lengths, mappable_slice_pos_dicts):
@@ -450,12 +450,12 @@ def simulate_dataset_from_mappability(N_mutants, fraction_20bp, mappable_positio
     mappable_position_data = {20: mappable_positions_20bp, 21: mappable_positions_21bp}
     # chromosome mappable lengths - a list of (chrom,mappable_lengths) tuples for each (flank_length,chrom,strand) combination, 
     #  to use as a list of values and weights when randomly choosing a chromosome - only include ones in all_chromosomes!
-    chrom_mappable_len = defaultdict(list)
+    chrom_mappable_len = collections.defaultdict(list)
     for flank_len,mappable_positions in mappable_position_data.iteritems():
         for (chrom,strand),pos_list in mappable_positions.iteritems():
             if chrom in all_chromosomes:
                 chrom_mappable_len[flank_len,strand].append((chrom, len(pos_list)))
-    simulated_positions = defaultdict(list)
+    simulated_positions = collections.defaultdict(list)
     for _ in range(N_mutants):
         # first choose a length (20 or 21bp) based on Fraction_20bp, and a strand based on fraction_plus_strand.
         #   random.random() gives a value x in the interval [0, 1) (including 0, excluding 1).
@@ -670,7 +670,7 @@ class Testing(unittest.TestCase):
         # help functions for testing all the functions in parallel
         def _read_raw_data(raw_data):
             """ get a dict of lists of ints or (int.str) tuples from a raw string. """
-            formatted_data = defaultdict(list)
+            formatted_data = collections.defaultdict(list)
             for chr_data in raw_data.split(', '):
                 chrom, pos_data = chr_data.strip().split(': ')
                 # pos_data can be ints (1 25 301) or ints with strand info (1- 25+ 301+)
