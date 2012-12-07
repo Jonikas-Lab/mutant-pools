@@ -21,6 +21,7 @@ import general_utilities
 import basic_seq_utilities
 import plotting_utilities
 import mutant_analysis_classes
+import mutant_utilities
 from mutant_utilities import get_histogram_data_from_positions, get_mutant_positions_from_dataset, get_chromosome_lengths
 
 
@@ -52,7 +53,7 @@ def _get_plotline_pos(middle_pos, total_width, total_N, N):
 
 
 def mutant_positions_and_data(datasets=[], dataset_formats=0, density_plots=True, colors=None, names=None, maxes_per_base=None, 
-                              strands=None, title='', bin_size=DEFAULT_BIN_SIZE, chromosome_lengths=None, 
+                              strands=None, title='', bin_size=mutant_utilities.DEFAULT_BIN_SIZE, chromosome_lengths=None, 
                               interpolate=False, condense_colorbars=True, total_plotline_width=0.6, 
                               include_scaffolds=False, include_cassette=False, include_other=False):
     """ Plot multiple datasets (mutant,position,density) across chromosomes, as position lines or density heatmaps.
@@ -346,7 +347,6 @@ def plot_hot_cold_spot_hlines(hc_spot_list, pval_cutoffs, all_chromosomes=None, 
         all_chromosomes = list(all_chromosomes)
     if chrom_numbers is None:
         all_chromosomes.sort(key=basic_seq_utilities.chromosome_sort_key)
-        print "Sorted chromosomes: %s"%(', '.join(all_chromosomes))
         chrom_numbers = {chrom:N for (N,chrom) in enumerate(all_chromosomes)}
     # figure out how many potentially overlapping (window_size, window_offset) sets we have, 
     #  give each of them a separate x axis position
