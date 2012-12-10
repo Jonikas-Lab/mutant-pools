@@ -21,6 +21,8 @@ import mutant_analysis_classes
 DEFAULT_NUCLEAR_GENOME_FILE = '~/experiments/reference_data/genomes_and_indexes/Chlre4-nm.fa'
 DEFAULT_ALL_GENOME_FILE = '~/experiments/reference_data/genomes_and_indexes/Chlre4-nm_chl-mit.fa'
 DEFAULT_GENOME_CASSETTE_FILE = '~/experiments/reference_data/genomes_and_indexes/Chlre4-nm_chl-mit_cassette-pMJ013b.fa'
+DEFAULT_GENE_POS_FILE = '~/experiments/reference_data/chlamy_annotation/Creinhardtii_169_gene.gff3' 
+DEFAULT_GENE_ANNOTATION_FILE = '~/experiments/reference_data/chlamy_annotation/Creinhardtii_169_annotation_info.txt'
 
 STRAND_VAR_VALUES = ('+', '-', 'both', None)
 DEFAULT_BIN_SIZE = 20000
