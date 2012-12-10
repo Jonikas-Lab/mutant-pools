@@ -23,6 +23,7 @@ import plotting_utilities
 import mutant_analysis_classes
 import mutant_utilities
 from mutant_utilities import get_histogram_data_from_positions, get_mutant_positions_from_dataset, get_chromosome_lengths
+import mutant_simulations
 
 
 ########################################## Plotting mutant positions #############################################
@@ -541,7 +542,7 @@ def chromosome_density_barchart(mutant_dataset, include_scaffolds=True, include_
 
 ### number of genes with 1+/2+/etc mutants vs number of mutants (randomly chosen mutant subsets)
 
-def genes_with_N_mutants(dataset, step_size=100, max_N_mutants=3, N_mutants_colors=None, repeat_N_times=100, 
+def genes_with_N_mutants(dataset, step_size=100, max_N_mutants=3, N_mutants_colors=None, repeat_N_times=100, dataset_info='', 
                          total_genes=None, mappable_percent=None, plot_full_count=True, print_repeat_progress=10):
     """ Plot % of all genes with N mutants for different-sized random subsets of dataset.
 
@@ -576,6 +577,7 @@ def genes_with_N_mutants(dataset, step_size=100, max_N_mutants=3, N_mutants_colo
         if total_genes is None: total_genes = 17114
 
     # Plot it all several times with new random mutant subsets, to make sure we have a good coverage of the random space
+    plot_xvals = range(0, len(dataset), step_size)
     for repeat in range(repeat_N_times):
         if print_repeat_progress:
             if not repeat % print_repeat_progress:  
@@ -585,24 +587,29 @@ def genes_with_N_mutants(dataset, step_size=100, max_N_mutants=3, N_mutants_colo
             # use custom colors if given, otherwise let mplt choose colors
             plot_kwargs = {} if N_mutants_colors is None else {'color': N_mutants_colors[N_mutants-1]}
             # only label the lines in the first repeat, to avoid 100 repeats in the legend!
-            if repeat==0:                   plot_kwargs['label'] = "genes with %s+ mutants"%N_mutants
-            mplt.plot(gene_counts, '.', linewidth=0, **plot_kwargs)
-    # add a separate plot set for the actual full mutant count, with different style (black border)
+            if repeat==0 and dataset_info != '__nolegend__':
+                plot_kwargs['label'] = "genes with %s+ mutants%s"%(N_mutants, ', %s'%dataset_info if dataset_info else '')
+            mplt.plot(plot_xvals, gene_counts, '.', linewidth=0, **plot_kwargs)
+    # optionally add a separate plot set for the actual full mutant count, with different style (black border)
     if plot_full_count:
         gene_counts_by_Nmutants = mutant_simulations.gene_counts_for_mutant_subsets(dataset, max_N_mutants, 
                                                                                 single_subset_size=len(dataset))
         for N_mutants,gene_counts in gene_counts_by_Nmutants.items():
             plot_kwargs = {} if N_mutants_colors is None else {'color': N_mutants_colors[N_mutants-1]}
-            mplt.plot(len(dataset)/step_size, gene_counts, '.', linewidth=0, markeredgecolor='black',**plot_kwargs)
+            mplt.plot(len(dataset), gene_counts, '.', linewidth=0, markeredgecolor='black',**plot_kwargs)
     # add a line at the total gene number - TODO this doesn't work right... figure out sensible xmin/xmax values, reset xlim
     mplt.legend(loc='upper left', prop=FontProperties(size='medium'))
 
     mplt.title('Number of genes hit vs number of mutants sequenced\n(plotted for %s random mutant subsets)'%repeat_N_times)
     mplt.ylabel("Number of genes hit (out of %s total chlamy nuclear genes)"%total_genes)
-    mplt.yticks(mplt.yticks()[0], ["%i (%.0f%%)"%(x, x*100/total_genes) for x in mplt.yticks()[0]])
-    mplt.xlabel("Number of mutants (randomly chosen out of %s total)\n"%len(dataset) 
+    # Y max should never be more than 100%, it makes the plot look weird
+    if mplt.ylim()[1] > 0.8*total_genes:
+        mplt.ylim(-0.01*total_genes, 1.01*total_genes)
+        percent_ticks = range(0,101,10)
+        mplt.yticks([x/100*total_genes for x in percent_ticks])
+    mplt.yticks(mplt.yticks()[], ["%i (%.0f%%)"%(x, x*100/total_genes) for x in mplt.yticks()[]])
+    mplt.xlabel("Number of mutants (randomly chosen subsets out of %s total)\n"%len(dataset) 
                 +"(counting only mappable unique genomic mutants%s)"%(' - about %s%%'%mappable_percent if mappable_percent else ''))
-    mplt.xticks(mplt.xticks()[0], ["%i"%(x*100) for x in mplt.xticks()[0]])
 
 
 ############################################## Plotting readcounts ##############################################
