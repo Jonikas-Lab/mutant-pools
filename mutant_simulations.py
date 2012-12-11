@@ -74,7 +74,7 @@ def genome_mappable_slices(slice_len, genome_seq=None, print_info=True):
     """
     # keep original genome_seq, because we'll want it for the second pass, and generators only work once
     original_genome_seq = genome_seq
-    if genome_seq is None:           genome_seq = os.path.expanduser(DEFAULT_ALL_GENOME_FILE)
+    if genome_seq is None:           genome_seq = DEFAULT_ALL_GENOME_FILE
     if isinstance(genome_seq, str):  genome_seq = basic_seq_utilities.parse_fasta(genome_seq)
     else:                            genome_seq = genome_seq.iteritems()
     ### This is done in two passes over the whole genome, to improve memory usage. The original version was done in one pass.
@@ -127,7 +127,7 @@ def genome_mappable_slices(slice_len, genome_seq=None, print_info=True):
     ### Second pass - go over all chromosomes again, and save the positions of known unique sequences.
     # restart genome_seq generator
     genome_seq = original_genome_seq
-    if genome_seq is None:              genome_seq = os.path.expanduser(DEFAULT_ALL_GENOME_FILE)
+    if genome_seq is None:              genome_seq = DEFAULT_ALL_GENOME_FILE
     if isinstance(genome_seq, str):     genome_seq = basic_seq_utilities.parse_fasta(genome_seq)
     else:                               genome_seq = genome_seq.iteritems()
     unique_seq_positions_by_chrom = {}
@@ -516,13 +516,12 @@ def simulate_dataset_from_mappability(N_mutants, fraction_20bp, mappable_positio
 
 ###### getting more information for simulated datasets
 
-def dataset_object_from_simulated(simulated_dataset, get_gene_info=True, 
-                  gene_info_file=os.path.expanduser("~/experiments/reference_data/chlamy_annotation/Creinhardtii_169_gene.gff3")):
+def dataset_object_from_simulated(simulated_dataset, get_gene_info=True, genefile=mutant_utilities.DEFAULT_GENE_POS_FILE):
     """ Convert a simulated dataset position dictionary into an Insertional_mutant_pool_dataset object, with optional gene info.
     
     Output will be a mutant_analysis_classes.Insertional_mutant_pool_dataset object, with all readcounts set to 1.
 
-    If get_gene_info is True, get the gene information for the positions (from gene_info_file if given, otherwise the default).
+    If get_gene_info is True, get the gene information for the positions (from genefile if given, otherwise the default).
 
     Input should be a (chrom,strand):position_list dictionary, like from simulate_dataset_from_mappability with include_strand True.
 
@@ -541,7 +540,7 @@ def dataset_object_from_simulated(simulated_dataset, get_gene_info=True,
             curr_mutant.add_counts(1,0,1)
     # Add gene info to dataset if desired
     if get_gene_info:
-        new_dataset.find_genes_for_mutants(gene_info_file, detailed_features=True)
+        new_dataset.find_genes_for_mutants(genefile, detailed_features=True)
     return new_dataset
 
 
