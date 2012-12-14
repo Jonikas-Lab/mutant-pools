@@ -23,6 +23,9 @@ from general_utilities import count_list_values, split_into_N_sets_by_counts
 from testing_utilities import run_functional_tests
 from mutant_utilities import DEFAULT_NUCLEAR_GENOME_FILE
 
+### constants
+
+GFF_strands = {1:'+', -1:'-'}
 
 ### Help functions used in main - the inputs are GFF objects from an already parsed file
 
@@ -129,11 +132,11 @@ def check_gene_coverage(sequence_records, check_for_overlap=True):
 
 ### Independend functions not used in main - take gff file as input, parse it, get some outputs
 
-def gene_positions(genefile, include_chromosomes=True, coding_only=False, ignore_strange_cases=False):
-    """ Return a gene_ID:(chromosome, start_pos, end_pos) dictionary based on GFF input file. 
+def gene_positions(genefile, include_chromosomes=True, include_strand=True, coding_only=False, ignore_strange_cases=False):
+    """ Return a gene_ID:(chromosome, strand, start_pos, end_pos) dictionary based on GFF input file. 
     
     The positions are 1-based, end-inclusive. 
-    If include_chromosomes is False, the output values are just (start_pos, end_pos). 
+    If include_chromosomes and/or include_strand is False, the corresponding values are missing from the output tuples.
 
     If coding_only is True, the start/end positions are the start and end of the first and last exon (i.e. excluding the UTRs). 
      In that case, if  a gene doesn't have an mRNA with exons, or has multiple mRNAs, raise an Exception, 
@@ -149,6 +152,7 @@ def gene_positions(genefile, include_chromosomes=True, coding_only=False, ignore
                 #  convert to 1-based end-inclusive (so first-third base is bases 1,2,3, i.e. range 1-3)
                 if include_chromosomes:     full_pos_info = (chromosome_record.id,)
                 else:                       full_pos_info = ()
+                if include_strand:          full_pos_info += (GFF_strands[gene_record.strand],)
                 if not coding_only:
                     full_pos_info += (gene_record.location.start.position+1, gene_record.location.end.position)
                 else:
