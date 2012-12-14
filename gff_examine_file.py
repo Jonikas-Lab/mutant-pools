@@ -21,7 +21,10 @@ from Bio import SeqIO
 # my modules
 from general_utilities import count_list_values, split_into_N_sets_by_counts
 from testing_utilities import run_functional_tests
+from mutant_utilities import DEFAULT_NUCLEAR_GENOME_FILE
 
+
+### Help functions used in main - the inputs are GFF objects from an already parsed file
 
 def check_for_overlapping_genes(sequence_record):
     """ Given a GFF sequence record (from BCBio.GFF parser), return list of tuples of IDs of overlapping genes.  
@@ -124,41 +127,94 @@ def check_gene_coverage(sequence_records, check_for_overlap=True):
     return gene_coverage_fraction, feature_coverage_fractions
 
 
-def gene_lengths(genefile):
-    """ Return a gene_ID:gene_length dictionary based on GFF input file. """
-    gene_lengths = {}
-    with open(os.path.expanduser(genefile)) as GENEFILE:
-        for chromosome_record in GFF.parse(GENEFILE):
-            for gene_record in chromosome_record.features:
-                # BCBio uses 0-based and end-exclusive positions (first-third base is bases 0,1,2, i.e range 0-3), 
-                #  so length is straightforward
-                gene_lengths[gene_record.id] = gene_record.location.end.position - gene_record.location.start.position
-    return gene_lengths
+### Independend functions not used in main - take gff file as input, parse it, get some outputs
 
+def gene_positions(genefile, include_chromosomes=True, coding_only=False, ignore_strange_cases=False):
+    """ Return a gene_ID:(chromosome, start_pos, end_pos) dictionary based on GFF input file. 
+    
+    The positions are 1-based, end-inclusive. 
+    If include_chromosomes is False, the output values are just (start_pos, end_pos). 
 
-def gene_positions(genefile):
-    """ Return a gene_ID:(chromosome, start_pos, end_pos) dictionary based on GFF input file. """
+    If coding_only is True, the start/end positions are the start and end of the first and last exon (i.e. excluding the UTRs). 
+     In that case, if  a gene doesn't have an mRNA with exons, or has multiple mRNAs, raise an Exception, 
+      unless ignore_strange_cases is True, then just don't include it in the output.
+    """
     gene_positions = {}
     with open(os.path.expanduser(genefile)) as GENEFILE:
-        for chromosome_record in GFF.parse(GENEFILE):
+        # if coding_only is False, only look at genes, not sub-features
+        genefile_parsing_limits = {'gff_type': ['gene']} if not coding_only else {}
+        for chromosome_record in GFF.parse(GENEFILE, limit_info=genefile_parsing_limits):
             for gene_record in chromosome_record.features:
                 # BCBio uses 0-based and end-exclusive positions (first-third base is bases 0,1,2, i.e range 0-3) - 
                 #  convert to 1-based end-inclusive (so first-third base is bases 1,2,3, i.e. range 1-3)
-                #  so length is straightforward
-                gene_positions[gene_record.id] = (chromosome_record.id, 
-                                                  gene_record.location.start.position+1, gene_record.location.end.position)
+                if include_chromosomes:     full_pos_info = (chromosome_record.id,)
+                else:                       full_pos_info = ()
+                if not coding_only:
+                    full_pos_info += (gene_record.location.start.position+1, gene_record.location.end.position)
+                else:
+                    if len(gene_record.sub_features) != 1:
+                        if ignore_strange_cases:    continue
+                        else:                       raise Exception("Gene %s has 0 or more than 1 mRNAs!"%gene_record.id)
+                    features = gene_record.sub_features[0].sub_features
+                    start_pos = min(feature.location.start.position for feature in features if feature.type=='CDS')
+                    end_pos = max(feature.location.end.position for feature in features if feature.type=='CDS')
+                    full_pos_info += (start_pos+1, end_pos)
+                gene_positions[gene_record.id] = full_pos_info
     return gene_positions
 
 
-def feature_total_lengths(genefile):
-    """ Return a dict containing the total lengths of all intergenic spaces, genes, exons, introns, 5' UTRs and 3' UTRs. """
-    feature_total_lengths = {}
+def gene_lengths(genefile, coding_only=False, ignore_strange_cases=False):
+    """ Return a gene_ID:gene_length dictionary based on GFF input file (full or coding length). 
+
+    If coding_only is True, the length is counted from first to last coding exon (excluding UTRs). 
+     In that case, if  a gene doesn't have an mRNA with exons, or has multiple mRNAs, raise an Exception, 
+      unless ignore_strange_cases is True, then just don't include it in the output.
+    """
+    gene_lengths = {}
+    for gene_ID, (start_pos, end_pos) in gene_positions(genefile, include_chromosomes=False, coding_only=coding_only, 
+                                                        ignore_strange_cases=ignore_strange_cases):
+        # gene_positions returns 1-based end-inclusive positions, so add 1 to get length (since a 1bp gene is 1-1)
+        gene_lengths[gene_ID] = end_pos - start_pos + 1
+    return gene_lengths
+
+
+def feature_total_lengths(genefile, ignore_strange_cases=False, genome_fasta_file=DEFAULT_NUCLEAR_GENOME_FILE):
+    """ Return a dict containing the total lengths of all genes, exons, introns, 5' and 3' UTRs, and intergenic spaces. 
+
+    Using the feature names from the gff file - usually "CDS" is used instead of "exon", 
+     since technically "exon" would include the UTRs, and here we want to separate them.
+
+    If  a gene doesn't have an mRNA with exons, or has multiple mRNAs, raise an Exception, 
+     unless ignore_strange_cases is True, then just ignore those cases for the purpose of total gene feature lengths
+      (but not for total gene length).
+
+    To get the correct total intergenic space size, input the path to a genome_fasta_file containing the chromosome sequences, 
+     to get chromosome lengths, since the gff genefile file doesn't have those.  
+     (The default value is the chlamy v4.3 genome fasta file.)
+    """
+    # BCBio uses 0-based and end-exclusive positions (first-third base is bases 0,1,2, i.e range 0-3), so length is straightforward
+    feature_total_lengths = defaultdict(int)
+    total_genome_length = 0
+    # get the total chromosome lengths from genome_fasta_file if given - needed to calculate total intergenic length 
+    if genome_fasta_file:
+        with open(genome_fasta_file) as FASTAFILE:  fasta_seq_dict = SeqIO.to_dict(SeqIO.parse(FASTAFILE, "fasta"))
+    else:                                           fasta_seq_dict = {}
     with open(os.path.expanduser(genefile)) as GENEFILE:
-        for chromosome_record in GFF.parse(GENEFILE):
+        for chromosome_record in GFF.parse(GENEFILE, base_dict=fasta_seq_dict):
+            total_genome_length += len(chromosome_record.seq)
             for gene_record in chromosome_record.features:
-                # BCBio uses 0-based and end-exclusive positions (first-third base is bases 0,1,2, i.e range 0-3), 
-                #  so length is straightforward
-                # TODO implement!
+                feature_total_lengths['gene'] += (gene_record.location.end.position - gene_record.location.start.position)
+                if len(gene_record.sub_features) != 1:
+                    if ignore_strange_cases:    continue
+                    else:                       raise Exception("Gene %s has 0 or more than 1 mRNAs!"%gene_record.id)
+                features = gene_record.sub_features[0].sub_features
+                for feature in features:
+                    feature_total_lengths[feature.type] += (feature.location.end.position - feature.location.start.position)
+    # calculate total intron length from total gene and exon/UTR length
+    feature_total_lengths['intron'] = feature_total_lengths['gene'] - sum(length for feature,length 
+                                                                          in feature_total_lengths.items() if feature != 'gene')
+    # calculate total intergenic length from total genome and gene length
+    feature_total_lengths['intergenic'] = total_genome_length - feature_total_lengths['gene']
     return feature_total_lengths
 
 
@@ -173,6 +229,8 @@ class Testing_(unittest.TestCase):
         assert output['test.geneA0_proper_plus'] == output['test.geneA1_proper_minus'] == 700
         assert output['test.geneB5_only_exon'] == 100
         assert output['test.geneD8a_bad_overlapping_genes'] == 400
+
+    # TODO unit-test the other non-main functions!
 
 
 def do_test_run():
