@@ -218,6 +218,7 @@ def feature_total_lengths(genefile, ignore_strange_cases=False, genome_fasta_fil
     feature_total_lengths['intron'] = feature_total_lengths['gene'] - sum(length for feature,length 
                                                                           in feature_total_lengths.items() if feature != 'gene')
     # calculate total intergenic length from total genome and gene length
+    feature_total_lengths['all'] = total_genome_length
     feature_total_lengths['intergenic'] = total_genome_length - feature_total_lengths['gene']
     return feature_total_lengths
 
