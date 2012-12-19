@@ -257,7 +257,7 @@ def _next_feature(feature_iterator, curr_pos):
 
     This assumes the feature does need to be advanced at least once (i.e. that curr_pos is over the current feature end).
     """
-    feature = Feature('blank 0 0')
+    feature = Feature('blank', 0, 0)
     while curr_pos is None or curr_pos > feature.end:
         try:
             feature = feature_iterator.next()
@@ -266,7 +266,7 @@ def _next_feature(feature_iterator, curr_pos):
             break
     return feature
 
-def _next_gene(gene_iterator, curr_pos, gene_mappable_lengths, gene_mappable_lengths_binned):
+def _next_gene(gene_iterator, curr_pos, gene_mappable_lengths, gene_mappable_lengths_binned, N_bins):
     """ Advance the gene until curr_pos <= gene_end, and return (gene_record,ID,start,end); don't catch StopIteration. 
 
     This assumes the gene does need to be advanced at least once (i.e. that curr_pos is over the current gene end).
@@ -279,7 +279,7 @@ def _next_gene(gene_iterator, curr_pos, gene_mappable_lengths, gene_mappable_len
         gene_start, gene_end = gff_examine_file.get_feature_start_end(gene_record)
         # when starting a new gene, set its mappable total and binned lengths to 0
         gene_mappable_lengths[gene_name] = 0
-        gene_mappable_lengths_binned[gene_name] = [0 for _ in range(split_into_bins)]
+        gene_mappable_lengths_binned[gene_name] = [0 for _ in range(N_bins)]
     # now create the final gene record, including a feature iterator
     assert len(gene_record.sub_features) == 1, "Gene %s has 0 or more than 1 mRNAs!"%gene_name
     features = sorted([Feature(feature.id, *gff_examine_file.get_feature_start_end(feature)) 
@@ -321,10 +321,10 @@ def gene_mappability(mappability_by_flanking_region, genefile=mutant_utilities.D
     # define some convenience functions to avoid re-typing things - note that these don't use the given variables as defaults, 
     #  so they're NOT closures, they don't store the at-definition value of the given variables, 
     #   but just using their at-call-time values as if they were globals (which they are), as far as I can tell.
-    next_gene = lambda (gene_end, curr_pos): _next_gene(genes_by_start_pos, curr_pos, 
-                                                        gene_mappable_lengths, gene_mappable_lengths_binned)
-    save_gene_binned_mappability = lambda: _save_gene_bin_mappability(mappable_positions, gene.start, gene.end, 
-                                                                      gene.name, gene_mappable_lengths_binned, N_bins)
+    next_gene = lambda (curr_pos): _next_gene(genes_by_start_pos, curr_pos, gene_mappable_lengths, 
+                                              gene_mappable_lengths_binned, split_into_bins)
+    save_gene_binned_mappability = lambda: _save_gene_bin_mappability(curr_gene_mappable_positions, curr_gene.start, curr_gene.end, 
+                                                                      curr_gene.name, gene_mappable_lengths_binned, split_into_bins)
     # go over the gff genefile by chromosome
     # MAYBE-TODO this currently mixes GFF parsing and getting the mappability data - would it be better to separate them?
     #  I could write a gff_examine_file.py function to get the positions of all the features, 
@@ -348,7 +348,7 @@ def gene_mappability(mappability_by_flanking_region, genefile=mutant_utilities.D
             chromosome_mappable_positions = iter(sorted(chromosome_mappable_positions))
             ### go over all genes and mappable positions concurrently, adding mappable length to all the output values
             # start the first gene
-            gene, feature = next_gene(curr_pos=1)
+            curr_gene, curr_feature = next_gene(curr_pos=1)
             curr_gene_mappable_positions = []
             while True:
                 # try to get the next mappable position:
@@ -358,30 +358,33 @@ def gene_mappability(mappability_by_flanking_region, genefile=mutant_utilities.D
                     # save the current gene binned mappability data, since we're done with it
                     save_gene_binned_mappability()
                     # skip all the next genes (by using None as the current mappable position)
-                    try:                    gene, feature = next_gene(curr_pos=None)
+                    try:                    curr_gene, curr_feature = next_gene(curr_pos=None)
                     except StopIteration:   pass
                     # once done with all the genes, break the outer "while True" loop and go on to the next chromosome
                     break
                 ### if there WASN'T a StopIteration, go on to the current mappable position:
                 # if the position is past the end of the gene, go on to the next gene (and the next etc if needed)
                 #  (if there are no more genes, break out of the "while True" loop and go on to the next chromosome)
-                if curr_mapp_pos > gene.end:
+                if curr_mapp_pos > curr_gene.end:
                     # save the current gene binned mappability data, since we're done with it
                     save_gene_binned_mappability()
                     # go on to next gene
-                    try:                    gene, feature = next_gene(curr_mapp_pos)
+                    try:                    curr_gene, curr_feature = next_gene(curr_mapp_pos)
                     except StopIteration:   break
                     curr_gene_mappable_positions = []
                 # if the position is BEFORE the start of the current gene, just go on to the next position
-                if curr_mapp_pos < gene.start:   continue
+                if curr_mapp_pos < curr_gene.start:   continue
                 # if the position is inside the gene, add it to the mappability counts by gene/bin/feature
-                if gene.start < curr_mapp_pos < gene.end:
-                    gene_mappable_lengths[gene.name] += 1
+                if curr_gene.start < curr_mapp_pos < curr_gene.end:
+                    gene_mappable_lengths[curr_gene.name] += 1
                     curr_gene_mappable_positions.append(curr_mapp_pos)
-                    ### iterate over features and positions in parallel, similar to genes:
-                    if curr_map_pos > feature.end:                          feature = _next_feature(gene.feature_iter, curr_mapp_pos)
-                    if feature is None or curr_mapp_pos < feature.start:    continue
-                    if feature.start < curr_mapp_pos < feature.end:         feature_total_mappable_lengths[feature.name] += 1
+                    ### iterate over features and positions in parallel - similar to genes:
+                    if curr_map_pos > curr_feature.end:
+                        curr_feature = _next_feature(curr_gene.feature_iter, curr_mapp_pos)
+                    if curr_feature is None or curr_mapp_pos < curr_feature.start:
+                        continue
+                    if curr_feature.start < curr_mapp_pos < curr_feature.end:
+                        feature_total_mappable_lengths[curr_feature.name] += 1
             # save the last gene binned mappability data!
             save_gene_binned_mappability()
 
@@ -401,13 +404,12 @@ def gene_mappability(mappability_by_flanking_region, genefile=mutant_utilities.D
     #    the maximum is 2N times the gene length (one per strand and flanking region length). 
     #  So divide all the values by 2N to get the actual mappability in the same units as real length.
     max_mappable_per_base = 2 * len(mappability_by_flanking_region)
-    gene_mappable_lengths = {gene: mapp_len/max_mappable_per_base for (gene, mapp_len) in gene_mappable_lengths}
+    gene_mappable_lengths = {gene: mapp_len/max_mappable_per_base for (gene, mapp_len) in gene_mappable_lengths.iteritems()}
     gene_mappable_lengths_binned = {gene: [mapp_len/max_mappable_per_base for mapp_len in mapp_len_list] 
-                                    for (gene, mapp_len_list) in gene_mappable_lengths_binned}
+                                    for (gene, mapp_len_list) in gene_mappable_lengths_binned.iteritems()}
     feature_total_mappable_lengths = {feature: mapp_len/max_mappable_per_base 
-                                      for (feature, mapp_len) in feature_total_mappable_lengths}
+                                      for (feature, mapp_len) in feature_total_mappable_lengths.iteritems()}
     return gene_mappable_lengths, gene_mappable_lengths_binned, feature_total_mappable_lengths
-    # TODO really should unit-test this!
 
 
 ############################# Using mappability to finding hotspots/coldspots in real data #############################
@@ -901,6 +903,23 @@ class Testing(unittest.TestCase):
             _compare_dicts(genome_mappable_insertion_sites_multi(fl_both, slices_both, None, False, '5prime', False), 
                            {'a':[0,1,1,2,2,3]})
 
+    def test__gene_mappability(self):
+        test_gene_infile = 'test_data/INPUT_gene-data-2_simple.gff3'
+        # test 1: no mappable positions - zero mappability
+        test_mappability_data = {20: {}, 21: {}}
+        gene_mapp, gene_mapp_2bins, feature_mapp = gene_mappability(test_mappability_data, test_gene_infile, 2)
+        assert gene_mapp == {'gene1_plus':0, 'gene2_minus':0}
+        assert gene_mapp_2bins == {'gene1_plus':[0,0], 'gene2_minus':[0,0]}
+        assert feature_mapp == {'CDS':0, 'five_prime_UTR':0, 'three_prime_UTR':0, 'intron':0, 'gene':0, 'intergenic':0, 'all':0}
+        # test 2: some realistic mappable positions
+        test_mappability_data = _____
+        gene_mapp, gene_mapp_2bins, feature_mapp = gene_mappability(test_mappability_data, test_gene_infile, 2)
+        print gene_mapp
+        print gene_mapp_2bins
+        print feature_mapp
+        # TODO implement!
+        # MAYBE-TODO add tests of the help functions?
+        # MAYBE-TODO add tests for unusual cases?
         
     # LATER-TODO add unit-tests for other stuff!
 

@@ -1,0 +1,14 @@
+##gff-version 3
+
+chrA	test	gene	101	700	.	+	.	ID=gene1_plus;Name=gene1_plus;
+chrA	test	mRNA	101	700	.	+	.	ID=PAC:gene1_mRNA;Name=gene1.t1.2;pacid=gene1_mRNA;Parent=gene1_plus;
+chrA	test	five_prime_UTR	101	200	.	+	.	ID=PAC:gene1_mRNA.five_prime_UTR.1;Parent=PAC:gene1_mRNA;pacid=gene1_mRNA;
+chrA	test	CDS	201	300	.	+	0	ID=PAC:gene1_mRNA.CDS.1;Parent=PAC:gene1_mRNA;pacid=gene1_mRNA;
+chrA	test	CDS	401	600	.	+	1	ID=PAC:gene1_mRNA.CDS.2;Parent=PAC:gene1_mRNA;pacid=gene1_mRNA;
+chrA	test	three_prime_UTR	601	700	.	+	.	ID=PAC:gene1_mRNA.three_prime_UTR.1;Parent=PAC:gene1_mRNA;pacid=gene1_mRNA;
+
+chrA	test	gene	1101	1700	.	-	.	ID=gene2_minus;Name=gene2_minus;
+chrA	test	mRNA	1101	1700	.	-	.	ID=PAC:gene2_mRNA;Name=gene2.t1.2;pacid=gene2_mRNA;Parent=gene2_minus;
+chrA	test	CDS	1501	1700	.	-	1	ID=PAC:gene2_mRNA.CDS.1;Parent=PAC:gene2_mRNA;pacid=gene2_mRNA;
+chrA	test	CDS	1301	1400	.	-	1	ID=PAC:gene2_mRNA.CDS.2;Parent=PAC:gene2_mRNA;pacid=gene2_mRNA;
+chrA	test	CDS	1101	1200	.	-	1	ID=PAC:gene2_mRNA.CDS.3;Parent=PAC:gene2_mRNA;pacid=gene2_mRNA;
