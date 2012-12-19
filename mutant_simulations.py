@@ -249,8 +249,8 @@ def genome_mappable_insertion_sites_multi(flanking_region_lengths=[20,21], mappa
     return full_mappable_position_data
 
 
-Gene = collections.namedtuple('Gene', 'record name start end feature_iter')
-Feature = collections.namedtuple('Feature', 'name start end')
+Gene = collections.namedtuple('Gene', 'record name start end strand feature_iter')
+Feature = collections.namedtuple('Feature', 'type start end')
 
 def _next_feature(feature_iterator, curr_pos):
     """ Return the first feature in feature_iterator that ends after curr_pos, or None if there aren't any. 
@@ -282,7 +282,7 @@ def _next_gene(gene_iterator, curr_pos, gene_mappable_lengths, gene_mappable_len
         gene_mappable_lengths_binned[gene_name] = [0 for _ in range(N_bins)]
     # now create the final gene record, including a feature iterator
     assert len(gene_record.sub_features) == 1, "Gene %s has 0 or more than 1 mRNAs!"%gene_name
-    features = sorted([Feature(feature.id, *gff_examine_file.get_feature_start_end(feature)) 
+    features = sorted([Feature(feature.type, *gff_examine_file.get_feature_start_end(feature)) 
                        for feature in gene_record.sub_features[0].sub_features], key=lambda feature: feature.start)
     # make sure the feature positions are sane (MAYBE-TODO is this really necessary? Probably slows things down...)
     assert features[0].start >= gene_start, "In %s first feature starts before gene start!"%gene_name
@@ -290,13 +290,18 @@ def _next_gene(gene_iterator, curr_pos, gene_mappable_lengths, gene_mappable_len
     for feature1,feature2 in zip(features, features[1:]):
         assert feature1.end < feature2.start, "Overlapping features in %s!"%gene_name
     feature_iterator = iter(features)
-    gene = Gene(gene_record, gene_name, gene_start, gene_end, feature_iterator)
+    gene_strand = gff_examine_file.GFF_strands[gene_record.strand]
+    gene = Gene(gene_record, gene_name, gene_start, gene_end, gene_strand, feature_iterator)
     feature = _next_feature(feature_iterator, curr_pos)
     return gene, feature
 
-def _save_gene_bin_mappability(mappable_positions, gene_start, gene_end, gene_name, gene_mappable_lengths_binned, N_bins):
+def _save_gene_bin_mappability(mappable_positions, gene, gene_mappable_lengths_binned, N_bins):
     """ Divide mappable_positions list into N bins, save bin counts in gene_mappable_lengths_binned[gene_name]. """
-    gene_mappable_lengths_binned[gene_name] = numpy.histogram(mappable_positions, bins=N_bins, range=(gene_start,gene_end))[0] 
+    mappable_lengths_binned = list(numpy.histogram(mappable_positions, bins=N_bins, range=(gene.start,gene.end))[0])
+    # if the gene is -strand, the order of the bins should just be reversed
+    if gene.strand == '-': 
+        mappable_lengths_binned.reverse()
+    gene_mappable_lengths_binned[gene.name] = mappable_lengths_binned
 
 
 def gene_mappability(mappability_by_flanking_region, genefile=mutant_utilities.DEFAULT_GENE_POS_FILE, split_into_bins=20):
@@ -323,8 +328,8 @@ def gene_mappability(mappability_by_flanking_region, genefile=mutant_utilities.D
     #   but just using their at-call-time values as if they were globals (which they are), as far as I can tell.
     next_gene = lambda (curr_pos): _next_gene(genes_by_start_pos, curr_pos, gene_mappable_lengths, 
                                               gene_mappable_lengths_binned, split_into_bins)
-    save_gene_binned_mappability = lambda: _save_gene_bin_mappability(curr_gene_mappable_positions, curr_gene.start, curr_gene.end, 
-                                                                      curr_gene.name, gene_mappable_lengths_binned, split_into_bins)
+    save_gene_binned_mappability = lambda: _save_gene_bin_mappability(curr_gene_mappable_positions, curr_gene, 
+                                                                      gene_mappable_lengths_binned, split_into_bins)
     # go over the gff genefile by chromosome
     # MAYBE-TODO this currently mixes GFF parsing and getting the mappability data - would it be better to separate them?
     #  I could write a gff_examine_file.py function to get the positions of all the features, 
@@ -375,16 +380,16 @@ def gene_mappability(mappability_by_flanking_region, genefile=mutant_utilities.D
                 # if the position is BEFORE the start of the current gene, just go on to the next position
                 if curr_mapp_pos < curr_gene.start:   continue
                 # if the position is inside the gene, add it to the mappability counts by gene/bin/feature
-                if curr_gene.start < curr_mapp_pos < curr_gene.end:
+                if curr_gene.start <= curr_mapp_pos <= curr_gene.end:
                     gene_mappable_lengths[curr_gene.name] += 1
                     curr_gene_mappable_positions.append(curr_mapp_pos)
                     ### iterate over features and positions in parallel - similar to genes:
-                    if curr_map_pos > curr_feature.end:
+                    if curr_mapp_pos > curr_feature.end:
                         curr_feature = _next_feature(curr_gene.feature_iter, curr_mapp_pos)
                     if curr_feature is None or curr_mapp_pos < curr_feature.start:
                         continue
-                    if curr_feature.start < curr_mapp_pos < curr_feature.end:
-                        feature_total_mappable_lengths[curr_feature.name] += 1
+                    if curr_feature.start <= curr_mapp_pos <= curr_feature.end:
+                        feature_total_mappable_lengths[curr_feature.type] += 1
             # save the last gene binned mappability data!
             save_gene_binned_mappability()
 
@@ -404,11 +409,12 @@ def gene_mappability(mappability_by_flanking_region, genefile=mutant_utilities.D
     #    the maximum is 2N times the gene length (one per strand and flanking region length). 
     #  So divide all the values by 2N to get the actual mappability in the same units as real length.
     max_mappable_per_base = 2 * len(mappability_by_flanking_region)
-    gene_mappable_lengths = {gene: mapp_len/max_mappable_per_base for (gene, mapp_len) in gene_mappable_lengths.iteritems()}
-    gene_mappable_lengths_binned = {gene: [mapp_len/max_mappable_per_base for mapp_len in mapp_len_list] 
-                                    for (gene, mapp_len_list) in gene_mappable_lengths_binned.iteritems()}
-    feature_total_mappable_lengths = {feature: mapp_len/max_mappable_per_base 
-                                      for (feature, mapp_len) in feature_total_mappable_lengths.iteritems()}
+    if max_mappable_per_base>0:
+        gene_mappable_lengths = {gene: mapp_len/max_mappable_per_base for (gene, mapp_len) in gene_mappable_lengths.iteritems()}
+        gene_mappable_lengths_binned = {gene: [mapp_len/max_mappable_per_base for mapp_len in mapp_len_list] 
+                                        for (gene, mapp_len_list) in gene_mappable_lengths_binned.iteritems()}
+        feature_total_mappable_lengths = {feature: mapp_len/max_mappable_per_base 
+                                          for (feature, mapp_len) in feature_total_mappable_lengths.iteritems()}
     return gene_mappable_lengths, gene_mappable_lengths_binned, feature_total_mappable_lengths
 
 
@@ -651,9 +657,12 @@ def simulate_dataset_from_mappability(N_mutants, fraction_20bp, mappable_positio
     return simulated_positions
     # TODO how would I test this sensibly??  Complicated... But I did run it, visualize the results, and compare to a real dataset, and it looked all right.  (../1211_positions_Ru-screen1-for-paper/positions_over_chromosomes/*simulated*)
 
+# TODO write a function that uses the gene mappable lengths from gene_mappability to DIRECTLY simulate the genes for a dataset, instead of simulating locations with simulate_dataset_from_mappability and finding genes for them with find_genes_for_simulated - should be much faster!!
+
 
 ### simulate dataset with N randomly positioned mutants, matching the gap-size distribution of the real dataset, and taking into account mappable/unmappable positions
-# LATER-TODO
+# MAYBE-TODO - is this even a useful idea?  It won't match the real hot/coldspot locations...
+
 # MAYBE-TODO would it be possible to also match the real hotspots and coldspots of the real dataset?
 
 
@@ -905,21 +914,48 @@ class Testing(unittest.TestCase):
 
     def test__gene_mappability(self):
         test_gene_infile = 'test_data/INPUT_gene-data-2_simple.gff3'
-        # test 1: no mappable positions - zero mappability
-        test_mappability_data = {20: {}, 21: {}}
-        gene_mapp, gene_mapp_2bins, feature_mapp = gene_mappability(test_mappability_data, test_gene_infile, 2)
-        assert gene_mapp == {'gene1_plus':0, 'gene2_minus':0}
-        assert gene_mapp_2bins == {'gene1_plus':[0,0], 'gene2_minus':[0,0]}
-        assert feature_mapp == {'CDS':0, 'five_prime_UTR':0, 'three_prime_UTR':0, 'intron':0, 'gene':0, 'intergenic':0, 'all':0}
-        # test 2: some realistic mappable positions
-        test_mappability_data = _____
-        gene_mapp, gene_mapp_2bins, feature_mapp = gene_mappability(test_mappability_data, test_gene_infile, 2)
-        print gene_mapp
-        print gene_mapp_2bins
-        print feature_mapp
-        # TODO implement!
-        # MAYBE-TODO add tests of the help functions?
-        # MAYBE-TODO add tests for unusual cases?
+        ### test 1: no mappable positions - zero mappability
+        for no_mappability_val in [{}, {'chrA':[]}, {'chrB':[]}, {('chrA','+'):[], ('chrA','-'):[]}]:
+            for test_mappability_data in [{}, {10:no_mappability_val}, {20: no_mappability_val, 21: no_mappability_val}]:
+                gene_mapp, gene_mapp_2bins, feature_mapp = gene_mappability(test_mappability_data, test_gene_infile, 2)
+                assert gene_mapp == {'gene1_plus':0, 'gene2_minus':0}
+                assert gene_mapp_2bins == {'gene1_plus':[0,0], 'gene2_minus':[0,0]}
+                assert feature_mapp == {'CDS':0, 'five_prime_UTR':0, 'three_prime_UTR':0, 
+                                        'intron':0, 'gene':0, 'intergenic':0, 'all':0}
+        ### test 2: intergenic mappable positions only (for simplicity); testing mappability multiplier and strandedness.
+        #  If we have mappability on a DIFFERENT chromosome that has no genes on it, 
+        #   we get non-zero intergenic/all feature mappability values.
+        #  Tests that the mappability multiplier is correct: with one flanking region length and 4 mappable positions, 
+        #   the mappability is 2; with two lengths with 4 positions each, still 2; with one length with none and one with 4, 1.
+        #   Tests whether it works for both stranded and non-stranded data, too.
+        for (mapp_count, test_mappability_data ) in [(2,   {10: {'chrB':[1,2,3,4]} }), 
+                                                     (2,   {10: {'chrB':[1,1,2,2]} }), 
+                                                     (2,   {10: {('chrB','+'):[1,2], ('chrB','-'):[1,2]} }), 
+                                                     (1,   {10: {('chrB','+'):[1,2], ('chrB','-'):[]} }), 
+                                                     (2,   {10: {'chrB':[1,2,3,4]},   11: {'chrB':[1,2,3,4]} }), 
+                                                     (1,   {10: {'chrB':[1,2,3,4]},   11: {'chrB':[]} }),
+                                                     (1,   {10: {'chrB':[1,2]},   11: {'chrB':[1,2]} }),
+                                                     (1,   {10: {'chrB':[1,2]},   11: {'chrB':[100,200]} }),
+                                                     (0.5, {10: {'chrB':[1,2]},       11: {'chrB':[]} })]:
+            gene_mapp, gene_mapp_2bins, feature_mapp = gene_mappability(test_mappability_data, test_gene_infile, 2)
+            assert (gene_mapp, gene_mapp_2bins) == ({'gene1_plus':0, 'gene2_minus':0}, {'gene1_plus':[0,0], 'gene2_minus':[0,0]})
+            assert feature_mapp == {'CDS':0, 'five_prime_UTR':0, 'three_prime_UTR':0, 'intron':0, 'gene':0, 
+                                    'intergenic':mapp_count, 'all':mapp_count}
+        ### test 3: some realistic mappable positions (some gene, some intergenic; remember gene2 is -strand!)
+        # help function to auto-make mappability_data: assume flank-length and chromosome; use every position twice, once per strand
+        _make_mapp_data = lambda mappability_val: {10: {'chrA': sorted(mappability_val*2)}}
+        # test 3a: mappable positions in the middles of various features and intergenic
+        gene_mapp, gene_mapp_2bins, feature_mapp = gene_mappability(_make_mapp_data([150,250,251, 1000, 1150,1250, 2000]), 
+                                                                    test_gene_infile, 2)
+        assert (gene_mapp,gene_mapp_2bins) == ({'gene1_plus':3, 'gene2_minus':2}, {'gene1_plus':[3,0], 'gene2_minus':[0,2]})
+        assert feature_mapp == {'CDS':3, 'five_prime_UTR':1, 'three_prime_UTR':0, 'intron':1, 'gene':5, 'intergenic':2, 'all':7}
+        # test 3b: checking edges - mappable positions right at the edge of intron/feature/intergenic
+        gene_mapp, gene_mapp_2bins, feature_mapp = gene_mappability(_make_mapp_data([400,401, 600,601, 700,701, 
+                                                                                     1100,1101, 1200,1201]), test_gene_infile, 2)
+        assert (gene_mapp,gene_mapp_2bins) == ({'gene1_plus':5, 'gene2_minus':3}, {'gene1_plus':[1,4], 'gene2_minus':[0,3]})
+        assert feature_mapp == {'CDS':4, 'five_prime_UTR':0, 'three_prime_UTR':2, 'intron':2, 'gene':8, 'intergenic':2, 'all':10}
+        # MAYBE-TODO add separate tests of the help functions?
+        # MAYBE-TODO add tests for error/weird cases? overlapping features, 0-length stuff, etc...
         
     # LATER-TODO add unit-tests for other stuff!
 
