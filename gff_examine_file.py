@@ -237,7 +237,7 @@ class Testing_(unittest.TestCase):
     """ Unit-tests for some of the additional functions not used in main (main has a run-test, that's enough). """
 
     def test__gene_lengths(self):
-        output = gene_lengths('test_data/INPUT_gene-data.gff3')
+        output = gene_lengths('test_data/INPUT_gene-data-1_all-cases.gff3')
         assert len(output) == 28
         assert output['test.geneA0_proper_plus'] == output['test.geneA1_proper_minus'] == 700
         assert output['test.geneB5_only_exon'] == 100
@@ -250,7 +250,7 @@ def do_test_run():
     """ Test run: run script on test infile, compare output to reference file."""
     test_folder = "test_data"
 
-    infile = "test_data/INPUT_gene-data.gff3"
+    infile = "test_data/INPUT_gene-data-1_all-cases.gff3"
     tests = [("gff-ex__gene-data-analysis", "-E -n -1 %s"%infile)]
 
     parser = define_option_parser()

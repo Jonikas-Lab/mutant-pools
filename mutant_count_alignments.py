@@ -32,7 +32,7 @@ def do_test_run():
     aln_infile1 = "test_data/INPUT_alignment1_genomic-unique.sam"
     aln_infile2 = "test_data/INPUT_alignment2_for-genes.sam"
     aln_infile3 = "test_data/INPUT_alignment3_for-merging.sam"
-    gff_genefile = "test_data/INPUT_gene-data.gff3"
+    gff_genefile = "test_data/INPUT_gene-data-1_all-cases.gff3"
     dataset_to_remove = "test_data/INPUT_mutants_to_remove.txt"
 
     test_runs = [
