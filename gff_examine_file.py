@@ -139,6 +139,19 @@ def get_feature_start_end(feature_record):
     """
     return (feature_record.location.start.position+1, feature_record.location.end.position)
 
+def get_gene_start_end_excluding_UTRs(gene_record):
+    """ Get the start of the first CDS feature and the end of the last one, (as numbers, 1-based, end-inclusive).
+
+    If gene has no mRNAs or more than one, just return None.
+
+    BCBio uses 0-based end-exclusive positions, so the first two bases are 0-2; this uses 1-based end-inclusive, so they're 1-2.
+    """
+    if len(gene_record.sub_features) != 1:  return None
+    features = gene_record.sub_features[0].sub_features
+    CDS_positions = [get_feature_start_end(feature) for feature in features if feature.type=='CDS']
+    CDS_starts, CDS_ends = zip(*CDS_positions)
+    return min(CDS_starts), max(CDS_ends)
+
 
 def gene_positions(genefile, include_chromosome=True, include_strand=True, coding_only=False, ignore_strange_cases=False):
     """ Return a gene_ID:(chromosome, strand, start_pos, end_pos) dictionary based on GFF input file. 
@@ -164,27 +177,25 @@ def gene_positions(genefile, include_chromosome=True, include_strand=True, codin
                 if not coding_only:
                     full_pos_info += get_feature_start_end(gene_record)
                 else:
-                    if len(gene_record.sub_features) != 1:
+                    start_end = get_gene_start_end_excluding_UTRs(gene_record)
+                    if start_end is None:
                         if ignore_strange_cases:    continue
                         else:                       raise Exception("Gene %s has 0 or more than 1 mRNAs!"%gene_record.id)
-                    features = gene_record.sub_features[0].sub_features
-                    CDS_positions = [get_feature_start_end(feature) for feature in features if feature.type=='CDS']
-                    CDS_starts, CDS_ends = zip(*CDS_positions)
-                    full_pos_info += (min(CDS_starts), max(CDS_ends))
+                    full_pos_info += start_end
                 gene_positions[gene_record.id] = full_pos_info
     return gene_positions
 
 
-def gene_lengths(genefile, coding_only=False, ignore_strange_cases=False):
+def gene_lengths(genefile, exclude_UTRs=False, ignore_strange_cases=False):
     """ Return a gene_ID:gene_length dictionary based on GFF input file (full or coding length). 
 
-    If coding_only is True, the length is counted from first to last coding exon (excluding UTRs). 
+    If exclude_UTRs is True, the length is counted from first to last coding exon (excluding UTRs). 
      In that case, if  a gene doesn't have an mRNA with exons, or has multiple mRNAs, raise an Exception, 
       unless ignore_strange_cases is True, then just don't include it in the output.
     """
     gene_lengths = {}
     for gene_ID, (start_pos, end_pos) in gene_positions(genefile, include_chromosome=False, include_strand=False, 
-                                                coding_only=coding_only, ignore_strange_cases=ignore_strange_cases).iteritems():
+                                                coding_only=exclude_UTRs, ignore_strange_cases=ignore_strange_cases).iteritems():
         # gene_positions returns 1-based end-inclusive positions, so add 1 to get length (since a 1bp gene is 1-1)
         gene_lengths[gene_ID] = end_pos - start_pos + 1
     return gene_lengths
