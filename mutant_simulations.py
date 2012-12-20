@@ -304,12 +304,15 @@ def _save_gene_bin_mappability(mappable_positions, gene, gene_mappable_lengths_b
     gene_mappable_lengths_binned[gene.name] = mappable_lengths_binned
 
 
-def gene_mappability(mappability_by_flanking_region, genefile=mutant_utilities.DEFAULT_GENE_POS_FILE, split_into_bins=20):
+def gene_mappability(mappability_by_flanking_region, genefile=mutant_utilities.DEFAULT_GENE_POS_FILE, split_into_bins=20, 
+                     exclude_UTRs_in_bins=False):
     """ Calculate mappable gene lengths (total and binned by length) and overall mappable lengths of different gene features.
 
     Three outputs: 
         1) a gene_name:total_mappable_length dict
-        2) a gene_name:list_of_mappable_lengths_by_bin dict
+        2) a gene_name:list_of_mappable_lengths_by_bin dict - divide the gene length into N equal bins, give their mappable lengths.
+            Normally the full mRNA length is binned; if exclude_UTRs_in_bins is True, the region binned will be only
+             from the start of the first CDS feature to the end of the last CDS feature.
         3) a seq_type:total_mappable_length dict, with seq_type each of 
                 CDS/intron/5'UTR/3'UTR/gene/intergenic (same keys as in gff_examine_file.feature_total_lengths output)
     (all these things are done in parallel instead of by separate functions because it's faster that way, if not very clean)
@@ -319,6 +322,7 @@ def gene_mappability(mappability_by_flanking_region, genefile=mutant_utilities.D
     The mappable lengths correspond to real lengths (will be equal to real lengths if all positions are mappable), 
      but can be fractions if some position is mappable only for some flanking region lengths or strands.
     """
+    # TODO implement exclude_UTRs_in_bins!
     if not split_into_bins > 1:  raise Exception("split_into_bins must be >1!")
     gene_mappable_lengths = {}
     gene_mappable_lengths_binned = {}
@@ -345,32 +349,20 @@ def gene_mappability(mappability_by_flanking_region, genefile=mutant_utilities.D
             chromosome_mappable_positions = []
             for mappability_dict in mappability_by_flanking_region.values():
                 # convert the values to lists instead of numpy arrays (MAYBE-TODO this takes more memory, but it's easier...)
-                # using dict.get to return an empty list if that chromosome/strand isn't in the dict
-                if '+' in str(mappability_dict.keys()):
+                try:    
+                    chromosome_mappable_positions += list(mappability_dict[chromosome])
+                # using dict.get to return an empty list if that chromosome/strand isn't in the dict at all
+                except KeyError:
                     chromosome_mappable_positions += list(mappability_dict.get((chromosome, '+'), []))
                     chromosome_mappable_positions += list(mappability_dict.get((chromosome, '-'), []))
-                else:
-                    chromosome_mappable_positions += list(mappability_dict.get(chromosome, []))
-                # MAYBE-TODO get separate sense/antisense mappable lengths? But it can't be much different, since only the 20-21bp on gene/feature edges could make a difference.
-            chromosome_mappable_positions = iter(sorted(chromosome_mappable_positions))
-            ### go over all genes and mappable positions concurrently, adding mappable length to all the output values
+            # MAYBE-TODO get separate sense/antisense mappable lengths? But it can't be much different, 
+            #  since only the 20-21bp on gene/feature edges could make a difference - probably not worth it.
+            ### go over mappable positions concurrently, iterating over all genes/features by hand in parallel, 
+            #    adding mappable length to all the output values
             # start the first gene
             curr_gene, curr_feature = next_gene(curr_pos=1)
             curr_gene_mappable_positions = []
-            # TODO this could be rewritten as a "for curr_mapp_pos in chromosome_mappable_positions" loop!
-            while True:
-                # try to get the next mappable position:
-                try: curr_mapp_pos = chromosome_mappable_positions.next()
-                ### if there are no more mappable positions, all remaining genes should get a 0 mappable length (full and binned)
-                except StopIteration:   
-                    # save the current gene binned mappability data, since we're done with it
-                    save_gene_binned_mappability()
-                    # skip all the next genes (by using None as the current mappable position)
-                    try:                    curr_gene, curr_feature = next_gene(curr_pos=None)
-                    except StopIteration:   pass
-                    # once done with all the genes, break the outer "while True" loop and go on to the next chromosome
-                    break
-                ### if there WASN'T a StopIteration, go on to the current mappable position:
+            for curr_mapp_pos in sorted(chromosome_mappable_positions):
                 # if the position is past the end of the gene, go on to the next gene (and the next etc if needed)
                 #  (if there are no more genes, break out of the "while True" loop and go on to the next chromosome)
                 if curr_mapp_pos > curr_gene.end:
@@ -393,8 +385,12 @@ def gene_mappability(mappability_by_flanking_region, genefile=mutant_utilities.D
                         continue
                     if curr_feature.start <= curr_mapp_pos <= curr_feature.end:
                         feature_total_mappable_lengths[curr_feature.type] += 1
-            # save the last gene binned mappability data!
+            ### if there are no more mappable positions, all remaining genes should get a 0 mappable length (full and binned)
+            # save the current gene binned mappability data, since we're done with it
             save_gene_binned_mappability()
+            # skip all the next genes (by using None as the current mappable position)
+            try:                    curr_gene, curr_feature = next_gene(curr_pos=None)
+            except StopIteration:   pass
 
     # add 'gene', 'intron', 'intergenic' and 'all' categories to feature_total_mappable_lengths, calculating from existing data
     feature_total_mappable_lengths['all'] = sum( sum( len(chrom_mappable_positions) 
