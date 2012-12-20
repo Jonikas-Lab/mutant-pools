@@ -344,17 +344,20 @@ def gene_mappability(mappability_by_flanking_region, genefile=mutant_utilities.D
             # make a single list of mappable positions, collapsing all flanking region lengths and strands together
             chromosome_mappable_positions = []
             for mappability_dict in mappability_by_flanking_region.values():
+                # convert the values to lists instead of numpy arrays (MAYBE-TODO this takes more memory, but it's easier...)
                 # using dict.get to return an empty list if that chromosome/strand isn't in the dict
                 if '+' in str(mappability_dict.keys()):
-                    chromosome_mappable_positions += mappability_dict.get((chromosome, '+'), [])
-                    chromosome_mappable_positions += mappability_dict.get((chromosome, '-'), [])
+                    chromosome_mappable_positions += list(mappability_dict.get((chromosome, '+'), []))
+                    chromosome_mappable_positions += list(mappability_dict.get((chromosome, '-'), []))
                 else:
-                    chromosome_mappable_positions += mappability_dict.get(chromosome, [])
+                    chromosome_mappable_positions += list(mappability_dict.get(chromosome, []))
+                # MAYBE-TODO get separate sense/antisense mappable lengths? But it can't be much different, since only the 20-21bp on gene/feature edges could make a difference.
             chromosome_mappable_positions = iter(sorted(chromosome_mappable_positions))
             ### go over all genes and mappable positions concurrently, adding mappable length to all the output values
             # start the first gene
             curr_gene, curr_feature = next_gene(curr_pos=1)
             curr_gene_mappable_positions = []
+            # TODO this could be rewritten as a "for curr_mapp_pos in chromosome_mappable_positions" loop!
             while True:
                 # try to get the next mappable position:
                 try: curr_mapp_pos = chromosome_mappable_positions.next()
