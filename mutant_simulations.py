@@ -334,6 +334,7 @@ def gene_mappability(mappability_by_flanking_region, genefile=mutant_utilities.D
     # MAYBE-TODO this currently mixes GFF parsing and getting the mappability data - would it be better to separate them?
     #  I could write a gff_examine_file.py function to get the positions of all the features, 
     #   but dealing with that would probably be more complicated than just doing it the current way...
+    # TODO what about chromosomes that aren't in GENEFILE at all??  Those need to be taken into account too! FIX THAT!
     with open(os.path.expanduser(genefile)) as GENEFILE:
         for chromosome_record in gff_examine_file.GFF.parse(GENEFILE):
             chromosome = chromosome_record.id
@@ -414,8 +415,8 @@ def gene_mappability(mappability_by_flanking_region, genefile=mutant_utilities.D
         feature_total_mappable_lengths = {feature: mapp_len/max_mappable_per_base 
                                           for (feature, mapp_len) in feature_total_mappable_lengths.iteritems()}
     return gene_mappable_lengths, gene_mappable_lengths_binned, feature_total_mappable_lengths
-    # MAYBE-TODO really all this mappability isn't quite right, because I'm giving equal weight to 20bp an 21bp flanking regions,
-    #  but in reality more mutants have 21bp ones... Fix that?  Unlikely to be a large difference though.
+    # TODO really all this mappability isn't quite right, because I'm giving equal weight to 20bp an 21bp flanking regions,
+    #  but in reality more mutants have 21bp ones... Fix that!
 
 
 ############################# Using mappability to finding hotspots/coldspots in real data #############################
@@ -589,17 +590,35 @@ def get_hot_cold_spot_list(pvalue_data_window_size_offset_dict, side_data_window
 
 ###### help functions
 
-def weighted_random_choice(value_weight_list):
-    """ Given a list of (value, weight) tuples, pick a random value, with probability=weight for each value. """
-    # also see http://eli.thegreenplace.net/2010/01/22/weighted-random-generation-in-python/ - using weighted_choice_sub
-    #  MAYBE-TODO make this faster by using the WeightedRandomGenerator class from the same site?
-    #  also see http://docs.python.org/3/library/random.html - similar, but for python3 only, (2.7 is missing itertools.accumulate)
-    values, weights = zip(*value_weight_list)
-    rnd = random.random() * sum(weights)
+
+### Two weighted_random_choice_* fuctions instead of one with an option, so that they're both as fast as possible!
+#  see http://eli.thegreenplace.net/2010/01/22/weighted-random-generation-in-python/ - using weighted_choice_sub
+#  MAYBE-TODO make this faster by using the WeightedRandomGenerator class from the same site?
+#  also see http://docs.python.org/3/library/random.html - similar, but for python3 only, (2.7 is missing itertools.accumulate)
+
+def weighted_random_choice_single(values, weights, sum_of_weights=None):
+    """ Given a list of values and weights, pick a random value, with probability=weight for each value. """
+    if sum_of_weights is None:
+        sum_of_weights = sum(weights)
+    rnd = random.random() * sum_of_weights 
     for i, w in enumerate(weights):
         rnd -= w
         if rnd < 0:
             return values[i]
+    # LATER-TODO move this to general_utilities?
+
+def weighted_random_choice_multi(values, weights, N=10):
+    """ Given a list of values and weights, pick N random values, with probability=weight for each value.  """
+    sum_of_weights = sum(weights)
+    results = []
+    for _ in range(N):
+        rnd = random.random() * sum_of_weights 
+        for i, w in enumerate(weights):
+            rnd -= w
+            if rnd < 0:
+                results.append(values[i])
+                continue
+    return results
     # LATER-TODO move this to general_utilities?
 
 
@@ -645,7 +664,7 @@ def simulate_dataset_from_mappability(N_mutants, fraction_20bp, mappable_positio
         else:                                      strand = '-'
         # next choose a chromosome, with a probability corresponding to the mappable length of each chromosome
         #  (given the flank_length and the strand)
-        chrom = weighted_random_choice(chrom_mappable_len[(flank_length,strand)])
+        chrom = weighted_random_choice_single(*zip(*chrom_mappable_len[(flank_length,strand)]))
         # next choose a position from the list of mappable positions on the chromosome
         pos = random.choice(mappable_position_data[flank_length][(chrom,strand)])
         # save the data
@@ -657,7 +676,31 @@ def simulate_dataset_from_mappability(N_mutants, fraction_20bp, mappable_positio
     return simulated_positions
     # TODO how would I test this sensibly??  Complicated... But I did run it, visualize the results, and compare to a real dataset, and it looked all right.  (../1211_positions_Ru-screen1-for-paper/positions_over_chromosomes/*simulated*)
 
-# TODO write a function that uses the gene mappable lengths from gene_mappability to DIRECTLY simulate the genes for a dataset, instead of simulating locations with simulate_dataset_from_mappability and finding genes for them with find_genes_for_simulated - should be much faster!!
+
+def simulate_genelist_from_mappability(N_mutants, gene_mappable_lengths, intergenic_mappable_length):
+    """ Return gene list from simulating inserting N mutants into the genome randomly, based on gene/intergenic mappable lengths.
+    
+    Gene_mappable_lengths should be a gene:mappable_length dict; intergenic_mappable_length should be a number.
+    They will be used as weights in a weighted random choice for each new mutant insertion (so the probability of each mutant
+     ending up in a gene or intergenic region will be proportional to the gene/intergenic mappable lengths).
+
+    Output will be just a list of the gene names for each simulated mutant.
+     output will include duplicates, i.e. if there are two mutants in a gene, the gene will show up twice on the list; 
+     for intergenic mutants, mutant_analysis_classes.SPECIAL_GENE_CODES.not_found will be used; 
+     output will be in no particular order;  output can be used as input to gene_counts_for_mutant_subsets.
+    Note: the output should be the same as from running simulate_dataset_from_mappability and then find_genes_for_simulated, 
+     but should be a lot faster.
+    """
+    # make gene ID and length lists to use as weighted_random_choice_multi arguments; also pre-calculate sum_of_lengths
+    #  (it'll be faster to do this rather than redo the zip/sum/etc for each N)
+    #  (and I think prepending instead of appending the intergenic regions will make it faster, since more cases will stop early)
+    gene_IDs, mapp_lengths = zip(*gene_mappable_lengths.items())
+    gene_IDs = (mutant_analysis_classes.SPECIAL_GENE_CODES.not_found,) + gene_IDs
+    mapp_lengths = (intergenic_mappable_length,) + mapp_lengths
+    # use simple weighed random choice to choose a gene N times
+    simulated_genelist = weighted_random_choice_multi(gene_IDs, mapp_lengths, N_mutants)
+    return simulated_genelist
+    # TODO unit-test!
 
 
 ### simulate dataset with N randomly positioned mutants, matching the gap-size distribution of the real dataset, and taking into account mappable/unmappable positions
