@@ -775,16 +775,12 @@ def find_genes_for_simulated(sim_dataset, genefile=mutant_utilities.DEFAULT_GENE
 
 ### number of genes with 1+/2+/etc mutants vs number of mutants (randomly chosen mutant subsets)
    
-def gene_counts_for_mutant_subsets(dataset, max_N_mutants=3, step_size=100, single_subset_size=None):
+def gene_counts_for_mutant_subsets(dataset, subset_sizes, max_N_mutants=3):
     """ Return numbers of genes with N mutants for different-sized random subsets of dataset, or a single subset size.
 
     Return an N:list_of_gene_numbers dictionary, where N is each value between 1 and max_N_mutants, 
      and list_of_gene_numbers contains the number of genes with at least N mutants 
-      in randomly chosen subsets of dataset, of sizes starting at 0 and going up to the full dataset size in step_size steps.
-     (So if dataset contains 200 mutants, and step_size is 100, each list will have 3 values, for 0, 100 and 200 mutants.)
-     (Note that the last value is not for the full dataset size, but for the closest lower number divisible by step_size.)
-    If single_subset_size is not None, ignore step_size, and just return an N:gene_number dictionary 
-     for a randomly chosen subset of size single_subset_size.
+      in randomly chosen subsets of dataset, of sizes given by subset_sizes (a sorted list).
 
     Dataset should be a mutant_analysis_classes.Insertional_mutant_pool_dataset instance, 
       or a list of mutants (mutant_analysis_classes.Insertional_mutant instances), 
@@ -793,16 +789,10 @@ def gene_counts_for_mutant_subsets(dataset, max_N_mutants=3, step_size=100, sing
     # if dataset is a list of mutant objects or a full mutant dataset object, extract just the gene list
     try:                        genes = [mutant.gene for mutant in dataset]
     except AttributeError:      genes = dataset
-    # get subset_sizes list based on either single_subset_size or step_size
-    if single_subset_size is not None:
-        subset_sizes = [single_subset_size]
-        step_size = 0
-    else:
-        subset_sizes = range(0, len(genes), step_size)
-    if step_size > len(dataset) or single_subset_size > len(dataset):
-        raise ValueError("step_size and single_subset_size can't be greater than dataset size!")
+    subset_sizes.sort()
+    subset_sizes = [x for x in subset_sizes if x <= len(dataset)]
     # only shuffle the dataset if we're not going to be using the full one anyway
-    if not step_size == len(dataset) or single_subset_size == len(dataset):
+    if not subset_sizes == [len(dataset)]:
         random.shuffle(genes)
     mutantN_to_gene_count = collections.defaultdict(list)
     for subset_size in subset_sizes:
