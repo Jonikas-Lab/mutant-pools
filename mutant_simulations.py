@@ -59,6 +59,7 @@ import gff_examine_file
     # So it's probably a good idea to pickle the output (after running genome_mappable_slices or genome_mappable_insertion_sites*), close python to release the memory (even though it'll take a LONG TIME, especially if there was swap space used), and open a new instance to unpickle the data and work on it.  
     # BUT if I pickle the output of any of those, and unpickle it in a new interactive python shell, again the output itself doesn't end up too huge (see sizes above), BUT the unpickling seems to take more memory and not release it again! Ugh. So maybe I really should convert it to bitarrays or something.  Although numpy arrays helped some. 
 
+### genome mappability by position
 
 def genome_mappable_slices(slice_len, genome_seq=None, print_info=True):
     """ Return a chrom:position_array dict giving the positions of all the unique slice_len seq slices. 
@@ -248,6 +249,8 @@ def genome_mappable_insertion_sites_multi(flanking_region_lengths=[20,21], mappa
     full_mappable_position_data = {key: numpy.array(pos_list) for (key, pos_list) in full_mappable_position_data.items()}
     return full_mappable_position_data
 
+
+### mappability data by gene
 
 Gene = collections.namedtuple('Gene', 'record name start end strand bin_start bin_end feature_iter')
 Feature = collections.namedtuple('Feature', 'type start end')
