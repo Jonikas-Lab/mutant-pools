@@ -61,8 +61,8 @@ def _get_plotline_pos(middle_pos, total_width, total_N, N):
 
 def mutant_positions_and_data(datasets=[], dataset_formats=0, density_plots=True, colors=None, names=None, maxes_per_base=None, 
                               maxes_per_bin=None, strands=None, title='', bin_size=mutant_utilities.DEFAULT_BIN_SIZE, 
-                              chromosome_lengths=None, interpolate=False, condense_colorbars=True, total_plotline_width=0.6, 
-                              include_scaffolds=False, include_cassette=False, include_other=False):
+                              chromosome_lengths=None, interpolate=False, NaN_color='0.6', total_plotline_width=0.6, 
+                              condense_colorbars=True, include_scaffolds=False, include_cassette=False, include_other=False):
     """ Plot multiple datasets (mutant,position,density) across chromosomes, as position lines or density heatmaps.
 
     Each element in datasets must match the corresponding value in dataset_formats (or the value if only one is given:
@@ -168,6 +168,7 @@ def mutant_positions_and_data(datasets=[], dataset_formats=0, density_plots=True
             if max_per_base is not None:    max_count = max_per_base*bin_size
             elif max_per_bin is not None:   max_count = max_per_bin
             else:                           max_count = real_maxcount
+            real_mincount = min([min(dataset[c]) for c in all_chromosomes if c in dataset])
 
         # plot data for each chromosome
         for chr_N,chromosome in enumerate(all_chromosomes):
@@ -188,15 +189,17 @@ def mutant_positions_and_data(datasets=[], dataset_formats=0, density_plots=True
                 #  if no data for this chromosome, no need to plot anything.
                 try:                inverted_data = numpy.array(list(reversed(dataset[chromosome])))
                 except KeyError:    continue
+                # grab the desired colormap, and set it to use NaN_color to display missing data
+                cmap = mplt.get_cmap(color)
+                cmap.set_bad(NaN_color)
                 # actually draw the heatmap image - this is tricky! Matplotlib tends to assume there's only a single heatmap.
                 #  - the reshape call is to make the densities from a 1D array into a 2D Nx1 array, for imshow to work properly
                 #  - aspect='auto' is to prevent matplotlib from reshaping the entire plot to fit the image shape
-                #  - norm=None, vmin=0, vmax=1 are to prevent matplotlib from normalizing the values to a 0-1 range!
+                #  - norm=None, vmin, vmax are to prevent matplotlib from normalizing the values to a 0-1 range!
                 #    (which would be BAD, because then each chromosome would be normalized separately, and have a different scale)
                 #  - DON'T give those a label, so that mplt.legend() will only work on line-plots - colorbars will be separate
-                im = mplt.imshow(inverted_data.reshape(-1,1), 
-                                 extent=(left_pos,right_pos,0,chromosome_length), cmap=mplt.get_cmap(color), 
-                                 aspect='auto', norm=None, vmin=0, vmax=max_count, **imshow_kwargs)
+                im = mplt.imshow(inverted_data.reshape(-1,1), extent=(left_pos,right_pos,0,chromosome_length), cmap=cmap, 
+                                 aspect='auto', norm=None, vmin=min(0,real_mincount), vmax=max_count, **imshow_kwargs)
                 # save info image to add colorbars: image, name, and if_normalized (True if max_per_base was given) 
                 if chr_N==0 and name!='':  all_heatmaps.append((im, name, (max_per_base is not None), real_maxcount))
 
@@ -232,6 +235,7 @@ def mutant_positions_and_data(datasets=[], dataset_formats=0, density_plots=True
         mplt.legend(prop=FontProperties(size='small'))
         # MAYBE-TODO nicer legend formatting?  Get rid of frame, thicker line, line up with colorbars or something?
     # if desired, figure out sensible positioning to put smaller colorbars in two rows rather than have the default big ones
+    # MAYBE-TODO add option for more than two rows?
     if condense_colorbars:
         # column sizes
         N_columns = numpy.ceil(len(all_heatmaps)/2)
@@ -271,17 +275,66 @@ def mutant_positions_and_data(datasets=[], dataset_formats=0, density_plots=True
             ticks_and_labels = []
             # c._ticker()[1] gives the tick positions
             for x in c._ticker()[1]:
-                x = float(x)
-                if x==int(x):   ticks_and_labels.append( (x, str(int(x)) ) )
-        # if real_maxcount is higher than the colorbar max, change last colorbar ticklabel to reflect that
-        # MAYBE-TODO also add a pointed end to the colorbar if that's the case, or whatever's normally used to signify truncation?
-        max_count = ticks_and_labels[-1][0]
-        if real_maxcount > max_count:
-            ticks_and_labels[-1] = (max_count, '%i-%i'%(max_count, real_maxcount))
+                # x is a unicode string to start with; replace gets around a bug where matplotlib can't render the unicode minus sign
+                x = float(x.replace(u'\u2212', '-'))
+                if x==int(x):   ticks_and_labels.append( (x, str(int(x))) )
+        # if real_maxcount is higher than the colorbar max, add colorbar ticklabel or change last ticklabel to reflect that
+        colorbar_max, highest_tick_pos = c.vmax, ticks_and_labels[-1][0]
+        if real_maxcount > colorbar_max:
+            if abs(colorbar_max - highest_tick_pos) < 1:
+                ticks_and_labels[-1] = (highest_tick_pos, '%i-%i'%(highest_tick_pos, real_maxcount))
+            else:
+                ticks_and_labels.append((int(colorbar_max), '%i-%i'%(int(colorbar_max), real_maxcount)))
+        # MAYBE-TODO also add a pointed end to the colorbar if that's the case, or whatever's normally used to signify truncation?  Using the extend arg to mplt.colorbar, so I'd have to do that up above
         c.set_ticks(zip(*ticks_and_labels)[0])
         c.set_ticklabels(zip(*ticks_and_labels)[1])
         mplt.draw()
     # TODO it'd be nice if this actually returned the main axes object... (and maybe a list of colorbar axes too?)  And the numpy.histogram results for all the datasets might be nice too!
+
+
+def correct_mutant_density_for_mappability(dataset_histogram, mappability_histogram, 
+                                           difference_not_ratio=False, mappability_fraction_NaN=0):
+    """ Given mutant density and mappability as by-chromosome histograms, return the ratio or difference.
+
+    The first two inputs should be chromosome:bin_density_list dicts, like generated by get_histogram_data_from_positions.
+    The keys and value lengths must be the same.  The output will be in the same format, with same keys and value lengths.
+
+    If difference_not_ratio is True, the return dataset will be the difference between the two (can be negative);
+    if False, it'll be the ratio of the two inputs, with NaN when mappability is below mappability_fraction_NaN.
+
+    Raise an exception if there are mutants in any zero-mappability range.
+    """
+    # complain if dataset has chromosomes that mappability doesn't; only warn otherwise
+    dataset_chroms = set(dataset_histogram.keys())
+    mappability_chroms = set(mappability_histogram.keys())
+    if not dataset_chroms.issubset(mappability_chroms):
+        raise Exception("the two inputs have different chromosomes!")
+    if not dataset_chroms==mappability_chroms:
+        print "Warning: some chromosomes present in mappability but not dataset: %s"%(', '.join(mappability_chroms - dataset_chroms))
+    corrected_dataset = {}
+    NaN = float('NaN')
+    # get multiplier to convert the mappability to the expected number of mutants, 
+    #  based on the total number of mutants in dataset divided by total mappability
+    #   (need to convert everything from arrays to lists to make a sum)
+    expected_mutants_multiplier = ( sum(general_utilities.flatten_lists(dataset_histogram)) 
+                                   / sum(general_utilities.flatten_lists(mappability_histogram)) )
+    # get the number of expected mutants that corresponds to mappability_fraction_NaN of max mappability
+    max_mappability = max(general_utilities.flatten_lists(mappability_histogram))
+    NaN_cutoff = max_mappability * mappability_fraction_NaN * expected_mutants_multiplier
+    for chromosome in dataset_histogram:
+        corrected_dataset[chromosome] = []
+        expected_mutants_chr_list = mappability_histogram[chromosome] * expected_mutants_multiplier
+        if not len(dataset_histogram[chromosome]) == len(expected_mutants_chr_list):
+            raise Exception("Mismatched lengths between the two inputs, on %s!"%chromosome)
+        for N_mutants, expected_mutants in zip(dataset_histogram[chromosome], expected_mutants_chr_list):
+            if expected_mutants==0 and N_mutants>0:
+                raise Exception("Mutants found in zero-mappability area on %s!"%chromosome)
+            if difference_not_ratio:                corrected_dataset[chromosome].append(N_mutants - expected_mutants)
+            else:
+                if expected_mutants<=NaN_cutoff:    corrected_dataset[chromosome].append(NaN)
+                else:                               corrected_dataset[chromosome].append(N_mutants / expected_mutants)
+    return corrected_dataset
+    # TODO unit-test!
 
 
 ######### Hotspot/coldspot related plots
