@@ -109,16 +109,16 @@ def define_option_parser():
     parser.add_option('-M', '--merge_adjacent_mutants', action="store_true", default=False, 
                       help="Merge adjacent mutants if they satisfy the -W/-w constraints (default %default)")
     parser.add_option('-W', '--merge_adjacent_leave_mutants', default='auto', metavar='N',
-                      help="For -M: how many mutants to leave unmerged: a number, 'auto' (based on opposite-strand "
-                          +"adjacent mutants); ignored if -w option is given. '(default %default)")
+                      help="For -M: how many mutants to leave unmerged: a number, or 'auto' (based on opposite-strand "
+                          +"adjacent mutants); ignored if -w option is given. (default %default)")
     parser.add_option('-w', '--merge_adjacent_count_ratio', type='int', default=None, metavar='K',
                       help="For -M: merge mutants only if one has at least K times fewer reads than the other (default %default)")
     parser.add_option('-Q', '--merge_opposite_tandem_mutants', action="store_true", default=False,
                       help="Merge opposite-strand same-position mutants (tail-to-tail-tandems) "
                           +"if they satisfy the -Y/-y contraints. (default %default)")
-    parser.add_option('-Y', '--merge_opposite_leave_mutants', type='int', default=1, metavar='N',
-                      help="For -Q: how many mutants to leave unmerged: a number, 'auto' (based on opposite-strand "
-                          +"adjacent mutants); ignored if -y option is given, '(default %default)")
+    parser.add_option('-Y', '--merge_opposite_leave_mutants', default='auto', metavar='N',
+                      help="For -Q: how many mutants to leave unmerged: a number, or 'auto' (based on opposite-strand "
+                          +"adjacent mutants); ignored if -y option is given, (default %default)")
     parser.add_option('-y', '--merge_opposite_count_ratio', type='int', default=None, metavar='K',
                       help="For -Q: merge mutants only if the readcounts are within Kx of each other. (default %default)")
     parser.add_option('--merge_mutant_choice_method', choices=['by_ratio','random'], default='by_ratio', metavar='by_ratio|random',
