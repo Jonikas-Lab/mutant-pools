@@ -1033,7 +1033,9 @@ class Dataset_summary_data():
         return len([1 for m in self.dataset if m.read_info(self.dataset_name).total_read_count]) 
     @property
     def median_readcount(self):
-        return median([m.read_info(self.dataset_name).total_read_count for m in self.dataset])
+        # only including mutants with non-zero reads
+        return median([m.read_info(self.dataset_name).total_read_count for m in self.dataset 
+                       if m.read_info(self.dataset_name).total_read_count])
     @property
     def mutants_in_genes(self):
         return len([1 for m in self.dataset if m.read_info(self.dataset_name).total_read_count 
