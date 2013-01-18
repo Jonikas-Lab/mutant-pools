@@ -153,7 +153,7 @@ def main(infiles, outfile, options):
 
     ### optionally remove mutants based on another dataset
     if options.remove_mutants_from_file:
-        other_dataset = mutant_analysis_classes.Insertional_mutant_pool_dataset(infile=options.remove_mutants_from_file)
+        other_dataset = mutant_analysis_classes.read_mutant_file(options.remove_mutants_from_file)
         multi_dataset.remove_mutants_based_on_other_dataset(other_dataset, 
                  readcount_min=options.remove_mutants_readcount_min, perfect_reads=options.remove_mutants_min_is_perfect)
 
