@@ -20,7 +20,7 @@ import random
 import HTSeq
 from BCBio import GFF
 # my modules
-from general_utilities import split_into_N_sets_by_counts, add_dicts_of_ints, sort_lists_inside_dict, keybased_defaultdict, value_and_percentages, FAKE_OUTFILE, NaN, nan_func, merge_values_to_unique
+from general_utilities import split_into_N_sets_by_counts, add_dicts_of_ints, sort_lists_inside_dict, keybased_defaultdict, value_and_percentages, FAKE_OUTFILE, NaN, nan_func, merge_values_to_unique, unpickle
 from basic_seq_utilities import SEQ_ENDS, SEQ_STRANDS, SEQ_DIRECTIONS, SEQ_ORIENTATIONS, position_test_contains, position_test_overlap, chromosome_sort_key, get_seq_count_from_collapsed_header
 from deepseq_utilities import check_mutation_count_try_all_methods
 # there's a "from parse_annotation_file import parse_gene_annotation_file" in one function, not always needed
@@ -2518,7 +2518,7 @@ class Insertional_mutant_pool_dataset():
 def read_mutant_file(infile):
     """ Read mutant input file, return as new dataset (old .txt format, or new .pickle format). """
     if infile.endswith('.pickle'):
-        current_dataset = general_utilities.unpickle(infile)
+        current_dataset = unpickle(infile)
     else:
         current_dataset = Insertional_mutant_pool_dataset(infile=infile)
         current_dataset.count_adjacent_mutants(OUTPUT=None)
