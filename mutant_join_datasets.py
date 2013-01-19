@@ -156,6 +156,9 @@ def main(infiles, outfile, options):
         other_dataset = mutant_analysis_classes.read_mutant_file(options.remove_mutants_from_file)
         multi_dataset.remove_mutants_based_on_other_dataset(other_dataset, 
                  readcount_min=options.remove_mutants_readcount_min, perfect_reads=options.remove_mutants_min_is_perfect)
+        if options.verbosity_level>0:   
+            print "removed mutants based on %s - %s mutants remaining in combined dataset"%(options.remove_mutants_from_file, 
+                                                                                            len(multi_dataset))
 
     # if requested, add gene annotation info from separate file
     if options.gene_annotation_file:
