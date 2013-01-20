@@ -171,16 +171,20 @@ def plot_all_correlations(all_data, plot_scale, figname, print_correlation=False
     else:
         if mutants_to_color:    colors = [mutants_to_color[tuple(mutant_line[:3])] for mutant_line in mutant_data]
         else:                   colors = ['k' for mutant_line in mutant_data]
-    # TODO might want plotsize to be an option, along with default dotsize, and maybe dpi?  Does the dpi even do anything?
+    # TODO might want plotsize to be a command-line option, also default dotsize, and maybe dpi?
     plotsize = 4
     dotsize = 1
     # TODO does the dpi here even do anything??  not sure - as far as the final image it's the savefig dpi that matters.
     # TODO make all the subplots square!!  Using "(plotsize*(N_samples+0.1), plotsize*N_samples)" is close but not exact
     fig = mplt.figure(figsize=(plotsize*(N_samples+0.1), plotsize*N_samples), dpi=300)
-    if print_correlation=='none':        correlation_info = ''
-    elif print_correlation=='spearman':  correlation_info = '\n\'corr\' = Spearman rank correlation.'
-    elif print_correlation=='pearson':   correlation_info = '\n\'corr\' = Pearson\'s correlation coefficient.'
-    fig_title = '%s PLOT, %s SCALE. \nFor each pair of samples in the set, a plot comparing %s of each mutant.%s'%(os.path.basename(figname.upper()), plot_scale.upper(), datatype, correlation_info)
+    # TODO make title_verbosity a command-line option!
+    title_verbosity = 1
+    if title_verbosity>1:   fig_title = '%s PLOT, %s SCALE'%(os.path.basename(figname.upper()), plot_scale.upper())
+    else:                   fig_title = '%s'%os.path.basename(figname)
+    if title_verbosity>3:   fig_title += '\nFor each pair of samples in the set, a plot comparing %s of each mutant.'%datatype
+    if title_verbosity>2:
+        if print_correlation=='spearman':    fig_title += '\n\'corr\' = Spearman rank correlation.'
+        elif print_correlation=='pearson':   fig_title += '\n\'corr\' = Pearson\'s correlation coefficient.'
     # TODO more explanation?  Also note that more explanatory text could be moved into the empty space.
     # TODO alternatively, the correlation info could be moved into the empty space instead of sticking it on the plots (or put it on the plots, and ALSO put it in the empty space in a table with more info)
     # TODO should I in fact be ignoring mutants not found in one sample? I'd rather plot them...
@@ -200,7 +204,7 @@ def plot_all_correlations(all_data, plot_scale, figname, print_correlation=False
     minimize_tick_labels = False
     same_scale_both_plots = True
     # TODO min_value and min_val_to_plot should probably be merged?  Just one min_value and one True/False variable specifying whether values under min_value should be set to min_value or removed.
-    need_title = True
+    need_title = bool(title_verbosity)
     for i in range(N_samples):
         base_sample_i = _get_single_clean_sample(sample_data, i, min_value=min_value)
         for j in range(i+1,N_samples):
