@@ -470,6 +470,7 @@ def main_functionality(infile, options=None):
     color_mutants_from_files = {}
     if options.color_mutants_magenta:   color_mutants_from_files['magenta'] = options.color_mutants_magenta
     if options.color_mutants_blue:      color_mutants_from_files['blue'] = options.color_mutants_blue
+    if options.color_mutants_aqua:      color_mutants_from_files['cyan'] = options.color_mutants_aqua
     if options.color_mutants_green:     color_mutants_from_files['green'] = options.color_mutants_green
     if options.color_mutants_red:       color_mutants_from_files['red'] = options.color_mutants_red
 
@@ -554,6 +555,8 @@ def define_option_parser():
                       help='color mutants present in FILE magenta on the plots (default %default).')
     parser.add_option('-B', '--color_mutants_blue', metavar='FILE',
                       help='color mutants present in FILE blue on the plots (default %default).')
+    parser.add_option('-A', '--color_mutants_aqua', metavar='FILE',
+                      help='color mutants present in FILE aqua on the plots (default %default).')
     parser.add_option('-G', '--color_mutants_green', metavar='FILE',
                       help='color mutants present in FILE green on the plots (default %default).')
     parser.add_option('-R', '--color_mutants_red', metavar='FILE',
