@@ -470,9 +470,10 @@ def main_functionality(infile, options=None):
     color_mutants_from_files = {}
     if options.color_mutants_magenta:   color_mutants_from_files['magenta'] = options.color_mutants_magenta
     if options.color_mutants_blue:      color_mutants_from_files['blue'] = options.color_mutants_blue
-    if options.color_mutants_aqua:      color_mutants_from_files['cyan'] = options.color_mutants_aqua
-    if options.color_mutants_green:     color_mutants_from_files['green'] = options.color_mutants_green
+    if options.color_mutants_aqua:      color_mutants_from_files['darkturquoise'] = options.color_mutants_aqua
+    if options.color_mutants_green:     color_mutants_from_files['limegreen'] = options.color_mutants_green
     if options.color_mutants_red:       color_mutants_from_files['red'] = options.color_mutants_red
+    if options.color_mutants_orange:    color_mutants_from_files['darkorange'] = options.color_mutants_orange
 
     # read input data (all_data will be an (sample_data, sample_headers, mutant_data) tuple)
     all_data = read_joint_mutant_file(infile, options.which_reads)
@@ -561,6 +562,8 @@ def define_option_parser():
                       help='color mutants present in FILE green on the plots (default %default).')
     parser.add_option('-R', '--color_mutants_red', metavar='FILE',
                       help='color mutants present in FILE red on the plots (default %default).')
+    parser.add_option('-O', '--color_mutants_orange', metavar='FILE',
+                      help='color mutants present in FILE orange on the plots (default %default).')
     # TODO how should the coloring work for the readcount distribution plots, where each sample gets a color? Either grey out all cassette dots, or make them paler or something... 
     # MAYBE-TODO There should also be a -G option for other mutants to be greyed-out instead of or in addition to the cassette; other colors should be ignored.
     return parser
