@@ -137,7 +137,7 @@ def main(infiles, outfile, options):
             current_dataset.count_adjacent_mutants(OUTPUT=None)
             # note - read_data_from_file doesn't deal with merging/counting info, so that will be wrong/missing
         all_datasets[dataset_name] = current_dataset
-        if options.verbosity_level>0:   print "%s mutants in dataset from input file %s"%(len(current_dataset), infile)
+        if options.verbosity_level>0:   print "%s mutants in file %s"%(len(current_dataset), infile)
         elif options.verbosity_level>1: current_dataset.print_summary()
     
     # merge datasets into one multi-dataset object
