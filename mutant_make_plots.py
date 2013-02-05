@@ -13,8 +13,7 @@ import os
 from collections import defaultdict
 ### other packages
 from numpy import isnan, isinf, isneginf, array, ndarray
-from numpy import corrcoef
-from scipy.stats.stats import spearmanr
+from scipy.stats.stats import spearmanr, pearsonr
 # TODO might want to import some of the bigger libraries only after the option-parsing works to save time...
 # switch backend to Agg - this is only necessary on some computers - seems to fix some weird display problem
 import matplotlib; matplotlib.use('Agg')    
@@ -287,19 +286,16 @@ def plot_all_correlations(all_data, plot_scale, figname, print_correlation=False
                 else:                   min_val_for_corr = min_value
                 clean_sample_i, clean_sample_j = remove_nan_inf_from_two_samples(sample_i, sample_j, min_val=min_val_for_corr, 
                                                                                  min_val_allowed=False, remove_only_if_both=True)
-                if print_correlation=='spearman':   corr_coeff = spearmanr(clean_sample_i,clean_sample_j)[0]
-                elif print_correlation=='pearson':  corr_coeff = corrcoef(clean_sample_i,clean_sample_j)[0][1]
-                # if the result isn't a number (for instance an empty list/array/whatever), set it to NaN
-                #  (need to convert numpy arrays to lists first, because they act like numbers!)
-                if isinstance(corr_coeff, ndarray):     corr_coeff = list(corr_coeff)
-                try:                                    corr_coeff/2
-                except TypeError:                       corr_coeff = float('nan')
+                # corr_coeff_pval is a (correlation coefficient, p-value) pair
+                if print_correlation=='spearman':   corr_coeff_pval = spearmanr(clean_sample_i,clean_sample_j)
+                elif print_correlation=='pearson':  corr_coeff_pval = pearsonr(clean_sample_i,clean_sample_j)
                 # MAYBE-TODO should mutants below min_val_to_plot be excluded too?
-                # the corr_coeff text color is based on value: <.25 black, .25-.50 blue, .50-.75 magenta, .75-1 red.
+                # the corr_coeff_pval text color is based on value: <.25 black, .25-.50 blue, .50-.75 magenta, .75-1 red;
+                # if the result isn't a number (for instance an empty list/array/whatever), set it to NaN and the color to black.
                 corr_coeff_colors = ['k','b','m','r','r']
-                if isnan(corr_coeff):   color = 'k'
-                else:                   color = corr_coeff_colors[int(abs(corr_coeff)*16)/ 4]
-                mplt.text(text_pos_x, text_pos_y, 'corr %.2f'%corr_coeff, color=color, 
+                try:                    color = corr_coeff_colors[int(abs(corr_coeff_pval[0])*16)/ 4]
+                except TypeError:       color, corr_coeff_pval = 'k', (float('nan'), float('nan'))
+                mplt.text(text_pos_x, text_pos_y, 'corr %.2f (p-value %.2g)'%corr_coeff_pval, color=color, 
                           horizontalalignment='right',verticalalignment='top')
     # need a label for the last column, below the last plot
     # TODO if there are just two samples (i.e. one plot), change the top_newlines/end_spaces/end_newlines values to 0 in both this xlabel and the ylabel above to make things look better (may want to abstract all this into a subfunction)
