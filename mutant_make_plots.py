@@ -10,7 +10,7 @@ USAGE: mutant_make_plots.py [options] infile
 
 ### basic libraries
 import os
-from collections import defaultdict
+from collections import defaultdict, Counter
 ### other packages
 from numpy import isnan, isinf, isneginf, array, ndarray
 from scipy.stats.stats import spearmanr, pearsonr
@@ -170,6 +170,7 @@ def plot_all_correlations(all_data, plot_scale, figname, print_correlation=False
     else:
         if mutants_to_color:    colors = [mutants_to_color[tuple(mutant_line[:3])] for mutant_line in mutant_data]
         else:                   colors = ['k' for mutant_line in mutant_data]
+        if mutants_to_color and verbose:    print "color counts: %s."%', '.join('%s %s'%data for data in Counter(colors).items())
     # TODO might want plotsize to be a command-line option, also default dotsize, and maybe dpi?
     plotsize = 4
     dotsize = 1
@@ -429,7 +430,9 @@ def get_mutant_colors(color_cassette_mutants=False, color_mutants_from_files={},
                 color_dict[(chrom,strand,min_pos)] = color
                 color_dict[(chrom,strand,str(min_pos))] = color
     if verbose and color_mutants_from_files:
-        print "%s colored mutants from %s files"%(len(color_dict),len(color_mutants_from_files))
+        # TODO give more sensible breakdown of colored mutant numbers, maybe by file etc...
+        print "%s potential colored mutants from %s files (some may not be in plotted datasets!)"%(len(color_dict),
+                                                                                                   len(color_mutants_from_files))
     assert color_dict[('chromosome_1','+',100)] == 'black'
     assert color_dict[('insertion_cassette','+',100)] == grey_color if color_cassette_mutants else 'black'
     return color_dict
