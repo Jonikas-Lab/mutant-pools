@@ -120,7 +120,6 @@ def filter_flanking_regions_by_pattern(flanking_region_count_list, pattern, eith
         # if it didn't match anywhere, save it as a no-match.
         flanking_region_count_list_nomatch.append((flanking_region, count))
     return flanking_region_count_list_match, flanking_region_count_list_nomatch
-    # TODO amend unit-tests to reflect the randomization and other changes!
 
 
 def print_flanking_regions_to_fasta(flanking_region_count_list, outfile, convert_counts=lambda x: x):
@@ -165,14 +164,19 @@ def print_base_count_fraction_for_dist(flanking_region_count_list, distance_from
     local_flanking_region_count_list = [(seq[flank_length-distance_from_middle:flank_length+distance_from_middle], 
                                          convert_counts(count)) for (seq,count) in flanking_region_count_list]
     # apply ignore_bases_pattern by changing the relevant bases to N
+    #  note that I'm doing it this way, instead of just skipping these positions in the final output, 
+    #  because that wouldn't work if average_both_sides is True: if ignore_bases_pattern is ANAN, 
+    #   the ignore pattern isn't symmetrical around the middle, so half the position 1 bases will be ignored (first N in ANAN), 
+    #    and half the position 2 bases will be ignored (second N in ANAN) - there will be no single position with all bases ignored.
     if ignore_bases_pattern is not None:
         if len(ignore_bases_pattern) % 2:       sys.exit("Ignore_bases_pattern length must be an even number!")
         length_diff = int((len(ignore_bases_pattern)-local_flanking_region_length)/2)
-        if length_diff>0:   ignore_bases_pattern = ignore_bases_pattern[length_diff:-length_diff]
+        if length_diff>0:   raise ValueError("Ignore_bases_pattern is longer than 2*distance_from_middle - probably error!")
         if length_diff<0:   ignore_bases_pattern = 'N'*length_diff + ignore_bases_pattern + 'N'*length_diff
-        def mask_seq(seq, mask_pattern=ignore_bases_pattern):
-            return ''.join([(N if if_mask=='N' else base) for (base,if_mask) in zip(seq, mask_pattern)])
-        local_flanking_region_count_list = [(mask_seq(seq), count) for  (seq,count) in local_flanking_region_count_list]
+        def mask_seq(seq, mask_pattern):
+            return ''.join([(base if if_mask=='N' else 'N') for (base,if_mask) in zip(seq, mask_pattern)])
+        local_flanking_region_count_list = [(mask_seq(seq, ignore_bases_pattern), count) 
+                                            for (seq,count) in local_flanking_region_count_list]
     # if average_both_sides, make a new local_flanking_region_count_list that has each half of each sequence separately
     if average_both_sides:
         new_flanking_region_count_list = []
@@ -181,16 +185,19 @@ def print_base_count_fraction_for_dist(flanking_region_count_list, distance_from
             second_half = flanking_region[distance_from_middle:]
             new_flanking_region_count_list.extend([(first_half,count), (second_half,count)])
         local_flanking_region_count_list = new_flanking_region_count_list
+        local_flanking_region_length = int(local_flanking_region_length/2)
     base_count_list_dict = base_count_dict(local_flanking_region_count_list)
     base_fraction_list_dict = base_fraction_dict(local_flanking_region_count_list)
+    # for each position in the final flanking regions, give the base fraction/count; 
+    #  ignore positions in which there were no non-N bases.
     all_lines = ''
     for position in range(local_flanking_region_length):
-        display_pos = position if average_both_sides else _relative_position_vs_cut(position, distance_from_middle)
-        data = ['%s %.0f%% (%s)'%(base, base_fraction_list_dict[base][position]*100, base_count_list_dict[base][position]) 
-                for base in NORMAL_DNA_BASES]
-        all_lines +=  " - position %s: \t%s\n"%(display_pos, ', \t'.join(data))
+        if sum(base_count_list_dict[base][position] for base in NORMAL_DNA_BASES):
+            data = ['%s %.0f%% (%s)'%(base, base_fraction_list_dict[base][position]*100, base_count_list_dict[base][position]) 
+                    for base in NORMAL_DNA_BASES]
+            display_pos = position+1 if average_both_sides else _relative_position_vs_cut(position, distance_from_middle)
+            all_lines +=  " - position %s: \t%s\n"%(display_pos, ', \t'.join(data))
     return all_lines
-    # TODO unit-test! This got rather complicated...
 
 
 def base_fraction_stats(base_count_position_list_dict, overall_GC_content=0.5, print_single_pvalues=False, print_summary=True, 
@@ -309,7 +316,7 @@ class Testing(unittest.TestCase):
 
     def test__filter_flanking_regions_by_pattern(self):
         # all flanking regions must be same length
-        self.assertRaises(SystemExit, filter_flanking_regions_by_pattern, [('AA',2), ('AAAA',1)], '')
+        self.assertRaises(ValueError, filter_flanking_regions_by_pattern, [('AA',2), ('AAAA',1)], '')
         # flanking region and pattern length must be even
         self.assertRaises(SystemExit, filter_flanking_regions_by_pattern, [('AAA',2)], '')
         self.assertRaises(SystemExit, filter_flanking_regions_by_pattern, [('',1)], 'ANN')
@@ -322,24 +329,61 @@ class Testing(unittest.TestCase):
         # empty/all-N pattern matches everything
         all_4bp_regions = [(''.join(bases),1) for bases in itertools.product(*[NORMAL_DNA_BASES for _ in range(4)])]
         for pattern in ['', 'NN', 'NNNN']:
-          for orient in (True,False):
-            assert filter_flanking_regions_by_pattern(all_4bp_regions, pattern, orient) == all_4bp_regions
+            assert filter_flanking_regions_by_pattern(all_4bp_regions, pattern, False) == (all_4bp_regions, [])
         assert filter_flanking_regions_by_pattern
         # function for easier checking of more complex cases while ignoring counts
-        def _check_patterns_all_counts_1(input_seqs_str, pattern, both_orient, output_seqs_str):
+        def _check_patterns_all_counts_1(input_seqs_str, pattern, both_orient, expected_match_seqs_str):
             full_input = [(seq,1) for seq in input_seqs_str.split()]
-            expected_output = [(seq,1) for seq in output_seqs_str.split()]
-            real_output = filter_flanking_regions_by_pattern(full_input, pattern, both_orient)
-            return (real_output == expected_output)
+            expected_output_match = [(seq,1) for seq in expected_match_seqs_str.split()]
+            expected_match_seqs_set = set(expected_match_seqs_str.split())
+            expected_nomatch_seqs = [seq for seq in input_seqs_str.split() if seq not in expected_match_seqs_set]
+            expected_output_nomatch = [(seq,1) for seq in expected_nomatch_seqs]
+            real_output_match, real_output_nomatch = filter_flanking_regions_by_pattern(full_input, pattern, both_orient)
+            if not real_output_match == expected_output_match:
+                print real_output_match, expected_output_match
+                return False
+            if not real_output_nomatch == expected_output_nomatch:
+                print real_output_nomatch, expected_output_nomatch
+                return False
+            return True
         # a few more complex cases
         assert _check_patterns_all_counts_1('AAAT AATT GTTT', 'ANTN', False, 'AATT')
-        assert _check_patterns_all_counts_1('AAAT AATT GTTT', 'ANTN', True, 'ATTT AATT')
         # including a shorter pattern that needs to be padded, and seqs with Ns
         assert _check_patterns_all_counts_1('AAGT TAGN GTTT GNNT GNGT GNAT', 'AG', False, 'AAGT TAGN GNNT GNGT')
-        # TODO finish!
-
         # check that counts are propagated properly
-        assert filter_flanking_regions_by_pattern([('AA',1), ('AG',2), ('AC',100)], 'AN', False) == [('AA',1), ('AG',2), ('AC',100)]
+        assert filter_flanking_regions_by_pattern([('AA',1),('AG',2),('AC',100)], 'AN', False)[0] == [('AA',1), ('AG',2), ('AC',100)]
+        # TODO add cases for both_orientations=True!  That one's randomized, so it's harder to test...
+
+    def test__print_base_count_fraction_for_dist(self):
+        # these tests are pretty brief, since the function returns strings and is annoying to test
+        # fails if lengths aren't all the same, or seq or ignore_bases_pattern aren't even, 
+        #  or if ignore_bases_pattern is longer than 2*distance_from_middle
+        self.assertRaises(ValueError, print_base_count_fraction_for_dist, [('AT',1), ('GGG',3)], 1)
+        self.assertRaises(SystemExit, print_base_count_fraction_for_dist, [('ATG',1)], 1)
+        self.assertRaises(SystemExit, print_base_count_fraction_for_dist, [('AT',1)], 1, ignore_bases_pattern='T')
+        self.assertRaises(ValueError, print_base_count_fraction_for_dist, [('AT',1)], 1, ignore_bases_pattern='TTTT')
+        # basic functionality
+        assert print_base_count_fraction_for_dist([('AT',1), ('GG',3)], 1, ignore_bases_pattern=None, average_both_sides=False) == ( 
+            ' - position -1: \tA 25% (1), \tC 0% (0), \tT 0% (0), \tG 75% (3)\n'
+           +' - position 1: \tA 0% (0), \tC 0% (0), \tT 25% (1), \tG 75% (3)\n')
+        # ignore_bases_pattern
+        assert print_base_count_fraction_for_dist([('AT',1), ('GG',3)], 1, ignore_bases_pattern='AA', average_both_sides=False) == ''
+        assert print_base_count_fraction_for_dist([('AT',1), ('GG',3)], 1, ignore_bases_pattern='AN', average_both_sides=False) == ( 
+            ' - position 1: \tA 0% (0), \tC 0% (0), \tT 25% (1), \tG 75% (3)\n')
+        # average_both_sides
+        assert print_base_count_fraction_for_dist([('AT',1), ('GG',1)], 1, ignore_bases_pattern=None, average_both_sides=True) == ( 
+            ' - position 1: \tA 0% (0), \tC 25% (1), \tT 50% (2), \tG 25% (1)\n')
+        assert print_base_count_fraction_for_dist([('AT',1), ('GG',3)], 1, ignore_bases_pattern=None, average_both_sides=True) == ( 
+            ' - position 1: \tA 0% (0), \tC 38% (3), \tT 25% (2), \tG 38% (3)\n')
+        # average_both_sides AND ignore_bases_pattern, since they interact in complicated ways!
+        assert print_base_count_fraction_for_dist([('AT',1), ('GG',3)], 1, ignore_bases_pattern='AA', average_both_sides=True) == ''
+        assert print_base_count_fraction_for_dist([('CATG',1)], 2, ignore_bases_pattern='ANNA', average_both_sides=True) == ( 
+            ' - position 1: \tA 0% (0), \tC 0% (0), \tT 100% (2), \tG 0% (0)\n')
+        assert print_base_count_fraction_for_dist([('CATG',1)], 2, ignore_bases_pattern='NAAN', average_both_sides=True) == ( 
+            ' - position 2: \tA 0% (0), \tC 0% (0), \tT 0% (0), \tG 100% (2)\n')
+        assert print_base_count_fraction_for_dist([('CATG',1)], 2, ignore_bases_pattern='ANAN', average_both_sides=True) == ( 
+            ' - position 1: \tA 0% (0), \tC 0% (0), \tT 100% (1), \tG 0% (0)\n'
+           +' - position 2: \tA 0% (0), \tC 0% (0), \tT 0% (0), \tG 100% (1)\n')
 
     # TODO write unit-tests for some of the other more complicated functions!
 
