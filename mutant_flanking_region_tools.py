@@ -25,20 +25,47 @@ from basic_seq_utilities import get_all_seq_length, base_count_dict, base_fracti
 import general_utilities
 
 
-def grab_flanking_regions(mutant_dataset_infile, genome, flanksize=200, 
+def flanking_region_from_pos(position_before_insertion, chromosome, strand, genome, flanksize=200, padding_char='.'):
+    """ Given a position (pos,chromosome,strand), and the genome sequence, return position flanking region
+
+    Given a position, chromosome and strand for an insertion, use genome (a chrom_name:seq dict) to figure out the 
+     flanksize-length flanking sequences on both sides (padded with padding_char if the end of the chromosome is too close), 
+     reverse-complement if needed (if strand=='-') to get it in the same orientation as the insertion, and return as string.
+    """
+    chromosome_seq = genome[chromosome]
+    # grab positions to get the sequence flanksize bp on both sides of the insertion;
+    #  pad it with . if there's a chromosome start/end closer than that.
+    flank_start = position_before_insertion - flanksize
+    flank_end = position_before_insertion + flanksize
+    start_padding = padding_char * max(0, -flank_start)
+    flank_start = max(flank_start, 0)
+    end_padding = padding_char * max(0, flank_end - len(chromosome_seq))
+    flank_end = min(flank_end, len(chromosome_seq))
+    # grab the actual flanking sequence, add padding; 
+    #  reverse-complement it if mutant is -strand, to keep them in the same orientation as the cassette insertion
+    full_flanking_seq = chromosome_seq[flank_start:flank_end]
+    full_flanking_seq = start_padding + full_flanking_seq + end_padding
+    if strand == '-':
+        full_flanking_seq = reverse_complement(full_flanking_seq)
+    return full_flanking_seq
+    # TODO unit-test this!
+
+
+def grab_flanking_regions(mutant_dataset_infile, genome, flanksize=200, padding_char='.', 
                           min_readcount=0, chromosome_check_function=lambda x: True, ignore_both_strand_mutants=False):
     """ Return (flanking_seq,readcount) with both-side genomic flanking sequences for insertional mutants in mutant_dataset_infile.
 
     Grab all the insertion positions from mutant_dataset_infile (pickled mutant_analysis_classes.Insertional_mutant_dataset object), 
      use genome (a chrom_name:seq dict) to figure out the flanksize-length flanking sequences on both sides
-      (padded with '.' if the end of the chromosome is too close), and write them to outfile in fasta format. 
-    The flanking sequences will be in the same orientation as the insertion cassette.
+      (padded with padding_char if the end of the chromosome is too close), reverse-complement if needed (if strand=='-') 
+      to get it in the same orientation as the insertion.
 
     Filter the mutants: 
      - by readcount - ignore mutants with total readcount below min_readcount=0
      - by chromosome - ignore mutants in chromosomes for which chromosome_check_function returns False
      - by strand - both-strand (merged tandem) mutants will be ignored if ignore_both_strand_mutants is True, 
                 otherwise ValueError will be raised; ValueError will be raised for other unexpected strand values.
+
     For all remaining mutants, append (flanking region seq, total_readcount) to output list.
     """
     flanking_region_count_list = []
@@ -54,24 +81,12 @@ def grab_flanking_regions(mutant_dataset_infile, genome, flanksize=200,
             else:                                   raise ValueError("Unexpected mutant strand! %s"%mutant.position)
         # grab mutant position/chromosome
         pos_before_insertion = mutant.position.min_position
-        chromosome_seq = genome[mutant.position.chromosome]
         # ignore cassette tandems (i.e. insertions that map to start or end of cassette)
         if mutant_analysis_classes.is_cassette_chromosome(mutant.position.chromosome):
-            if pos_before_insertion in [0, len(chromosome_seq)]:  continue
-        # grab positions to get the sequence flanksize bp on both sides of the insertion;
-        #  pad it with . if there's a chromosome start/end closer than that.
-        flank_start = pos_before_insertion - flanksize
-        flank_end = pos_before_insertion + flanksize
-        start_padding = '.' * max(0, -flank_start)
-        flank_start = max(flank_start, 0)
-        end_padding = '.' * max(0, flank_end - len(chromosome_seq))
-        flank_end = min(flank_end, len(chromosome_seq))
-        # grab the actual flanking sequence, add padding; 
-        #  reverse-complement it if mutant is -strand, to keep them in the same orientation as the cassette insertion
-        full_flanking_seq = chromosome_seq[flank_start:flank_end]
-        full_flanking_seq = start_padding + full_flanking_seq + end_padding
-        if mutant.position.strand == '-':
-            full_flanking_seq = reverse_complement(full_flanking_seq)
+            if pos_before_insertion in [0, len(genome[mutant.position.chromosome])]:  continue
+        # grab the actual flanking sequence, with padding, correct orientation etc
+        full_flanking_seq = flanking_region_from_pos(mutant.position.min_position, mutant.position.chromosome, 
+                                                     mutant.position.strand, genome, flanksize, padding_char)
         # append the sequence and readcount to output data
         flanking_region_count_list.append((full_flanking_seq, mutant.total_read_count))
     return flanking_region_count_list
