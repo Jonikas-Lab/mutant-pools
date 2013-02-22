@@ -43,8 +43,8 @@ def grab_flanking_regions(mutant_dataset_infile, genome, flanksize=200,
     """
     flanking_region_count_list = []
     count_all, count_lowreads, count_midreads, count_highreads = 0, 0, 0, 0
-    dataset = general_utilities.unpickle(mutant_dataset_infile)
-    for mutant in dataset:
+    dataset = mutant_analysis_classes.read_mutant_file(mutant_dataset_infile)
+    for mutant in sorted(dataset, key = lambda m: m.position):
         # filter out mutants with wrong readcounts or in wrong chromosomes
         if not chromosome_check_function(mutant.position.chromosome):           continue
         if mutant.total_read_count < min_readcount:                             continue
@@ -132,9 +132,9 @@ def print_flanking_regions_to_fasta(flanking_region_count_list, outfile, convert
 
 
 def _relative_position_vs_cut(pos, reference_pos):
-    """ Convert zero-based position into relative position around a cut site after reference_pos, with no 0.
+    """ Convert zero-based position into relative position around a cut site before reference_pos, with no 0.
 
-    If refpos is 1, we assume the true reference cut position is between 1 and 2, so positions 1 and 2 become -1 and 1, 
+    If refpos is 2, we assume the true reference cut position is between 1 and 2, so positions 1 and 2 become -1 and 1, 
      0 and 3 become -2 and 2, etc.
     """
     if pos < reference_pos:  return int(pos - reference_pos)
@@ -314,6 +314,35 @@ def base_fraction_plot(base_count_position_list_dict, flank_size=10,
 class Testing(unittest.TestCase):
     """ Runs unit-tests for this module. """
 
+    def test__grab_flanking_regions(self):
+        # standard inputs
+        mutantfile = 'test_data/INPUT_mutants_for_flanking-regions.txt'
+        test_genome = {'chr1':'AAAGGGCCC', 'chr2':'CGCG'}
+        args = (mutantfile, test_genome)
+        # if there's a both-strand mutant and ignore_both_strand_mutants is False, raise exception 
+        self.assertRaises(ValueError, grab_flanking_regions, *args, flanksize=2, ignore_both_strand_mutants=False)
+        # alwys use ignore_both_strand_mutants=True from now on, since otherwise we get an error
+        kwargs = dict(ignore_both_strand_mutants=True)
+        # correct flanking regions and readcounts
+        assert grab_flanking_regions(*args, flanksize=0, **kwargs) == [('',10), ('',10), ('',1), ('',10)]
+        assert grab_flanking_regions(*args, flanksize=1, **kwargs) == [('AG',10), ('CT',10), ('GG',1), ('GC',10)]
+        assert grab_flanking_regions(*args, flanksize=2, **kwargs) == [('AAGG',10), ('CCTT',10), ('AGGG',1), ('CGCG',10)]
+        # when the flanksize gets high enough that some mutants run into chromosome edges, it's padded with . 
+        assert grab_flanking_regions(*args, flanksize=4, **kwargs) == [('.AAAGGGC',10), ('GCCCTTT.',10), 
+                                                                       ('AAAGGGCC',1), ('..CGCG..',10)]
+        # testing that min_readcount works
+        for M in (2,3,5,10):
+            assert grab_flanking_regions(*args, flanksize=2, min_readcount=M, **kwargs) == [('AAGG',10), ('CCTT',10), ('CGCG',10)]
+        for M in (11, 12, 100, 1000):
+            assert grab_flanking_regions(*args, flanksize=2, min_readcount=M, **kwargs) == []
+        # testing that chromosome_check_function works
+        f_chr1 = lambda x: x.endswith('1')
+        f_chr2 = lambda x: x.endswith('2')
+        f_chr3 = lambda x: x.endswith('3')
+        assert grab_flanking_regions(*args,flanksize=1, chromosome_check_function=f_chr1, **kwargs) == [('AG',10),('CT',10),('GG',1)]
+        assert grab_flanking_regions(*args,flanksize=1, chromosome_check_function=f_chr2, **kwargs) == [('GC',10)]
+        assert grab_flanking_regions(*args,flanksize=1, chromosome_check_function=f_chr3, **kwargs) == []
+
     def test__filter_flanking_regions_by_pattern(self):
         # all flanking regions must be same length
         self.assertRaises(ValueError, filter_flanking_regions_by_pattern, [('AA',2), ('AAAA',1)], '')
@@ -352,7 +381,35 @@ class Testing(unittest.TestCase):
         assert _check_patterns_all_counts_1('AAGT TAGN GTTT GNNT GNGT GNAT', 'AG', False, 'AAGT TAGN GNNT GNGT')
         # check that counts are propagated properly
         assert filter_flanking_regions_by_pattern([('AA',1),('AG',2),('AC',100)], 'AN', False)[0] == [('AA',1), ('AG',2), ('AC',100)]
-        # TODO add cases for both_orientations=True!  That one's randomized, so it's harder to test...
+        ### Two cases for both_orientations=True!  
+        ###  That one's randomized, so it's harder to test - I'm doing 100 repeats and making sure all the valid results show up.
+        # 1) non-palindrome pattern:
+        #  GGTT doesn't match NTTN in either direction, so it'll show up in nomatch either forward or reverse-complement.
+        #  AAAT matches only when reverse-complement, and ATTG only when forward, so they'll show up as ATTT and ATTG, always.
+        all_match, all_nomatch = set(), set()
+        for _ in range(100):
+            match,nomatch = filter_flanking_regions_by_pattern([('AAAT',1),('ATTG',2),('GGTT',3)], 'NTTN', True)
+            all_match.add(tuple(match))
+            all_nomatch.add(tuple(nomatch))
+        assert all_match == set([ (('ATTT',1),('ATTG',2)) ])
+        assert all_nomatch == set([ (('GGTT',3),), (('AACC',3),) ])
+        # 2) palindrome pattern:    CTAC matches in either direction, so it'll show up as CTAC or GTAG;
+        #                           GTTT doesn't match in either direction, so it'll show up as GTTT or AAAC.
+        all_match, all_nomatch = set(), set()
+        for _ in range(100):
+            match,nomatch = filter_flanking_regions_by_pattern([('CTAC',1),('GTTT',2)], 'NTAN', True)
+            all_match.add(tuple(match))
+            all_nomatch.add(tuple(nomatch))
+        assert all_match   == set([ (('CTAC',1),), (('GTAG',1),) ])
+        assert all_nomatch == set([ (('GTTT',2),), (('AAAC',2),) ])
+
+    def test___relative_position_vs_cut(self):
+        assert _relative_position_vs_cut(1,2) == -1
+        assert _relative_position_vs_cut(2,2) == 1
+        for N in range(1000):
+            assert _relative_position_vs_cut(N,0) == N+1
+            assert _relative_position_vs_cut(N,N) == 1
+            assert _relative_position_vs_cut(N-1,N) == -1
 
     def test__print_base_count_fraction_for_dist(self):
         # these tests are pretty brief, since the function returns strings and is annoying to test
@@ -385,8 +442,7 @@ class Testing(unittest.TestCase):
             ' - position 1: \tA 0% (0), \tC 0% (0), \tT 100% (1), \tG 0% (0)\n'
            +' - position 2: \tA 0% (0), \tC 0% (0), \tT 0% (0), \tG 100% (1)\n')
 
-    # TODO write unit-tests for some of the other more complicated functions!
-
+    # LATER-TODO add unit-tests for all the other functions?  Lower priority, since they're either straightforward, or mostly focus on printing/plotting data rather than complicated transformations.
 
 if __name__=='__main__':
     """ If module is run directly, run tests. """
