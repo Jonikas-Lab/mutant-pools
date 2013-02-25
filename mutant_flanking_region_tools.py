@@ -51,8 +51,8 @@ def flanking_region_from_pos(position_before_insertion, chromosome, strand, geno
     # TODO unit-test this!
 
 
-def grab_flanking_regions(mutant_dataset_infile, genome, flanksize=200, padding_char='.', 
-                          min_readcount=0, chromosome_check_function=lambda x: True, ignore_both_strand_mutants=False):
+def grab_flanking_regions_from_mutantfile(mutant_dataset_infile, genome, flanksize=200, padding_char='.', 
+                                      min_readcount=0, chromosome_check_function=lambda x: True, ignore_both_strand_mutants=False):
     """ Return (flanking_seq,readcount) with both-side genomic flanking sequences for insertional mutants in mutant_dataset_infile.
 
     Grab all the insertion positions from mutant_dataset_infile (pickled mutant_analysis_classes.Insertional_mutant_dataset object), 
@@ -68,9 +68,8 @@ def grab_flanking_regions(mutant_dataset_infile, genome, flanksize=200, padding_
 
     For all remaining mutants, append (flanking region seq, total_readcount) to output list.
     """
-    flanking_region_count_list = []
-    count_all, count_lowreads, count_midreads, count_highreads = 0, 0, 0, 0
     dataset = mutant_analysis_classes.read_mutant_file(mutant_dataset_infile)
+    flanking_region_count_list = []
     for mutant in sorted(dataset, key = lambda m: m.position):
         # filter out mutants with wrong readcounts or in wrong chromosomes
         if not chromosome_check_function(mutant.position.chromosome):           continue
@@ -80,12 +79,12 @@ def grab_flanking_regions(mutant_dataset_infile, genome, flanksize=200, padding_
             if mutant.position.strand=='both' and ignore_both_strand_mutants:   continue
             else:                                   raise ValueError("Unexpected mutant strand! %s"%mutant.position)
         # grab mutant position/chromosome
-        pos_before_insertion = mutant.position.min_position
+        position_before_insertion = mutant.position.min_position
         # ignore cassette tandems (i.e. insertions that map to start or end of cassette)
         if mutant_analysis_classes.is_cassette_chromosome(mutant.position.chromosome):
-            if pos_before_insertion in [0, len(genome[mutant.position.chromosome])]:  continue
+            if position_before_insertion in [0, len(genome[mutant.position.chromosome])]:  continue
         # grab the actual flanking sequence, with padding, correct orientation etc
-        full_flanking_seq = flanking_region_from_pos(mutant.position.min_position, mutant.position.chromosome, 
+        full_flanking_seq = flanking_region_from_pos(position_before_insertion, mutant.position.chromosome, 
                                                      mutant.position.strand, genome, flanksize, padding_char)
         # append the sequence and readcount to output data
         flanking_region_count_list.append((full_flanking_seq, mutant.total_read_count))
@@ -93,9 +92,34 @@ def grab_flanking_regions(mutant_dataset_infile, genome, flanksize=200, padding_
 
 
 def filter_flanking_regions_by_pattern(flanking_region_count_list, pattern, either_orientation=True):
+def grab_flanking_regions_from_pos_dict(insertion_position_dict, genome, flanksize=200, padding_char='.', 
+                                        chromosome_check_function=lambda x: True, ignore_both_strand_mutants=False):
+    """ Same as grab_flanking_regions_from_mutantfile, but takes input as a (chrom,strand):pos_list dictionary instead, 
+    and assumes all readcounts to be 1.
+    """
+    flanking_region_count_list = []
+    for (chromosome,strand),pos_list in insertion_position_dict.items():
+        for position_before_insertion in pos_list:
+            # filter out positions in wrong chromosomes; filter out both-stranded positions if desired
+            if not chromosome_check_function(chromosome):           continue
+            if strand not in '+-':  
+                if strand=='both' and ignore_both_strand_mutants:   continue
+                else:                                               raise ValueError("Unexpected strand! %s"%strand)
+            # ignore cassette tandems (i.e. insertions that map to start or end of cassette)
+            if mutant_analysis_classes.is_cassette_chromosome(chromosome):
+                if position_before_insertion in [0, len(genome[chromosome])]:  continue
+            # grab the actual flanking sequence, with padding, correct orientation etc
+            full_flanking_seq = flanking_region_from_pos(position_before_insertion, chromosome, strand, 
+                                                         genome, flanksize, padding_char)
+            # append the sequence and readcount to output data
+            flanking_region_count_list.append((full_flanking_seq, 1))
+    return flanking_region_count_list
+    # TODO unit-test this too?  Could probably just convert the mutant data from the grab_flanking_regions_from_mutantfile unit-test and use that.
+
+
     """ Return separate lists of flanking regions that do and don't match given sequence pattern.
     
-    flanking_region_count_list should be a list of (flanking_region, count) pairs (like from grab_flanking_regions); 
+    flanking_region_count_list should be a list of (flanking_region, count) pairs (like from grab_flanking_regions_from_mutantfile); 
      the two return values (flanking regions that match and don't match the pattern) are the same format.
 
     The pattern should be a sequence string (allowed letters are ACTGN). It'ss considered to be centered around the cut site; 
@@ -335,28 +359,31 @@ class Testing(unittest.TestCase):
         test_genome = {'chr1':'AAAGGGCCC', 'chr2':'CGCG'}
         args = (mutantfile, test_genome)
         # if there's a both-strand mutant and ignore_both_strand_mutants is False, raise exception 
-        self.assertRaises(ValueError, grab_flanking_regions, *args, flanksize=2, ignore_both_strand_mutants=False)
+        self.assertRaises(ValueError, grab_flanking_regions_from_mutantfile, *args, flanksize=2, ignore_both_strand_mutants=False)
         # alwys use ignore_both_strand_mutants=True from now on, since otherwise we get an error
         kwargs = dict(ignore_both_strand_mutants=True)
         # correct flanking regions and readcounts
-        assert grab_flanking_regions(*args, flanksize=0, **kwargs) == [('',10), ('',10), ('',1), ('',10)]
-        assert grab_flanking_regions(*args, flanksize=1, **kwargs) == [('AG',10), ('CT',10), ('GG',1), ('GC',10)]
-        assert grab_flanking_regions(*args, flanksize=2, **kwargs) == [('AAGG',10), ('CCTT',10), ('AGGG',1), ('CGCG',10)]
+        assert grab_flanking_regions_from_mutantfile(*args, flanksize=0, **kwargs) == [('',10), ('',10), ('',1), ('',10)]
+        assert grab_flanking_regions_from_mutantfile(*args, flanksize=1, **kwargs) == [('AG',10), ('CT',10), ('GG',1), ('GC',10)]
+        assert grab_flanking_regions_from_mutantfile(*args, flanksize=2, **kwargs) == [('AAGG',10), ('CCTT',10), 
+                                                                                       ('AGGG',1), ('CGCG',10)]
         # when the flanksize gets high enough that some mutants run into chromosome edges, it's padded with . 
-        assert grab_flanking_regions(*args, flanksize=4, **kwargs) == [('.AAAGGGC',10), ('GCCCTTT.',10), 
-                                                                       ('AAAGGGCC',1), ('..CGCG..',10)]
+        assert grab_flanking_regions_from_mutantfile(*args, flanksize=4, **kwargs) == [('.AAAGGGC',10), ('GCCCTTT.',10), 
+                                                                                       ('AAAGGGCC',1), ('..CGCG..',10)]
         # testing that min_readcount works
         for M in (2,3,5,10):
-            assert grab_flanking_regions(*args, flanksize=2, min_readcount=M, **kwargs) == [('AAGG',10), ('CCTT',10), ('CGCG',10)]
+            assert grab_flanking_regions_from_mutantfile(*args, flanksize=2, min_readcount=M, **kwargs) == [('AAGG',10), 
+                                                                                                            ('CCTT',10), ('CGCG',10)]
         for M in (11, 12, 100, 1000):
-            assert grab_flanking_regions(*args, flanksize=2, min_readcount=M, **kwargs) == []
+            assert grab_flanking_regions_from_mutantfile(*args, flanksize=2, min_readcount=M, **kwargs) == []
         # testing that chromosome_check_function works
         f_chr1 = lambda x: x.endswith('1')
         f_chr2 = lambda x: x.endswith('2')
         f_chr3 = lambda x: x.endswith('3')
-        assert grab_flanking_regions(*args,flanksize=1, chromosome_check_function=f_chr1, **kwargs) == [('AG',10),('CT',10),('GG',1)]
-        assert grab_flanking_regions(*args,flanksize=1, chromosome_check_function=f_chr2, **kwargs) == [('GC',10)]
-        assert grab_flanking_regions(*args,flanksize=1, chromosome_check_function=f_chr3, **kwargs) == []
+        assert grab_flanking_regions_from_mutantfile(*args,flanksize=1, chromosome_check_function=f_chr1, **kwargs) == [('AG',10),
+                                                                                                                ('CT',10),('GG',1)]
+        assert grab_flanking_regions_from_mutantfile(*args,flanksize=1, chromosome_check_function=f_chr2, **kwargs) == [('GC',10)]
+        assert grab_flanking_regions_from_mutantfile(*args,flanksize=1, chromosome_check_function=f_chr3, **kwargs) == []
 
     def test__filter_flanking_regions_by_pattern(self):
         # all flanking regions must be same length
