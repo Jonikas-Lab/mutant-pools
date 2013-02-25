@@ -117,6 +117,41 @@ def grab_flanking_regions_from_pos_dict(insertion_position_dict, genome, flanksi
     # TODO unit-test this too?  Could probably just convert the mutant data from the grab_flanking_regions_from_mutantfile unit-test and use that.
 
 
+def grab_flanking_region_base_counts_from_pos_dict(insertion_position_dict, genome, flanksize=200, 
+                                                   chromosome_check_function=lambda x: True, ignore_both_strand_mutants=False):
+    """ Same as base_count_dict(grab_flanking_regions_from_mutantfile(*args)), but saves memory by not keeping all the sequences.
+
+    Basically instead of making a full dataset of flanking regions with grab_flanking_regions_from_mutantfile (which can be BIG)
+     and then converting those to a base-count dict with base_count_dict, just go over each position in insertion_position_dict,
+     grab that flanking region, add it to the current base-count dict, and go on to the next one, without saving.
+    Assumes all readcounts to be 1.
+    """
+    # initialize the base-count lists to the right length, and fill it out by going over all the seqs
+    base_count_dict = {base: [0 for _ in range(flanksize*2)] for base in NORMAL_DNA_BASES}
+    # for each position, grab the flanking region and add it to the base_count_dict
+    for (chromosome,strand),pos_list in insertion_position_dict.items():
+        for position_before_insertion in pos_list:
+            # filter out positions in wrong chromosomes; filter out both-stranded positions if desired
+            if not chromosome_check_function(chromosome):           continue
+            if strand not in '+-':  
+                if strand=='both' and ignore_both_strand_mutants:   continue
+                else:                                               raise ValueError("Unexpected strand! %s"%strand)
+            # ignore cassette tandems (i.e. insertions that map to start or end of cassette)
+            if mutant_analysis_classes.is_cassette_chromosome(chromosome):
+                if position_before_insertion in [0, len(genome[chromosome])]:  continue
+            # grab the actual flanking sequence, with padding, correct orientation etc
+            full_flanking_seq = flanking_region_from_pos(position_before_insertion, chromosome, strand, genome, flanksize)
+            # add base-counts from full_flanking_seq to base_count_dict
+            for position, base in enumerate(full_flanking_seq.upper()):
+                try:
+                    base_count_dict[base][position] += 1
+                except KeyError:
+                    pass
+                    # MAYBE-TODO add an option to NOT ignore bases that aren't in NORMAL_DNA_BASES?
+    return base_count_dict
+    # TODO unit-test this too?
+
+
     """ Return separate lists of flanking regions that do and don't match given sequence pattern.
     
     flanking_region_count_list should be a list of (flanking_region, count) pairs (like from grab_flanking_regions_from_mutantfile); 
