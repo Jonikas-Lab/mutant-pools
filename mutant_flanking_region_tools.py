@@ -91,7 +91,6 @@ def grab_flanking_regions_from_mutantfile(mutant_dataset_infile, genome, flanksi
     return flanking_region_count_list
 
 
-def filter_flanking_regions_by_pattern(flanking_region_count_list, pattern, either_orientation=True):
 def grab_flanking_regions_from_pos_dict(insertion_position_dict, genome, flanksize=200, padding_char='.', 
                                         chromosome_check_function=lambda x: True, ignore_both_strand_mutants=False):
     """ Same as grab_flanking_regions_from_mutantfile, but takes input as a (chrom,strand):pos_list dictionary instead, 
@@ -152,6 +151,8 @@ def grab_flanking_region_base_counts_from_pos_dict(insertion_position_dict, geno
     # TODO unit-test this too?
 
 
+def filter_flanking_regions_by_pattern(flanking_region_count_list, pattern, either_orientation=True, 
+                                       print_info=True, category=None, meaning_of_seqs='positions', meaning_of_counts='counts'):
     """ Return separate lists of flanking regions that do and don't match given sequence pattern.
     
     flanking_region_count_list should be a list of (flanking_region, count) pairs (like from grab_flanking_regions_from_mutantfile); 
@@ -163,6 +164,10 @@ def grab_flanking_region_base_counts_from_pos_dict(insertion_position_dict, geno
      orientation, and the returned flanking region will be in the orientation that matched - e.g. if pattern is GNAN, 
      a flanking region of either TTGCACTT or TTCTCCTT would match (forward and rev-compl respectively), 
       and the latter would be returned as rev-compl, AAGGAGAA.
+
+    If print_info is True, some information will be printed about what number/percentage matched and didn't: it'll be given two ways:
+     - by flanking region, counting each once, if meaning_of_seqs is not None, and meaning_of_seqs will be used as the description
+     - by count, if some counts are not 1 and meaning_of_counts is not None, and meaning_of_counts will be used as the description.
     """
     if not flanking_region_count_list:  return []
     flanking_region_length = get_all_seq_length(zip(*flanking_region_count_list)[0])
@@ -170,6 +175,7 @@ def grab_flanking_region_base_counts_from_pos_dict(insertion_position_dict, geno
     if len(pattern) % 2:                        sys.exit("Pattern length must be an even number!")
     if len(pattern) > flanking_region_length:   sys.exit("Pattern cannot be longer than flanking regions!")
     # pad the pattern to match the flanking region length
+    orig_pattern = pattern
     if len(pattern) < flanking_region_length:
         padding_len = int((flanking_region_length - len(pattern)) / 2)
         pattern = 'N'*padding_len + pattern + 'N'*padding_len
@@ -193,6 +199,24 @@ def grab_flanking_region_base_counts_from_pos_dict(insertion_position_dict, geno
                 continue
         # if it didn't match anywhere, save it as a no-match.
         flanking_region_count_list_nomatch.append((flanking_region, count))
+    if print_info:
+        if meaning_of_seqs is None and meaning_of_counts is None:
+            raise ValueError("To get info printed, at least one of meaning_of_seqs/meaning_of_counts must be not None!")
+        print_data = "%smatched %s:  "%('' if category is None else category+' ', orig_pattern)
+        if meaning_of_seqs is not None:
+            positions_matched, positions_unmatched = len(flanking_region_count_list_match), len(flanking_region_count_list_nomatch)
+            positions_all = positions_matched+positions_unmatched
+            print_data += "%s, unmatched %s/%s"%( 
+                            general_utilities.value_and_percentages(positions_matched,[positions_all],insert_word=meaning_of_seqs),
+                            positions_unmatched, positions_all)
+        if meaning_of_counts is not None:
+            counts_matched, counts_unmatched = [sum(zip(*data)[1]) 
+                                                for data in (flanking_region_count_list_match,flanking_region_count_list_nomatch)]
+            counts_all = counts_matched+counts_unmatched
+            print_data += ";  %s, unmatched %s/%s."%(
+                                general_utilities.value_and_percentages(counts_matched,[counts_all],insert_word=meaning_of_counts),
+                                counts_unmatched, counts_all)
+        print print_data
     return flanking_region_count_list_match, flanking_region_count_list_nomatch
 
 
