@@ -369,7 +369,7 @@ def base_fraction_stats(base_count_position_list_dict, overall_GC_content=0.5, p
 
 
 def base_fraction_plot(base_count_position_list_dict, flank_size=10, 
-                       normalize_to_GC_contents=1, overall_GC_content=0.5, 
+                       normalize_to_GC_contents=1, overall_GC_content=0.5, genome_info='', 
                        add_markers=True, bases_plotstyles={'A': 'g^-', 'T':'rv-', 'C':'bs-', 'G':'yo-'}):
     """ Plot the base fractions at each position, with given flanksize, normalized to GC content or not.
 
@@ -390,8 +390,8 @@ def base_fraction_plot(base_count_position_list_dict, flank_size=10,
         else:               mplt.plot(plot_data, bases_plotstyles[base][0], label=base)
     mplt.legend(loc=2, prop=FontProperties(size='smaller'))
     ylabel = 'fraction of bases in given position'
-    if normalize_to_GC_contents==1:     ylabel += ',\nas a difference from overall GC content of that genome'
-    elif normalize_to_GC_contents==2:   ylabel += ',\nas a ratio to overall GC content of that genome'
+    if normalize_to_GC_contents==1:     ylabel += ',\nas a difference from %s GC content'%genome_info
+    elif normalize_to_GC_contents==2:   ylabel += ',\nas a ratio to %s GC content'%genome_info
     else:                               ylabel = 'raw ' + ylabel
     mplt.ylabel(ylabel,ha='center')
     # change the xticks to use -1 before the insertion position and 1 after, no 0
