@@ -171,9 +171,9 @@ def filter_flanking_regions_by_pattern(flanking_region_count_list, pattern, eith
     """
     if not flanking_region_count_list:  return []
     flanking_region_length = get_all_seq_length(zip(*flanking_region_count_list)[0])
-    if flanking_region_length % 2:              sys.exit("Flanking region length must be an even number!")
-    if len(pattern) % 2:                        sys.exit("Pattern length must be an even number!")
-    if len(pattern) > flanking_region_length:   sys.exit("Pattern cannot be longer than flanking regions!")
+    if flanking_region_length % 2:              raise ValueError("Flanking region length must be an even number!")
+    if len(pattern) % 2:                        raise ValueError("Pattern length must be an even number!")
+    if len(pattern) > flanking_region_length:   raise ValueError("Pattern cannot be longer than flanking regions!")
     # pad the pattern to match the flanking region length
     orig_pattern = pattern
     if len(pattern) < flanking_region_length:
@@ -255,7 +255,7 @@ def print_base_count_fraction_for_dist(flanking_region_count_list, distance_from
      calculating base frequencies/counts.
     """
     flanking_region_length = get_all_seq_length(zip(*flanking_region_count_list)[0])
-    if flanking_region_length % 2:              sys.exit("Flanking region length must be an even number!")
+    if flanking_region_length % 2:              raise ValueError("Flanking region length must be an even number!")
     flank_length = int(flanking_region_length/2)
     # grab only the flanking region length we're actually interested in, and convert the counts
     local_flanking_region_length = 2*distance_from_middle
@@ -267,7 +267,7 @@ def print_base_count_fraction_for_dist(flanking_region_count_list, distance_from
     #   the ignore pattern isn't symmetrical around the middle, so half the position 1 bases will be ignored (first N in ANAN), 
     #    and half the position 2 bases will be ignored (second N in ANAN) - there will be no single position with all bases ignored.
     if ignore_bases_pattern is not None:
-        if len(ignore_bases_pattern) % 2:       sys.exit("Ignore_bases_pattern length must be an even number!")
+        if len(ignore_bases_pattern) % 2:       raise ValueError("Ignore_bases_pattern length must be an even number!")
         length_diff = int((len(ignore_bases_pattern)-local_flanking_region_length)/2)
         if length_diff>0:   raise ValueError("Ignore_bases_pattern is longer than 2*distance_from_middle - probably error!")
         if length_diff<0:   ignore_bases_pattern = 'N'*length_diff + ignore_bases_pattern + 'N'*length_diff
@@ -312,10 +312,10 @@ def base_fraction_stats(base_count_position_list_dict, overall_GC_content=0.5, p
     Optionally print details and/or summary, based on the pvalue cutoffs given.
     """
     if not pvalue_cutoffs==sorted(pvalue_cutoffs, reverse=True):
-        sys.exit("pvalue_cutoffs must be sorted, largest first!")
+        raise ValueError("pvalue_cutoffs must be sorted, largest first!")
 
     lengths = set([len(l) for l in base_count_position_list_dict.values()])
-    if len(lengths)>1:  sys.exit("Different bases have different count list lengths! %s"%lengths)
+    if len(lengths)>1:  raise ValueError("Different bases have different count list lengths! %s"%lengths)
     length = lengths.pop()
 
     expected_base_fractions = base_fractions_from_GC_content(overall_GC_content)
@@ -448,10 +448,10 @@ class Testing(unittest.TestCase):
         # all flanking regions must be same length
         self.assertRaises(ValueError, filter_flanking_regions_by_pattern, [('AA',2), ('AAAA',1)], '')
         # flanking region and pattern length must be even
-        self.assertRaises(SystemExit, filter_flanking_regions_by_pattern, [('AAA',2)], '')
-        self.assertRaises(SystemExit, filter_flanking_regions_by_pattern, [('',1)], 'ANN')
+        self.assertRaises(ValueError, filter_flanking_regions_by_pattern, [('AAA',2)], '')
+        self.assertRaises(ValueError, filter_flanking_regions_by_pattern, [('',1)], 'ANN')
         # pattern can't be longer than flanking regions
-        self.assertRaises(SystemExit, filter_flanking_regions_by_pattern, [('AAA',2)], 'ANNNNN')
+        self.assertRaises(ValueError, filter_flanking_regions_by_pattern, [('AAA',2)], 'ANNNNN')
         # empty list always gives empty list
         for pattern in 'NN AAAAAA ATCG'.split():
             for orient in (True,False):
@@ -517,8 +517,8 @@ class Testing(unittest.TestCase):
         # fails if lengths aren't all the same, or seq or ignore_bases_pattern aren't even, 
         #  or if ignore_bases_pattern is longer than 2*distance_from_middle
         self.assertRaises(ValueError, print_base_count_fraction_for_dist, [('AT',1), ('GGG',3)], 1)
-        self.assertRaises(SystemExit, print_base_count_fraction_for_dist, [('ATG',1)], 1)
-        self.assertRaises(SystemExit, print_base_count_fraction_for_dist, [('AT',1)], 1, ignore_bases_pattern='T')
+        self.assertRaises(ValueError, print_base_count_fraction_for_dist, [('ATG',1)], 1)
+        self.assertRaises(ValueError, print_base_count_fraction_for_dist, [('AT',1)], 1, ignore_bases_pattern='T')
         self.assertRaises(ValueError, print_base_count_fraction_for_dist, [('AT',1)], 1, ignore_bases_pattern='TTTT')
         # basic functionality
         assert print_base_count_fraction_for_dist([('AT',1), ('GG',3)], 1, ignore_bases_pattern=None, average_both_sides=False) == ( 
