@@ -151,6 +151,38 @@ def grab_flanking_region_base_counts_from_pos_dict(insertion_position_dict, geno
     # TODO unit-test this too?
 
 
+def grab_flanking_region_motif_counts_from_pos_dict(insertion_position_dict, genome, flanksize=2, 
+                                                    chromosome_check_function=lambda x: True, ignore_both_strand_mutants=False):
+    """ Get a flanking_seq:count dictionary for the flanking seqs for insertion_position_dict ((chrom,strand):pos_list dictionary).
+
+    Only really makes sense for small flanksizes - otherwise the total number of possible motifs will be huge (4^(flanksize*2).
+    Assumes all readcounts to be 1.
+    """
+    # initialize the motif-count lists to the right length, and fill it out by going over all the seqs
+    motif_count_dict = {''.join(four_bases): 0 for four_bases 
+                        in itertools.product(NORMAL_DNA_BASES,NORMAL_DNA_BASES,NORMAL_DNA_BASES,NORMAL_DNA_BASES)}
+    # for each position, grab the flanking region and add it to the motif_count_dict
+    for (chromosome,strand),pos_list in insertion_position_dict.items():
+        for position_before_insertion in pos_list:
+            # filter out positions in wrong chromosomes; filter out both-stranded positions if desired
+            if not chromosome_check_function(chromosome):           continue
+            if strand not in '+-':  
+                if strand=='both' and ignore_both_strand_mutants:   continue
+                else:                                               raise ValueError("Unexpected strand! %s"%strand)
+            # ignore cassette tandems (i.e. insertions that map to start or end of cassette)
+            if mutant_analysis_classes.is_cassette_chromosome(chromosome):
+                if position_before_insertion in [0, len(genome[chromosome])]:  continue
+            # grab the actual flanking sequence, with padding, correct orientation etc
+            full_flanking_seq = flanking_region_from_pos(position_before_insertion, chromosome, strand, genome, flanksize)
+            # add motif-count of full_flanking_seq to motif_count_dict
+            try:                motif_count_dict[full_flanking_seq] += 1
+            except KeyError:    pass
+            # MAYBE-TODO add an option to NOT ignore motifs that aren't in NORMAL_DNA_BASES?
+    return motif_count_dict
+    # TODO unit-test this too?
+    # TODO should probably just merge this with grab_flanking_region_base_counts_from_pos_dict for the future?  Except I'd usually want to run them with different flanksizes, so maybe not.  May want to refactor or something - give different flanksizes for the two functionalities but in a single function?  Since most of the work is probably grabbing the flanking region...
+
+
 def filter_flanking_regions_by_pattern(flanking_region_count_list, pattern, either_orientation=True, 
                                        print_info=True, category=None, meaning_of_seqs='positions', meaning_of_counts='counts'):
     """ Return separate lists of flanking regions that do and don't match given sequence pattern.
