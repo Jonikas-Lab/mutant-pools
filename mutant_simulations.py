@@ -704,6 +704,7 @@ def simulate_genelist_from_mappability(N_mutants, gene_mappable_lengths, interge
     simulated_genelist = weighted_random_choice_multi(gene_IDs, mapp_lengths, N_mutants)
     return simulated_genelist
     # TODO unit-test!
+    # TODO this gives different results than simulate_dataset_from_mappability - search for it in 1211_positions_Ru-screen1-for-paper/notes.txt for more info. I ended up not using it - if I want to use it, I should figure out what's wrong and fix it!          Is it because I'm treating 20 and 21bp flanking regions equally when really I shouldn't be?
 
 
 ### simulate dataset with N randomly positioned mutants, matching the gap-size distribution of the real dataset, and taking into account mappable/unmappable positions
