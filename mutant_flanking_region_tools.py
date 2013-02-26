@@ -446,21 +446,20 @@ class Testing(unittest.TestCase):
 
     def test__filter_flanking_regions_by_pattern(self):
         # all flanking regions must be same length
-        self.assertRaises(ValueError, filter_flanking_regions_by_pattern, [('AA',2), ('AAAA',1)], '')
+        self.assertRaises(ValueError, filter_flanking_regions_by_pattern, [('AA',2), ('AAAA',1)], '', False)
         # flanking region and pattern length must be even
-        self.assertRaises(ValueError, filter_flanking_regions_by_pattern, [('AAA',2)], '')
-        self.assertRaises(ValueError, filter_flanking_regions_by_pattern, [('',1)], 'ANN')
+        self.assertRaises(ValueError, filter_flanking_regions_by_pattern, [('AAA',2)], '', False)
+        self.assertRaises(ValueError, filter_flanking_regions_by_pattern, [('',1)], 'ANN', False)
         # pattern can't be longer than flanking regions
-        self.assertRaises(ValueError, filter_flanking_regions_by_pattern, [('AAA',2)], 'ANNNNN')
+        self.assertRaises(ValueError, filter_flanking_regions_by_pattern, [('AAA',2)], 'ANNNNN', False)
         # empty list always gives empty list
         for pattern in 'NN AAAAAA ATCG'.split():
             for orient in (True,False):
-                assert filter_flanking_regions_by_pattern([], pattern, either_orientation=orient) == []
+                assert filter_flanking_regions_by_pattern([], pattern, orient, False) == []
         # empty/all-N pattern matches everything
         all_4bp_regions = [(''.join(bases),1) for bases in itertools.product(*[NORMAL_DNA_BASES for _ in range(4)])]
         for pattern in ['', 'NN', 'NNNN']:
-            assert filter_flanking_regions_by_pattern(all_4bp_regions, pattern, False) == (all_4bp_regions, [])
-        assert filter_flanking_regions_by_pattern
+            assert filter_flanking_regions_by_pattern(all_4bp_regions, pattern, False, False) == (all_4bp_regions, [])
         # function for easier checking of more complex cases while ignoring counts
         def _check_patterns_all_counts_1(input_seqs_str, pattern, both_orient, expected_match_seqs_str):
             full_input = [(seq,1) for seq in input_seqs_str.split()]
@@ -468,7 +467,7 @@ class Testing(unittest.TestCase):
             expected_match_seqs_set = set(expected_match_seqs_str.split())
             expected_nomatch_seqs = [seq for seq in input_seqs_str.split() if seq not in expected_match_seqs_set]
             expected_output_nomatch = [(seq,1) for seq in expected_nomatch_seqs]
-            real_output_match, real_output_nomatch = filter_flanking_regions_by_pattern(full_input, pattern, both_orient)
+            real_output_match, real_output_nomatch = filter_flanking_regions_by_pattern(full_input, pattern, both_orient, False)
             if not real_output_match == expected_output_match:
                 print real_output_match, expected_output_match
                 return False
@@ -481,7 +480,8 @@ class Testing(unittest.TestCase):
         # including a shorter pattern that needs to be padded, and seqs with Ns
         assert _check_patterns_all_counts_1('AAGT TAGN GTTT GNNT GNGT GNAT', 'AG', False, 'AAGT TAGN GNNT GNGT')
         # check that counts are propagated properly
-        assert filter_flanking_regions_by_pattern([('AA',1),('AG',2),('AC',100)], 'AN', False)[0] == [('AA',1), ('AG',2), ('AC',100)]
+        assert filter_flanking_regions_by_pattern([('AA',1),('AG',2),('AC',100)], 'AN', False, False)[0] == [('AA',1), 
+                                                                                                             ('AG',2), ('AC',100)]
         ### Two cases for both_orientations=True!  
         ###  That one's randomized, so it's harder to test - I'm doing 100 repeats and making sure all the valid results show up.
         # 1) non-palindrome pattern:
@@ -489,7 +489,7 @@ class Testing(unittest.TestCase):
         #  AAAT matches only when reverse-complement, and ATTG only when forward, so they'll show up as ATTT and ATTG, always.
         all_match, all_nomatch = set(), set()
         for _ in range(100):
-            match,nomatch = filter_flanking_regions_by_pattern([('AAAT',1),('ATTG',2),('GGTT',3)], 'NTTN', True)
+            match,nomatch = filter_flanking_regions_by_pattern([('AAAT',1),('ATTG',2),('GGTT',3)], 'NTTN', True, False)
             all_match.add(tuple(match))
             all_nomatch.add(tuple(nomatch))
         assert all_match == set([ (('ATTT',1),('ATTG',2)) ])
@@ -498,7 +498,7 @@ class Testing(unittest.TestCase):
         #                           GTTT doesn't match in either direction, so it'll show up as GTTT or AAAC.
         all_match, all_nomatch = set(), set()
         for _ in range(100):
-            match,nomatch = filter_flanking_regions_by_pattern([('CTAC',1),('GTTT',2)], 'NTAN', True)
+            match,nomatch = filter_flanking_regions_by_pattern([('CTAC',1),('GTTT',2)], 'NTAN', True, False)
             all_match.add(tuple(match))
             all_nomatch.add(tuple(nomatch))
         assert all_match   == set([ (('CTAC',1),), (('GTAG',1),) ])
