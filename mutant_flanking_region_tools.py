@@ -400,6 +400,72 @@ def base_fraction_stats(base_count_position_list_dict, overall_GC_content=0.5, p
     return raw_position_pvalues, FDRadj_position_pvalues
 
 
+def base_fraction_stats_compare(base_count_position_list_dict_1, base_count_position_list_dict_2, name1='SET1', name2='SET2', 
+                                print_single_pvalues=False, print_summary=True, 
+                                pvalue_cutoffs = [0.05, 1e-10, 1e-99], cutoff_marks=['*', '**', '***']):
+    """ Like base_fraction_stats, but compare two base-count datasets to each other at east position, instead of to a GC-content. """
+    if not pvalue_cutoffs==sorted(pvalue_cutoffs, reverse=True):
+        raise ValueError("pvalue_cutoffs must be sorted, largest first!")
+
+    lengths = set([len(l) for l in base_count_position_list_dict_1.values() + base_count_position_list_dict_2.values()])
+    if len(lengths)>1:  raise ValueError("Different bases have different count list lengths! %s"%lengths)
+    length = lengths.pop()
+
+    raw_position_pvalues = []
+    FDRadj_position_pvalues = []
+    base_fractions_by_pos_1, base_fractions_by_pos_2 = [], []
+    base_counts_list_1 = zip(*[base_count_position_list_dict_1[base] for base in NORMAL_DNA_BASES])
+    base_counts_list_2 = zip(*[base_count_position_list_dict_2[base] for base in NORMAL_DNA_BASES])
+    for base_counts_1,base_counts_2 in zip(base_counts_list_1,base_counts_list_2):
+        base_total_1 = sum(base_counts_1)
+        base_fractions_1 = [count/base_total_1 for count in base_counts_1]
+        base_fractions_by_pos_1.append(dict(zip(NORMAL_DNA_BASES,base_fractions_1)))
+        base_total_2 = sum(base_counts_2)
+        base_fractions_2 = [count/base_total_2 for count in base_counts_2]
+        base_fractions_by_pos_2.append(dict(zip(NORMAL_DNA_BASES,base_fractions_2)))
+        # NOTE - for scipy.stats.chisquare the reference has to be normalized so it adds up to the same total! So do that. 
+        expected_base_counts_from_2 = [fraction_2*base_total_1 for fraction_2 in base_fractions_2]
+        # Inputs have to be as scipy.array.  The return value is a (chisquare_statistic, pvalue) tuple - just grab the pvalue.
+        pvalue = scipy.stats.chisquare(scipy.array(base_counts_1), scipy.array(expected_base_counts_from_2))[1]
+        raw_position_pvalues.append(pvalue)
+    # adjust p-values for multiple testing - although it's not clear this is really needed, 
+    #  since we EXPECT the significant parts to be right around the cut site, we're only checking a longer region just in case,
+    #  and how long a region we're checking is pretty arbitrary...
+    FDRadj_position_pvalues = R_stats.p_adjust(FloatVector(raw_position_pvalues), method='BH')
+
+    if print_single_pvalues or print_summary:
+        def base_fractions_string(base_fraction_list_dict):
+            return ', '.join(['%.2f %s'%(base_fraction_list_dict[base], base) for base in NORMAL_DNA_BASES])
+    if print_single_pvalues:
+        relative_pos = lambda pos: _relative_position_vs_cut(pos, length/2)
+        # print info for only the LOWEST cutoff matched by the pvalue
+        print "single positions with raw p-value <= %s:"%max(pvalue_cutoffs)
+        for position,(pvalue, adj_pvalue, base_fractions_1, base_fractions_2) in enumerate(zip(raw_position_pvalues, 
+                                                   FDRadj_position_pvalues, base_fractions_by_pos_1, base_fractions_by_pos_2)):
+            for cutoff,mark in reversed(zip(pvalue_cutoffs, cutoff_marks)):
+                if pvalue <= cutoff:
+                    print " %s pvalue %.2g (FDR-adjusted %.2g) for base %s (%s %s; %s %s)" % (mark, 
+                                                                                    pvalue, adj_pvalue, relative_pos(position), 
+                                                                                    name1, base_fractions_string(base_fractions_1), 
+                                                                                    name2, base_fractions_string(base_fractions_2))
+                    break
+    if print_summary:
+        # grab the counts of raw and adjusted p-values over cutoffs (CUMULATIVE - a pvalue of 0 is counted for all cutoffs)
+        raw_pvalue_cutoff_counts = defaultdict(lambda: 0)
+        adj_pvalue_cutoff_counts = defaultdict(lambda: 0)
+        for position,(pvalue, adj_pvalue) in enumerate(zip(raw_position_pvalues, FDRadj_position_pvalues)):
+            for cutoff,mark in zip(pvalue_cutoffs, cutoff_marks):
+                if adj_pvalue <= cutoff:     adj_pvalue_cutoff_counts[cutoff] += 1
+                if pvalue <= cutoff:         raw_pvalue_cutoff_counts[cutoff] += 1
+        def pvalue_cutoff_count_list(pvalue_count_dict, cutoffs):
+            return ', '.join(["%s <= %s"%(pvalue_count_dict[cutoff], cutoff) for cutoff in cutoffs])
+        print "out of %s positions:\n raw p-values: %s\n FDR-adjusted p-values: %s" % (length, 
+                                                           pvalue_cutoff_count_list(raw_pvalue_cutoff_counts, pvalue_cutoffs), 
+                                                           pvalue_cutoff_count_list(adj_pvalue_cutoff_counts, pvalue_cutoffs))
+    return raw_position_pvalues, FDRadj_position_pvalues
+    # TODO should probably refactor this to re-use some code from base_fraction_stats, there's a lot of duplication...
+
+
 def base_fraction_plot(base_count_position_list_dict, flank_size=10, 
                        normalize_to_GC_contents=1, overall_GC_content=0.5, genome_info='', 
                        add_markers=True, bases_plotstyles={'A': 'g^-', 'T':'rv-', 'C':'bs-', 'G':'yo-'}):
