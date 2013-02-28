@@ -614,7 +614,8 @@ def chromosome_density_barchart(mutant_dataset, include_scaffolds=True, include_
 ### number of genes with 1+/2+/etc mutants vs number of mutants (randomly chosen mutant subsets)
 
 def genes_with_N_mutants(dataset, subset_sizes=100, max_N_mutants=3, N_mutants_colors=None, repeat_N_times=100, dataset_info='', 
-                         total_genes=None, mappable_percent=None, plot_full_count=True, print_repeat_progress=10):
+                         total_genes=None, mappable_percent=None, plot_full_count=True, 
+                         print_repeat_progress=10, rasterize_data=False):
     """ Plot % of all genes with N mutants for different-sized random subsets of dataset.
 
     Plot % of all genes that have between 1 and max_N_mutants mutants (separate line for each N); 
@@ -664,7 +665,9 @@ def genes_with_N_mutants(dataset, subset_sizes=100, max_N_mutants=3, N_mutants_c
         gene_counts_by_Nmutants = mutant_simulations.gene_counts_for_mutant_subsets(dataset, subset_sizes, max_N_mutants)
         for N_mutants,gene_counts in gene_counts_by_Nmutants.items():
             # use custom colors if given, otherwise let mplt choose colors
-            plot_kwargs = {} if N_mutants_colors is None else {'color': N_mutants_colors[N_mutants-1]}
+            plot_kwargs = {} 
+            if N_mutants_colors:    plot_kwargs['color'] = N_mutants_colors[N_mutants-1]
+            if rasterize_data:      plot_kwargs['rasterized'] = True
             # only label the lines in the first repeat, to avoid 100 repeats in the legend!
             if repeat==0 and dataset_info != '__nolegend__':
                 plot_kwargs['label'] = "genes with %s+ mutants%s"%(N_mutants, ', %s'%dataset_info if dataset_info else '')
@@ -673,7 +676,9 @@ def genes_with_N_mutants(dataset, subset_sizes=100, max_N_mutants=3, N_mutants_c
     if plot_full_count:
         gene_counts_by_Nmutants = mutant_simulations.gene_counts_for_mutant_subsets(dataset, [len(dataset)], max_N_mutants)
         for N_mutants,gene_counts in gene_counts_by_Nmutants.items():
-            plot_kwargs = {} if N_mutants_colors is None else {'color': N_mutants_colors[N_mutants-1]}
+            plot_kwargs = {} 
+            if N_mutants_colors:    plot_kwargs['color'] = N_mutants_colors[N_mutants-1]
+            if rasterize_data:      plot_kwargs['rasterized'] = True
             mplt.plot(len(dataset), gene_counts, '.', linewidth=0, markeredgecolor='black',**plot_kwargs)
     # add a line at the total gene number - TODO this doesn't work right... figure out sensible xmin/xmax values, reset xlim
     mplt.legend(loc='upper left', prop=FontProperties(size='medium'))
