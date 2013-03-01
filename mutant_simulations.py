@@ -16,10 +16,9 @@ import collections
 import numpy
 import scipy
 import scipy.stats
-from rpy2.robjects.packages import importr
-from rpy2.robjects.vectors import FloatVector
 # my modules
 import general_utilities
+import statistics_utilities
 import basic_seq_utilities
 import mutant_analysis_classes
 import mutant_utilities
@@ -447,23 +446,7 @@ def gene_mappability(mappability_by_flanking_region, genefile=mutant_utilities.D
     #
     # B) Alternatively, for option B - I'm trying to test whether the mean of two distributions (real and simulated mutant counts over a window) are the same or different...  So T-test (scipy.stats.ttest_ind, I think), or Welch's t-test (doesn't assume equal variances - apparently present in a newer scipy version), or Mann-Whitney U test (doesn't assume the data is normally distributed).  I'd say it's pretty likely to be randomly distributed, idk about the variances...  Well, I'm only giving a single number for the real dataset, so there's no variance in that - and if anything, the variance of the real dataset may be smaller than of the simulated ones, not larger, so I think we're good with the Student's T-test.
     #
-    # How to do FDR correction?  According to the Handbook of Biological Statistics (https://udel.edu/~mcdonald/statmultcomp.html), Benjamini-Hochberg correction is probably what I want.  They describe a procedure, but it's slightly odd, because it doesn't give a p-value (q-value?) for each window, just a yes/no significance result based on the p-value and the desired false discovery rate. 
-    # I didn't find any obvious way of doing this directly in python, but there's an R function "p.adjust" (http://stat.ethz.ch/R-manual/R-devel/library/stats/html/p.adjust.html), which I can use in python with rpy2 (http://stackoverflow.com/questions/7450957/how-to-implement-rs-p-adjust-in-python).  Trying that, with just a few test values:
-    #  * get the p_values for a few mutant counts per bin, between 0 and 15:
-    #     >>> p_values = [scipy.stats.binom_test(x,12061,20000/113000000) for x in (0,0,1,2,5,10,10,25,25)]
-    #     >>> p_values
-    #     [0.28620628492789102, 0.28620628492789102, 0.73047985928763548, 1.0, 0.065605526425554839, 7.8933016187778668e-05, 7.8933016187778668e-05, 1.3921234115131231e-18, 1.3921234115131231e-18]
-    #  * try the FDR adjustment with default options - the p-values increase a bit:
-    #     >>> from rpy2.robjects.packages import importr
-    #     >>> R_stats = importr('stats')
-    #     >>> from rpy2.robjects.vectors import FloatVector
-    #     >>> p_adjusted = R_stats.p_adjust(FloatVector(p_values), method = 'BH')
-    #     >>> list(p_adjusted)
-    #     [0.36797950919300276, 0.36797950919300276, 0.8217898416985899, 1.0, 0.1180899475659987, 0.000177599286422502, 0.000177599286422502, 6.264555351809054e-18, 6.264555351809054e-18]
-    #  * same, but using the correct N - I'm reporting 9 random p-values here, but we actually did 50000 tests (50000 windows), not just 9!  The values went down further - good.
-    #     >>> p_adjusted2 = R_stats.p_adjust(FloatVector(p_values), method = 'BH', n=50000)
-    #     >>> list(p_adjusted2)
-    #     [1.0, 1.0, 1.0, 1.0, 1.0, 0.9866627023472333, 0.9866627023472333, 3.4803085287828076e-14, 3.4803085287828076e-14]
+    # How to do FDR correction?  See "OLD NOTES ON FDR CORRECTION" section in ~/programs/basic_work_mine/statistics_utilities.py
 
 def find_hot_cold_spots(dataset, window_size, mappable_positions_20bp, mappable_positions_21bp, window_offset=0, N_samples=None, 
                         chromosome_lengths=None):
@@ -502,7 +485,6 @@ def find_hot_cold_spots(dataset, window_size, mappable_positions_20bp, mappable_
         chromosome_lengths = get_chromosome_lengths(chromosome_lengths)
     fraction_20bp = get_20bp_fraction(dataset)
     total_N_mutants = len(dataset)
-    R_stats = importr('stats')
     mappable_position_data = {20: mappable_positions_20bp, 21: mappable_positions_21bp}
     # get total mappable genome lengths (for 20 and 21bp cases separately)
     genome_mappable_lengths = {flank_len: sum(len(pos_list) for pos_list in mappable_positions.values())
@@ -546,8 +528,8 @@ def find_hot_cold_spots(dataset, window_size, mappable_positions_20bp, mappable_
         #  (if there are no windows on a given chromosome (it was too short for the size+offset), 
         #   just set the lists to empty and skip rather than running statistics on empty lists, which can give warnings)
         if len(window_mutant_count_list):
-            window_adjusted_pvalues[chrom] = numpy.array(R_stats.p_adjust(FloatVector(window_raw_pvalues[chrom]), 
-                                                                          method='BH', n=N_samples))
+            window_adjusted_pvalues[chrom] = numpy.array(statistics_utilities.FDR_adjust_pvalues(window_raw_pvalues[chrom], 
+                                                                                                 method='BH', N=N_samples))
         else:
             window_adjusted_pvalues[chrom] = numpy.array([])
     return window_adjusted_pvalues, window_raw_pvalues, window_which_side_values, window_mutant_count_lists

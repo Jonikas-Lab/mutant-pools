@@ -8,7 +8,7 @@ Plotting utilities specifically for mutant datasets and related things.  Module 
 from __future__ import division
 import unittest
 import glob
-import os
+import os, sys
 import collections
 from collections import defaultdict
 import math
@@ -17,13 +17,11 @@ import random
 import numpy
 import scipy
 import scipy.stats
-from rpy2.robjects.packages import importr
-from rpy2.robjects.vectors import FloatVector
-R_stats = importr('stats')
 import matplotlib.pyplot as mplt
 from matplotlib.font_manager import FontProperties
 # my modules
 import general_utilities
+import statistics_utilities
 import basic_seq_utilities
 import plotting_utilities
 import mutant_analysis_classes
@@ -862,7 +860,7 @@ def insertions_over_gene_length_pvalues(mutant_data_by_orientation, gene_effecti
     ### get the p-values for whether total bin mutant counts are different from the overall count
     total_count_pvalues = [scipy.stats.binom_test(x=bin_count, n=total_N_mutants['both'], p=bin_probability) 
                            for (bin_count, bin_probability) in zip(bin_mutant_counts['both'], bin_probabilities)]
-    total_count_pvalues_adjusted = R_stats.p_adjust(FloatVector(total_count_pvalues), method='BH')
+    total_count_pvalues_adjusted = statistics_utilities.FDR_adjust_pvalues(total_count_pvalues, method='BH')
     # print the data
     print "Whether total bin mutant counts are significantly different from overall, based on %s length:"%length_type
     print " (overall mutant density is %s (over full gene length %s)"%(total_N_mutants['both']/total_gene_length, seq_info) 
@@ -876,7 +874,7 @@ def insertions_over_gene_length_pvalues(mutant_data_by_orientation, gene_effecti
         fisher_result = scipy.stats.fisher_exact([[bin_mutant_counts['sense'][bin_N], bin_mutant_counts['antisense'][bin_N]], 
                                                  [total_N_mutants['sense'], total_N_mutants['antisense']]])
         orientation_diff_pvalues.append(fisher_result[1])   # fisher output is (oddsratio,pvalue) - we just want pvalue
-    orientation_diff_pvalues_adjusted = R_stats.p_adjust(FloatVector(orientation_diff_pvalues), method='BH')
+    orientation_diff_pvalues_adjusted = statistics_utilities.FDR_adjust_pvalues(orientation_diff_pvalues, method='BH')
     # print the data
     print "Whether bin mutant sense/antisense proportions are significantly different from overall:"
     print " (overall mutant sense:antisense counts are %s:%s (over full gene length %s)"%(total_N_mutants['sense'], 
@@ -1024,7 +1022,7 @@ def insertion_density_by_feature_pvalues(dataset, feature_lengths, feature_lengt
     ### get the p-values for whether total feature mutant counts are different from the overall count
     total_count_pvalues = [scipy.stats.binom_test(x=feature_mutant_counts_both[feature], n=total_N_mutants_both, 
                                                   p=feature_probabilities[feature]) for feature in features_order if feature!='all']
-    total_count_pvalues_adjusted = R_stats.p_adjust(FloatVector(total_count_pvalues), method='BH')
+    total_count_pvalues_adjusted = statistics_utilities.FDR_adjust_pvalues(total_count_pvalues, method='BH')
     # print the data
     print "Whether total feature mutant counts are significantly different from overall, based on %s length:"%feature_length_type
     print "  (overall mutant density %.3g - mutant count %s, genome length %s)"%(total_N_mutants_both/feature_lengths['all'], 
@@ -1039,7 +1037,7 @@ def insertion_density_by_feature_pvalues(dataset, feature_lengths, feature_lengt
                                                            feature_mutant_counts_antisense[feature]], 
                                                           [total_N_mutants_sense, total_N_mutants_antisense]])[1] 
                                 for feature in features_order_orientation]
-    orientation_diff_pvalues_adjusted = R_stats.p_adjust(FloatVector(orientation_diff_pvalues), method='BH')
+    orientation_diff_pvalues_adjusted = statistics_utilities.FDR_adjust_pvalues(orientation_diff_pvalues, method='BH')
     # print the data
     print "Whether feature mutant sense/antisense proportions are significantly different from overall:"
     print "  (overall mutant sense:antisense counts are %s:%s (over total gene length %s)"%(total_N_mutants_sense, 
