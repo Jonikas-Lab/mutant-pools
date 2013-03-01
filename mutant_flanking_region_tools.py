@@ -357,11 +357,8 @@ def base_fraction_stats(base_count_position_list_dict, overall_GC_content=0.5, p
         base_total = sum(base_counts)
         base_fractions = [count/base_total for count in base_counts]
         base_fractions_by_pos.append(dict(zip(NORMAL_DNA_BASES,base_fractions)))
-        # NOTE - for scipy.stats.chisquare the reference has to be normalized so it adds up to the same total! WEIRD. So do that. 
-        # TODO I've been doing this wrong!  The expected counts should be based on BOTH input datasets, not one!  CHECK THAT MORE, THEN FIX IT IN HERE AND IN OTHER CURRENT ANALYSIS DOCUMENTS... OR I could just use the fisher exact test for all this, it seems to work okay with big numbers...
-        expected_base_counts = [expected_base_fractions[base]*base_total for base in NORMAL_DNA_BASES]
-        # Inputs have to be as scipy.array.  The return value is a (chisquare_statistic, pvalue) tuple - just grab the pvalue.
-        pvalue = scipy.stats.chisquare(scipy.array(base_counts), scipy.array(expected_base_counts))[1]
+        expected_base_fractions_list = [expected_base_fractions[base] for base in NORMAL_DNA_BASES]
+        pvalue = statistics_utilities.chisquare_goodness_of_fit(base_counts, expected_base_fractions_list)
         raw_position_pvalues.append(pvalue)
     # adjust p-values for multiple testing - although it's not clear this is really needed, 
     #  since we EXPECT the significant parts to be right around the cut site, we're only checking a longer region just in case,
@@ -422,10 +419,7 @@ def base_fraction_stats_compare(base_count_position_list_dict_1, base_count_posi
         base_total_2 = sum(base_counts_2)
         base_fractions_2 = [count/base_total_2 for count in base_counts_2]
         base_fractions_by_pos_2.append(dict(zip(NORMAL_DNA_BASES,base_fractions_2)))
-        # NOTE - for scipy.stats.chisquare the reference has to be normalized so it adds up to the same total! So do that. 
-        expected_base_counts_from_2 = [fraction_2*base_total_1 for fraction_2 in base_fractions_2]
-        # Inputs have to be as scipy.array.  The return value is a (chisquare_statistic, pvalue) tuple - just grab the pvalue.
-        pvalue = scipy.stats.chisquare(scipy.array(base_counts_1), scipy.array(expected_base_counts_from_2))[1]
+        pvalue = statistics_utilities.chisquare_independence(base_counts_1, base_counts_2)
         raw_position_pvalues.append(pvalue)
     # adjust p-values for multiple testing - although it's not clear this is really needed, 
     #  since we EXPECT the significant parts to be right around the cut site, we're only checking a longer region just in case,
