@@ -104,8 +104,10 @@ def get_histogram_data_from_positions(position_dict, bin_size=DEFAULT_BIN_SIZE, 
         chromosome_length = chromosome_lengths[chromosome]
         # position_dict can be either just chromosome or (chromosome,strand)
         #  - get all the positions on the chromosome in either case, by just adding together the two strand lists if needed.
-        try:                position_list = position_dict[chromosome]
-        except KeyError:    position_list = position_dict[(chromosome,'+')] + position_dict[(chromosome,'-')]
+        #       (convert them to lists first, in case they're numpy arrays, for which + works differently!)
+        #       (MAYBE-TODO this list conversion is probably inefficient - could do something with numpy array concatenation...)
+        try:                position_list = list(position_dict[chromosome])
+        except KeyError:    position_list = list(position_dict[(chromosome,'+')]) + list(position_dict[(chromosome,'-')])
         # divide the chromosome into bin_size-sized ranges, using an x.5 cutoff for clarity
         bin_edges = [x-.5 for x in range(first_bin_offset+1, chromosome_length+1, bin_size)]
         # Make sure there's at least one bin, even if the total length is smaller than a bin!  (for scaffolds/etc)
