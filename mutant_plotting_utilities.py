@@ -420,11 +420,11 @@ def plot_hot_cold_spot_hlines(hc_spot_list, pval_cutoffs, all_chromosomes=None, 
         chrom_numbers = {chrom:N for (N,chrom) in enumerate(all_chromosomes)}
     # figure out how many potentially overlapping (window_size, window_offset) sets we have, 
     #  give each of them a separate x axis position
-    all_lines = sorted(set((end-start, offset) for (chrom, start, end, pvalue, kind, offset) in hc_spot_list))
+    all_lines = sorted(set((end-start, offset) for (chrom, start, end, pvalue, kind, offset, mcount) in hc_spot_list))
     x_offset_range = max_offset-min_offset
     x_offset_per_line = x_offset_range/len(all_lines)
     x_line_offsets = {line: (min_offset)+x_offset_per_line*N for (N,line) in enumerate(all_lines)}
-    for (chrom, start, end, pvalue, kind, offset) in hc_spot_list:
+    for (chrom, start, end, pvalue, kind, offset, mcount) in hc_spot_list:
         # plot only the lines with a pvalue that matches at least the highest cutoff
         cutoff_matched = _lowest_cutoff_matched(pvalue, pval_cutoffs)
         if cutoff_matched>0:
