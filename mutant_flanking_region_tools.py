@@ -16,6 +16,7 @@ import random
 import scipy.stats
 import matplotlib.pyplot as mplt
 from matplotlib.font_manager import FontProperties
+from fractions import Fraction
 # my modules
 import mutant_analysis_classes
 from basic_seq_utilities import get_all_seq_length, base_count_dict, base_fraction_dict, base_fraction_dict_from_count_dict, base_fractions_from_GC_content, NORMAL_DNA_BASES, reverse_complement, check_seq_against_pattern, write_fasta_line
@@ -461,41 +462,68 @@ def base_fraction_stats_compare(base_count_position_list_dict_1, base_count_posi
 
 def base_fraction_plot(base_count_position_list_dict, flank_size=10, 
                        normalize_to_GC_contents=1, overall_GC_content=0.5, genome_info='', 
-                       add_markers=True, bases_plotstyles={'A': 'g^-', 'T':'rv-', 'C':'bs-', 'G':'yo-'}):
+                       add_markers=True, ytick_scale=2, bases_plotstyles={'A': 'g^-', 'T':'rv-', 'C':'bs-', 'G':'yo-'}):
     """ Plot the base fractions at each position, with given flanksize, normalized to GC content or not.
 
     Base_count_position_list_dict should be the output of base_count_dict.
-    Normalize_to_GC_contents can be 0 (no normalization), 1 (difference between real and expected base contents), or 2 (ratio).
+    Normalize_to_GC_contents can be: 
+     - 0 - no normalization (show raw base fractions)
+     - 1 - difference between real and expected base contents 
+            (so the difference between 0.1 and 0.3, and between 0.3 and 0.5, will be the same 0.2), 
+     - 2 - ratio between real and expected base contents (the 0.1 to 0.3 ratio is same as 0.3 to 0.9, bigger than 0.3 to 0.5)
+     - 3 - ratio on a log-scale (so that ratios of 1/4, 1/2, 1, 2, 4 are all equidistant, which makes sense,
+            instead of 1, 2, 3 being equidistant and 1/2, 1/3, ..., 1/10 being all squished between 0 and 1 like on the linear scale)
+
+    Ytick_scale is only applicable when normalize_to_GC_contents is 3:  
+     - if it's 1, the ticks will be ..., 2, 1, 1/2, ...
+     - if it's 2, the ticks will be ..., 2, 3/2, 1, 3/2, 1/2, ...
+     - if it's 3, the ticks will be ..., 2, 5/3, 4/3, 1, 3/4, 3/5, 1/2, ...
     """
+    if not 0 <= normalize_to_GC_contents <= 3:
+        raise Exception("normalize_to_GC_contents must be 0/1/2/3, not %s!"%normalize_to_GC_contents)
     real_base_fraction_list_dict = base_fraction_dict_from_count_dict(base_count_position_list_dict)
     pos_after_insertion = int(len(real_base_fraction_list_dict['A']) / 2)
     expected_base_fractions = base_fractions_from_GC_content(overall_GC_content)
+    all_plot_data = []
     for base in NORMAL_DNA_BASES:
         raw_plot_data = real_base_fraction_list_dict[base][pos_after_insertion-flank_size:pos_after_insertion+flank_size] 
         assert len(raw_plot_data) == flank_size*2
         if normalize_to_GC_contents==0:         plot_data = raw_plot_data
         elif normalize_to_GC_contents==1:       plot_data = [x-expected_base_fractions[base] for x in raw_plot_data]
-        elif normalize_to_GC_contents==2:       plot_data = [x/expected_base_fractions[base] for x in raw_plot_data]
-        else:                           raise Exception("normalize_to_GC_contents must be 0/1/2, not %s!"%normalize_to_GC_contents)
+        else:                                   plot_data = [x/expected_base_fractions[base] for x in raw_plot_data]
+        all_plot_data.extend(plot_data)
         if add_markers:     mplt.plot(plot_data, bases_plotstyles[base], label=base, markeredgecolor='none')
         else:               mplt.plot(plot_data, bases_plotstyles[base][0], label=base)
     mplt.legend(loc=2, prop=FontProperties(size='smaller'))
     ylabel = 'fraction of bases in given position'
+    if normalize_to_GC_contents==0:     ylabel = 'raw ' + ylabel
     if normalize_to_GC_contents==1:     ylabel += ',\nas a difference from %s GC content'%genome_info
-    elif normalize_to_GC_contents==2:   ylabel += ',\nas a ratio to %s GC content'%genome_info
-    else:                               ylabel = 'raw ' + ylabel
-    mplt.ylabel(ylabel,ha='center')
+    else:                               ylabel += ',\nas a ratio to %s GC content'%genome_info
+    if normalize_to_GC_contents==3:     ylabel += ' (log scale)'
+    # make y logscale if desired; in that case I have to do the min/max/ticks sort of by hand...
+    if normalize_to_GC_contents==3:     
+        mplt.yscale('log')
+        y_max = int(max(scipy.ceil(max(all_plot_data)), scipy.ceil(1/min(all_plot_data)) ))
+        mplt.ylim(1/y_max, y_max)
+        half_yticks_x = [x for x in range(ytick_scale+1, ytick_scale*y_max+1)]
+        yticks = [ytick_scale/x for x in half_yticks_x] + [1] + [x/ytick_scale for x in half_yticks_x]
+        yticklabels = [Fraction(ytick_scale,x) for x in half_yticks_x] + [1] + [Fraction(x,ytick_scale) for x in half_yticks_x]
+        mplt.yticks(yticks, yticklabels)
+        mplt.minorticks_off()
+
     # change the xticks to use -1 before the insertion position and 1 after, no 0
     xticks = range(flank_size*2)
     mplt.xlim(0,flank_size*2-1)
     mplt.xticks(xticks, [_relative_position_vs_cut(x, flank_size) for x in xticks])
     mplt.xlabel('relative genome position (dotted line is the insertion position)')
+    mplt.ylabel(ylabel, ha='right')
     # put a dashed line at the insertion position
     ylim = mplt.ylim()
     mplt.vlines(flank_size-0.5, *ylim, linestyles='dashed')
     mplt.ylim(*ylim)
     # MAYBE-TODO add stars/questionmarks to columns based on pvalues
     # MAYBE-TODO add info about how many sequences were in each dataset
+    # MAYBE-TODO in addition a log-scale ratio (where a ratio of 4, 2, 1, 1/2, 1/4 is equidistant), I could also try doing a more complicated version with linear-scale top half and 1/x transformed lower half, so that 3, 2, 1, 1/2, 1/3 end up equidistant, which removes the relative stretching of small changes... not sure that's really useful though.)
 
 
 ### UNIT-TESTS
