@@ -613,6 +613,7 @@ def get_hot_cold_spot_list(pvalue_data_window_size_offset_dict, side_data_window
     In the output, kind is 'hotspot' or 'coldspot'. 
     Sort the output data by chromosome/position;  If print_info, print the output data.
     """
+    defaultdict = collections.defaultdict
     if mcount_data_window_size_offset_dict is None:
         mcount_data_window_size_offset_dict = defaultdict(lambda: defaultdict(lambda: defaultdict(lambda: 'unknown')))
     if average_mutants_per_window is None:
