@@ -462,7 +462,7 @@ def base_fraction_stats_compare(base_count_position_list_dict_1, base_count_posi
 
 def base_fraction_plot(base_count_position_list_dict, flank_size=10, 
                        normalize_to_GC_contents=1, overall_GC_content=0.5, genome_info='', 
-                       add_markers=True, ytick_scale=2, bases_plotstyles={'A': 'g^-', 'T':'rv-', 'C':'bs-', 'G':'yo-'}):
+                       add_markers=True, ytick_scale=1, bases_plotstyles={'A': 'g^-', 'T':'rv-', 'C':'bs-', 'G':'yo-'}):
     """ Plot the base fractions at each position, with given flanksize, normalized to GC content or not.
 
     Base_count_position_list_dict should be the output of base_count_dict.
@@ -497,11 +497,14 @@ def base_fraction_plot(base_count_position_list_dict, flank_size=10,
     mplt.legend(loc=2, prop=FontProperties(size='smaller'))
     ylabel = 'fraction of bases in given position'
     if normalize_to_GC_contents==0:     ylabel = 'raw ' + ylabel
-    if normalize_to_GC_contents==1:     ylabel += ',\nas a difference from %s GC content'%genome_info
+    elif normalize_to_GC_contents==1:   ylabel += ',\nas a difference from %s GC content'%genome_info
     else:                               ylabel += ',\nas a ratio to %s GC content'%genome_info
     if normalize_to_GC_contents==3:     ylabel += ' (log scale)'
     # make y logscale if desired; in that case I have to do the min/max/ticks sort of by hand...
     if normalize_to_GC_contents==3:     
+        if min(all_plot_data)<=0:
+            raise ValueError("some bases have 0 fraction - can't plot log-scale!")
+            # MAYBE-TODO plot it symlog if needed? But then all my work with limits/ticks needs to be redone...
         mplt.yscale('log')
         y_max = int(max(scipy.ceil(max(all_plot_data)), scipy.ceil(1/min(all_plot_data)) ))
         mplt.ylim(1/y_max, y_max)
