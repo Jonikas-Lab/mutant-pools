@@ -476,7 +476,7 @@ def plot_hot_cold_spot_overlapping(hc_spot_list, pval_cutoffs, all_chromosomes=N
         if len(pval_cutoffs) == 3:
             pval_cutoff_colors = {'hotspot': 'salmon red darkred'.split(), 'coldspot': 'skyblue steelblue blue'.split()}
         elif len(pval_cutoffs) == 2:
-            pval_cutoff_colors = {'hotspot': 'lightcoral red'.split(), 'coldspot': 'steelblue blue'.split()}
+            pval_cutoff_colors = {'hotspot': 'lightcoral red'.split(), 'coldspot': 'deepskyblue blue'.split()}
         else:
             raise Exception("If pval_cutoffs isn't length 2-3, must provide pval_cutoff_colors, no default!")
     if all_chromosomes is None:

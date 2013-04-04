@@ -468,9 +468,9 @@ def main_functionality(infile, options=None):
     # parse the options for coloring mutants from specific files into a single dictionary
     color_mutants_from_files = {}
     if options.color_mutants_magenta:   color_mutants_from_files['magenta'] = options.color_mutants_magenta
-    if options.color_mutants_blue:      color_mutants_from_files['blue'] = options.color_mutants_blue
+    if options.color_mutants_blue:      color_mutants_from_files['dodgerblue'] = options.color_mutants_blue
     if options.color_mutants_aqua:      color_mutants_from_files['darkturquoise'] = options.color_mutants_aqua
-    if options.color_mutants_green:     color_mutants_from_files['limegreen'] = options.color_mutants_green
+    if options.color_mutants_green:     color_mutants_from_files['limegreen'] = options.color_mutants_green   # maybe forestgreen?
     if options.color_mutants_red:       color_mutants_from_files['red'] = options.color_mutants_red
     if options.color_mutants_orange:    color_mutants_from_files['darkorange'] = options.color_mutants_orange
 
