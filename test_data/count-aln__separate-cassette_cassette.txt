@@ -25,6 +25,7 @@
 #  remaining adjacent opposite-strand "away-facing" pairs (% of toward-facing):	0 (N/A)
 #  remaining adjacent same-strand unmerged pairs (% of 2*toward-facing):	0 (N/A)
 ## Distinct mutants (read groups) by cassette insertion position:	1
+#  (mutants with 2+, 10+, 100+, 1000+ reads):	(0, 0, 0, 0)
 #  (read location with respect to cassette: which end, which direction):	(5prime, forward)
 #  (average and median reads per mutant):	(1, 1)
 #  Most common mutant(s): reads (% of aligned) (position or count):	1 (100%) (insertion_cassette_X + 104-?)

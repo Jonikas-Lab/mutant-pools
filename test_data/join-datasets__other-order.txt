@@ -13,6 +13,7 @@
 #  Reads with cassette direction matching chromosome + strand (% of aligned):	11 (79%)	8 (67%)
 #  Reads with cassette direction matching chromosome - strand (% of aligned):	3 (21%)	4 (33%)
 ## Distinct mutants (read groups) by cassette insertion position:	3	3
+#  (mutants with 2+, 10+, 100+, 1000+ reads):	(3, 0, 0, 0)	(2, 0, 0, 0)
 #  (read location with respect to cassette: which end, which direction):	(?, ?)	(?, ?)
 #  (average and median reads per mutant):	(5, 3)	(4, 4)
 #  Most common mutant(s): reads (% of aligned) (position or count):	9 (64%) (chromosome_A + 100-?)	7 (58%) (chromosome_A + 100-?)

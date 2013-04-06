@@ -1030,7 +1030,9 @@ class Dataset_summary_data():
 
     @property
     def N_mutants(self):
-        return len([1 for m in self.dataset if m.read_info(self.dataset_name).total_read_count]) 
+        return sum(1 for m in self.dataset if m.read_info(self.dataset_name).total_read_count) 
+    def N_mutants_over_readcount(self, readcount_min):
+        return sum(1 for m in self.dataset if m.read_info(self.dataset_name).total_read_count >= readcount_min) 
     @property
     def median_readcount(self):
         # only including mutants with non-zero reads
@@ -2368,6 +2370,8 @@ class Insertional_mutant_pool_dataset():
 
         DVG.append((header_prefix+"Distinct mutants (read groups) by cassette insertion position:", 
                     lambda summ: "%s"%summ.N_mutants ))
+        DVG.append((line_prefix+"(mutants with 2+, 10+, 100+, 1000+ reads):",
+                    lambda summ: "(%s, %s, %s, %s)"%tuple([summ.N_mutants_over_readcount(X) for X in (2,10,100,1000)]) ))
         DVG.append((line_prefix+"(read location with respect to cassette: which end, which direction):", 
                     lambda summ: "(%s, %s)"%(summ.cassette_end, 
                                              {'?': '?', True: 'reverse', False: 'forward'}[summ.reads_are_reverse]) ))
