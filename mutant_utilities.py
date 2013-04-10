@@ -142,14 +142,207 @@ def get_20bp_fraction(dataset):
     # LATER-TODO should this be here, or a mutant_analysis_classes.Insertional_mutant_pool_dataset method or something?
 
 
+def filter_data_by_min_reference(reference_list, other_lists, min_reference_value):
+    other_data_tuples = zip(*other_lists)
+    return [other_data for (x,other_data) in zip(reference_list, other_data_tuples) if x>=min_reference_value]
+    # MAYBE-TODO should this be in general_utilities or something?
+
+
+def replicate_reproducibility_info(dataset1, dataset2, readcount_cutoffs=[1,10,100,1000], ratio_cutoffs=[1.2,1.5,2,5,10], 
+                                   both_ways=True, real_min_reads_1=None, real_min_reads_2=None, quiet=False):
+    """ Return/print reproducibility information between two replicates: % of readcounts within 2x of each other, etc. 
+
+    Answers two basic questions, for each N in readcount_cutoffs:
+        1) what percent of flanking sequences with N+ reads in one replicate were also observed in the other replicate?  
+            (observed at all, not with N+ reads)
+        2) what % of the mutants with N+ reads in one replicate have the two replicate readcounts within 2x/etc of each other? 
+            Using each value in ratio_cutoffs for the ratio; using real or normalized readcount 
+            (normalized is so that if one replicate has 2x more reads total than the other, the 2x ratio is counted as 1x etc; 
+             still using raw readcounts for the cutoffs, because using normalized ones would probably be too hard to explain...)
+        Also reports the total number of mutants with N+ reads: total, as a percentage of all mutants, and optionally 
+         as a percentage of all "real" mutants, i.e. ones with at least real_min_reads_1 in dataset1 or real_min_reads_2 in dataset2 
+          (if real_min_reads_* are both not None).
+        Note that we're looking at mutants with >=X reads in one dataset, and putting no cutoff on the other; 
+        If both_ways is False, we just do it one way (looking at mutants with N+ counts in A and checking presence/ratio in B); 
+         if True, we do it both ways (A to B and B to A) and add the results together.
+
+    For example, if we have two replicates A and B, with readcounts of (0,1,3,4) and (1,0,2,5) for the same 4 mutants:
+        * looking at mutants with 1+ read (3 in A, 3 in B):
+          - out of mutants with 1+ read in A, 2 are present in B; same the other way around - so total 67% present. 
+          - out of mutants with 1+ read in A, the ratios are 0:1, 2:3, 5:4 - so 1/3 within 1.3x, 2/3 within 2x (and 5x etc) 
+            (and the reverse for mutants with 1+ read in B, leading to the same final counts)
+        * looking at mutants with 3+ reads (2 in A, 1 in B):
+          - out of mutants with 3+ reads in A, 2 are present in B; out of 1 in B, 1 present in A - so total 100% present.
+          - the ratios are 2:3 and 5:4 for the two in A, and 4:5 for the one in B, so 2/3 within 1.3x, 3/3 within 2x.
+        (the ratios are the same normalized and unnormalized here; if A was (0,2,6,8) instead, then the normalized ratios from 
+         the last section would be the same as above, but the raw ratios would be 2:6, 5:8, 8:5 - 0/3 within 1.3x, 2/3 within 2x.)
+    
+    The first two inputs should be either lists if integer readcounts (must be for the same list of mutants, in same order!), 
+     or mutant_analysis_classes.Insertional_mutant_pool_dataset instances.
+
+    Outputs, five total, in order:
+        1-4: four dictionaries with all the readcount cutoffs as keys (readcount cutoff is N), and various values:
+          1: number of mutants with N+ reads in one dataset
+          2: number of mutants with N+ reads in one dataset AND present in the other dataset
+          3-4: two dictionaries with ratio cutoffs as keys, and the values being the number of mutants 
+             with N+ reads in one dataset that had a readcount within that ratio cutoff to the other dataset: 
+              first dictionary uses raw readcounts to check ratios, the second uses readcounts normalized to total per dataset.
+        5: a mutant_totals list: first element is the total number of mutants with non-zero readcounts, 
+            second element is the total number of "real" mutants (i.e. ones with at least real_min_reads_1 in dataset1 
+             or real_min_reads_2 in dataset2) - second element only present if real_min_reads_* are both not None.
+
+    If quiet is True, don't print the data, just return it.  Note: printing is nicely formatted and has percentages.
+    """
+    # if the inputs are datasets instead of readcount lists, convert to readcount lists 
+    #   (join the two datasets first so that both readcount lists are for the same mutant list)
+    if isinstance(dataset1[0], int):
+        readcounts1, readcounts2 = dataset1, dataset2
+        if not len(readcounts1) == len(readcounts2):
+            raise ValueError("First two arguments to replicate_reproducibility_info must be same length!")
+    else:
+        joint_dataset = mutant_analysis_classes.Insertional_mutant_pool_dataset(multi_dataset=True)
+        joint_dataset.populate_multi_dataset({'1': dataset1, '2': dataset2})
+        readcounts1, readcounts2 = zip(*[[mutant.by_dataset[D].total_read_count for D in '12'] for mutant in joint_dataset])
+    # make normalized data for the normalized ratios
+    total_1, total_2 = sum(readcounts1), sum(readcounts2)
+    norm_readcounts1, norm_readcounts2 = [x/total_1 for x in readcounts1], [x/total_2 for x in readcounts2]
+    # we're adding together the comparisons both ways, then redefine the two readcount lists appropriately
+    if both_ways:   readcountsA, readcountsB = readcounts1+readcounts2, readcounts2+readcounts1
+    else:           readcountsA, readcountsB = readcounts1, readcounts2
+    if both_ways:   norm_readcountsA, norm_readcountsB = norm_readcounts1+norm_readcounts2, norm_readcounts2+norm_readcounts1
+    else:           norm_readcountsA, norm_readcountsB = norm_readcounts1, norm_readcounts2
+    # calculate the total number of mutants that are present in dataset A
+    total_N_mutants = sum(x>0 for x in readcountsA)
+    # if we got real_min_reads_* data, use that to calculate a separate "real mutant" total and use it
+    if real_min_reads_1 is not None and real_min_reads_2 is not None:
+        if both_ways:   total_N_real_mutants = sum(x>=real_min_reads_1 for x in readcounts1)\
+                                              +sum(x>=real_min_reads_2 for x in readcounts2)
+        else:           total_N_real_mutants = sum(x>=real_min_reads_1 for x in readcounts1)
+        mutant_count_totals = [total_N_mutants, total_N_real_mutants]
+        total_descriptions = ['of all', 'of after-standard-cutoffs']
+    else:
+        mutant_count_totals = [total_N_mutants]
+        total_descriptions = ['of all']
+    # make a few dictionaries to return the data in
+    N_filtered_dict, N_present_in_B_dict, N_within_ratio_raw_dict, N_within_ratio_norm_dict = {}, {}, {}, {}
+    # for each readcount cutoff, filter the data by the cutoff in datasetA, then look at presence and ratio in datasetB:
+    for readcount_cutoff in readcount_cutoffs:
+        # filter data by minimum readcount in A
+        filtered_readcount_pairs = filter_data_by_min_reference(readcountsA, [readcountsA,readcountsB], readcount_cutoff)
+        filtered_norm_readcount_pairs = filter_data_by_min_reference(readcountsA, [norm_readcountsA,norm_readcountsB], 
+                                                                     readcount_cutoff)
+        N_filtered_in_A = len(filtered_readcount_pairs)
+        N_filtered_dict[readcount_cutoff] = N_filtered_in_A
+        if not quiet:
+            print " * looking at mutants with at least %s reads in at least one dataset - %s"%(readcount_cutoff, 
+                   general_utilities.value_and_percentages(N_filtered_in_A, mutant_count_totals, 
+                                                           percentage_format_str='%.0f', words_for_percentages=total_descriptions))
+        # see how many are present in B
+        N_present_in_B = sum(b>0 for (a,b) in filtered_readcount_pairs)
+        if not quiet:
+            print "   - out of those, %s are present in the other."%(general_utilities.value_and_percentages(N_present_in_B, 
+                                                                                                             [N_filtered_in_A]))
+        N_present_in_B_dict[readcount_cutoff] = N_present_in_B
+        # look at how many mutants are within given B:A readcount ratios (raw and normalized readcounts)
+        if not quiet:
+            print '   - how many mutants are within a given readcount ratio between the replicates:'
+        info_strings_raw, info_strings_norm = [], []
+        N_within_ratio_raw_dict[readcount_cutoff], N_within_ratio_norm_dict[readcount_cutoff] = {}, {}
+        for ratio_cutoff in ratio_cutoffs:
+            N_within_ratio_raw = sum((1/ratio_cutoff <= b/a <= ratio_cutoff) for a,b in filtered_readcount_pairs)
+            N_within_ratio_raw_dict[readcount_cutoff][ratio_cutoff] = N_within_ratio_raw
+            info_strings_raw.append('%sx - %s'%(ratio_cutoff, 
+                                                'N/A' if N_filtered_in_A==0 else '%.0f%%'%(N_within_ratio_raw/N_filtered_in_A*100)))
+            N_within_ratio_norm = sum((1/ratio_cutoff <= b/a <= ratio_cutoff) for a,b in filtered_norm_readcount_pairs)
+            N_within_ratio_norm_dict[readcount_cutoff][ratio_cutoff] = N_within_ratio_norm
+            info_strings_norm.append('%sx - %s'%(ratio_cutoff, 
+                                                'N/A' if N_filtered_in_A==0 else '%.0f%%'%(N_within_ratio_norm/N_filtered_in_A*100)))
+        if not quiet:
+            print '       raw readcount ratios       : '+', '.join(info_strings_raw)
+            print '       normalized readcount ratios: '+', '.join(info_strings_norm)
+    return N_filtered_dict, N_present_in_B_dict, N_within_ratio_raw_dict, N_within_ratio_norm_dict, mutant_count_totals
+
+
 ######### unit-tests
 
 class Testing(unittest.TestCase):
     """ Runs unit-tests for this module. """
 
-    def test__(self):
-        sys.exit("NO UNIT-TESTS FOR THIS MODULE")
-    # LATER-TODO add unit-tests!
+    def test__filter_data_by_min_reference(self):
+        for min_val in range(-10,1):
+            assert filter_data_by_min_reference([1,3,2], [[3,2,1],[4,5,4]], min_val) == [(3,4), (2,5), (1,4)]
+        if True:    # this if statement is only here to make things indent and line up nicely
+            assert filter_data_by_min_reference([1,3,2], [[3,2,1],[4,5,4]], 1)       == [(3,4), (2,5), (1,4)]
+            assert filter_data_by_min_reference([1,3,2], [[3,2,1],[4,5,4]], 2)       == [       (2,5), (1,4)]
+            assert filter_data_by_min_reference([1,3,2], [[3,2,1],[4,5,4]], 3)       == [       (2,5)       ]
+        for min_val in range(4,10):
+            assert filter_data_by_min_reference([1,3,2], [[3,2,1],[4,5,4]], min_val) == [                   ]
+
+    def test__replicate_reproducibility_info(self):
+        # the outputs are: N_filtered_dict, N_present_in_B_dict, N_within_ratio_raw_dict, N_within_ratio_norm_dict
+        ### 1 - BASIC TEST, based on docstring example.
+        # checking both one-way options, and the both-way option (which should just be the sum of the two one-way ones)
+        # In all of those, the two datasets have the same readcount sum, so the raw and normalized data should be the same
+        #   (last two outputs), so we're only checking output 0-2, and checking that output3 is the same as output2.
+        dataA, dataB = [0,1,3,4], [1,0,2,5]
+        data1 = replicate_reproducibility_info(dataA, dataB, readcount_cutoffs=[1, 3], ratio_cutoffs=[1.3, 2], 
+                                               both_ways=False, quiet=True)
+        assert data1[:3] == ({1:3, 3:2}, {1:2, 3:2}, {1:{1.3:1, 2:2}, 3:{1.3:1, 2:2}})
+        assert data1[3] == data1[2]
+        data2 = replicate_reproducibility_info(dataB, dataA, readcount_cutoffs=[1, 3], ratio_cutoffs=[1.3, 2], 
+                                               both_ways=False, quiet=True)
+        assert data2[3] == data2[2]
+        assert data2[:3] == ({1:3, 3:1}, {1:2, 3:1}, {1:{1.3:1, 2:2}, 3:{1.3:1, 2:1}})
+        data3 = replicate_reproducibility_info(dataA, dataB, readcount_cutoffs=[1, 3], ratio_cutoffs=[1.3, 2], 
+                                               both_ways=True, quiet=True)
+        assert data3[:3] == ({1:6, 3:3}, {1:4, 3:3}, {1:{1.3:2, 2:4}, 3:{1.3:2, 2:3}})
+        assert data3[3] == data3[2]
+        # now make sure that doing the both-way option by hand (in both directions) gives the same result
+        data4 = replicate_reproducibility_info(dataB+dataA, dataA+dataB, readcount_cutoffs=[1, 3], ratio_cutoffs=[1.3, 2], 
+                                               both_ways=False, quiet=True)
+        data5 = replicate_reproducibility_info(dataA+dataB, dataB+dataA, readcount_cutoffs=[1, 3], ratio_cutoffs=[1.3, 2], 
+                                               both_ways=False, quiet=True)
+        assert data3 == data4 == data5
+        ### 2 - NORMALIZATION TEST, again based on docstring example.
+        # the normalized ratio counts should be the same as above, but the raw ones should be different.
+        data = replicate_reproducibility_info([x*2 for x in dataA], dataB, readcount_cutoffs=[3], ratio_cutoffs=[1.3, 2], 
+                                              both_ways=False, quiet=True)
+        assert data[:4] == ({3:2}, {3:2}, {3:{1.3:0, 2:1}}, {3:{1.3:1, 2:2}})
+        data = replicate_reproducibility_info(dataB, [x*2 for x in dataA], readcount_cutoffs=[3], ratio_cutoffs=[1.3, 2], 
+                                              both_ways=False, quiet=True)
+        assert data[:4] == ({3:1}, {3:1}, {3:{1.3:0, 2:1}}, {3:{1.3:1, 2:1}})
+        data = replicate_reproducibility_info([x*2 for x in dataA], dataB, readcount_cutoffs=[3], ratio_cutoffs=[1.3, 2], 
+                                              both_ways=True, quiet=True)
+        assert data[:4] == ({3:3}, {3:3}, {3:{1.3:0, 2:2}}, {3:{1.3:2, 2:3}})
+        ### 3 - MUTANT-TOTAL AND REAL-MUTANT-TOTAL TEST
+        # Just checking the last output (which I haven't checked before) - the mutant total and "real" total list.
+        # Ignoring everything else (leaving defaults for readcount/ratio cutoffs)
+        dataA, dataB = [0,1,3,4], [1,0,2,5]
+        real_min_reads_and_expected_output = [(None, None, [6]), 
+                                              (1,    1,    [6,6]), 
+                                              (1,    2,    [6,5]), 
+                                              (2,    1,    [6,5]), 
+                                              (2,    2,    [6,4]), 
+                                              (2,    3,    [6,3]), 
+                                              (3,    2,    [6,4]), 
+                                              (4,    5,    [6,2]), 
+                                              (5,    4,    [6,1]), 
+                                              (6,    6,    [6,0]), 
+                                             ]
+        for real_min_1, real_min_2, expected_output in real_min_reads_and_expected_output:
+            data = replicate_reproducibility_info(dataA, dataB, both_ways=True, 
+                                                  real_min_reads_1=real_min_1, real_min_reads_2=real_min_2, quiet=True)
+            assert data[4] == expected_output
+        ### 4 - NO-CUTOFFS TEST
+        # if cutoff lists are empty, we get empty dictionaries, no errors
+        data = replicate_reproducibility_info(dataA, dataB, readcount_cutoffs=[], ratio_cutoffs=[], both_ways=True, quiet=True)
+        assert data == ({}, {}, {}, {}, [6])
+        ### 5 - DIVISION BY ZERO TEST
+        # checks that we don't get an error raised when readcount cutoff is so high that nothing's left
+        data = replicate_reproducibility_info(dataA, dataB, readcount_cutoffs=[100], ratio_cutoffs=[1,2], both_ways=True, quiet=True)
+        # MAYBE-TODO test the actual printed data?  It's pretty straightforwardly derived from the outputted/tested data, though.
+
+    # LATER-TODO add unit-tests for the remaining functions!
 
 
 if __name__=='__main__':
