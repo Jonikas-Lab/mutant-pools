@@ -287,9 +287,9 @@ def define_option_parser():
     parser.add_option('-g', '--gene_counts', action="store_true", default=False, 
                       help="Count genes per chromosome, and the approximate fraction of each chromosome covered by genes. "
                           +"Default %default") 
+    parser.add_option('-G', '--no_gene_counts', action="store_false", dest='gene_counts')
     parser.add_option('-a', '--fasta_sequence_file', default='', metavar='FILE', 
                       help="Fasta file containing the sequences listed in gff infile (default %default).")
-    parser.add_option('-G', '--no_gene_counts', action="store_false", dest='gene_counts')
     parser.add_option('-d', '--print_seq_details', action="store_true", default=False, 
                       help='Print full GFF details for each chromosome (only if -g). Default %default') 
     parser.add_option('-D', '--no_print_seq_details', action="store_false", dest='print_seq_details')
