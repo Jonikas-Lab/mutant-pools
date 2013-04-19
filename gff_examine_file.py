@@ -11,7 +11,7 @@ USAGE: gff_examine_file.py [options] gff_infile [outfile]"""
 import sys, os, time
 import unittest
 import itertools
-from collections import defaultdict
+from collections import defaultdict, Counter
 import subprocess
 import filecmp
 import pprint
@@ -19,7 +19,7 @@ import pprint
 from BCBio import GFF
 from Bio import SeqIO
 # my modules
-from general_utilities import count_list_values, split_into_N_sets_by_counts
+from general_utilities import count_list_values, split_into_N_sets_by_counts, value_and_percentages, add_to_dict_no_replacement
 from testing_utilities import run_functional_tests
 from mutant_utilities import DEFAULT_NUCLEAR_GENOME_FILE
 
@@ -130,7 +130,7 @@ def check_gene_coverage(sequence_records, check_for_overlap=True):
     return gene_coverage_fraction, feature_coverage_fractions
 
 
-### Independend functions not used in main - take gff file as input, parse it, get some outputs
+### Independent functions not used in main - take gff file as input, parse it, get some outputs
 
 def get_feature_start_end(feature_record):
     """ Get the start and end feature positions as numbers, 1-based, end-inclusive (so the first two bases are 1-2).
@@ -240,6 +240,121 @@ def feature_total_lengths(genefile, ignore_strange_cases=False, genome_fasta_fil
     feature_total_lengths['all'] = total_genome_length
     feature_total_lengths['intergenic'] = total_genome_length - feature_total_lengths['gene']
     return feature_total_lengths
+
+
+### Functions for parsing JGI GFF2-format file 
+
+def parse_JGI_GFF2_file(infile_GFF2, stop_on_error=False):
+    """ Given a JGI-style GFF2 file, yield data_fields,annotation_dict tuples for each line. 
+
+    The input should be the filename.
+    Data_fields is just a list of the tab-separated fields (including the annotation field as a raw string).
+    Annotation_dict is a tag:value dictionary of the annotations from the last field.
+
+    If stop_on_error is True, raise a ValueError when can't parse an annotation field; 
+     otherwise print an error line and keep going, leaving the annotation parsing for that line unfinished.
+    """ 
+    for line in open(infile_GFF2):
+        fields = line.strip().split('\t')
+        annotations = {}
+        for ann in fields[8].split('; '):
+            try:
+                if '"' in ann:
+                    key, val = ann.split(' "')
+                    val = val.strip('"')
+                else:
+                    key, val = ann.split(' ')
+                annotations[key] = val
+            except ValueError:
+                error_msg = "Can't parse this annotation into a key:value pair! %s"%ann
+                if stop_on_error:   raise ValueError(error_msg)
+                else:               print "ERROR: %s"%error_msg
+                continue
+        yield fields[:8], annotations
+    # TODO unit-test?
+
+
+def name_to_ID_dicts(infile_GFF2, convert_to_singles=True):
+    """ Given a JGI-style GFF2 file, return a set of all gene names, and name:transcriptID and name:proteinID dictionaries.
+
+    The input should be the filename.
+
+    Assumes the file has a 'name' annotation on each line (prints an error if not found), 
+     and 'transcriptId' and 'proteinId' on some lines; ignores other annotations.
+
+    If sometimes a single name has more than one transcript/protein, both returned dictionaries have sets as values; 
+     if there's always exactly one, they'll be converted to name:ID dictionaries if convert_to_singles is True.
+    """
+    # go over the file, parse each line and make name:proteinID and name:transcriptID dictionaries
+    all_names = set()
+    name_to_transcriptIDs = defaultdict(set)
+    name_to_proteinIDs = defaultdict(set)
+    for fields, annotations in parse_JGI_GFF2_file(infile_GFF2):
+        if 'name' not in annotations:
+            print "ERROR: line has no 'name' tag! %s"%line
+            continue
+        name = annotations['name'].strip('"')
+        all_names.add(name)
+        if 'transcriptId' in annotations:
+            name_to_transcriptIDs[name].add(annotations['transcriptId'])
+        if 'proteinId' in annotations:
+            name_to_proteinIDs[name].add(annotations['proteinId'])
+    # print some summaries
+    print "Total %s gene names in file; %s have transcript IDs, %s have protein IDs."%(len(all_names), 
+                           value_and_percentages(len(name_to_transcriptIDs), [len(all_names)]), 
+                           value_and_percentages(len(name_to_proteinIDs), [len(all_names)]))
+    genes_with_both_IDs = set(name_to_transcriptIDs) & set(name_to_proteinIDs)
+    N_same = sum(name_to_proteinIDs[name]==name_to_transcriptIDs[name] for name in genes_with_both_IDs)
+    print "Out of genes that have both (%s), the protein ID and transcript ID are the same for %s."%(len(genes_with_both_IDs), 
+                     value_and_percentages(N_same, [len(genes_with_both_IDs)]))
+    # See how many unique protein/transcript IDs each name has
+    N_transcript_IDs = Counter(len(x) for x in name_to_transcriptIDs.values()) 
+    print "Number of unique transcript IDs per gene name, and how many genes have that number: %s"%(
+        ', '.join('%s - %s'%(N_IDs,N_genes) for N_IDs,N_genes in sorted(N_transcript_IDs.items())))
+    N_protein_IDs = Counter(len(x) for x in name_to_proteinIDs.values())    
+    print "Number of unique protein IDs per gene name, and how many genes have that number: %s"%(
+        ', '.join('%s - %s'%(N_IDs,N_genes) for N_IDs,N_genes in sorted(N_protein_IDs.items())))
+    # Make new dictionaries that just have a single protein/transcript ID per name, instead of a set
+    if list(N_transcript_IDs.keys()) == [1]:
+        name_to_transcriptIDs = {name: transcriptIDs.pop() for name, transcriptIDs in name_to_transcriptIDs.items()}
+    if list(N_protein_IDs.keys()) == [1]:
+        name_to_proteinIDs = {name: proteinIDs.pop() for name, proteinIDs in name_to_proteinIDs.items()}
+    return all_names, name_to_transcriptIDs, name_to_proteinIDs
+    # TODO unit-test?
+
+
+def gene_position_dict(infile_GFF2):
+    """ Given a JGI-style GFF2 file, return chromosome:proteinID:(start,end) dictionary; ignores strand and features.
+
+    The input should be the filename.
+    """
+    # go over the file, parse each line and grab chromosome/start/end for each 
+    name_to_positions = defaultdict(set)
+    name_to_proteinID = {}
+    name_to_chromosome = {}
+    for fields, annotations in parse_JGI_GFF2_file(infile_GFF2):
+        try:
+            name = annotations['name'].strip('"')
+        except KeyError:
+            print "ERROR: line has no 'name' tag! %s"%line
+            continue
+        name_to_positions[name].update([int(x) for x in fields[3:5]])
+        add_to_dict_no_replacement(name_to_chromosome, name, fields[0], 'gene', 'chromosome', raise_exception=False)
+        if 'proteinId' in annotations:
+            proteinID = annotations['proteinId']
+            add_to_dict_no_replacement(name_to_proteinID, name, proteinID, 'gene', 'proteinID', raise_exception=False)
+    # Now make the final dictionary, with the smallest and largest position for each gene, and using proteinIDs
+    #  (note: GFF positions are 1-based inclusive, so no need to adjust the positions, see
+    #   https://www.sanger.ac.uk/resources/software/gff/spec.html)
+    chromosomes_to_proteinIDs_to_positions = defaultdict(dict)
+    for gene, positions in name_to_positions.items():
+        chromosome = name_to_chromosome[gene]
+        proteinID = name_to_proteinID[gene]
+        start = min(positions)
+        end = max(positions)
+        chromosomes_to_proteinIDs_to_positions[chromosome][proteinID] = (start, end)
+    return chromosomes_to_proteinIDs_to_positions
+    # TODO unit-test?
 
 
 ######### Test code #########
