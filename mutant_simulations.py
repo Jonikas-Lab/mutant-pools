@@ -814,7 +814,7 @@ def find_genes_for_simulated(sim_dataset, genefile=mutant_utilities.DEFAULT_GENE
      output will be in no particular order;  output can be used as input to gene_counts_for_mutant_subsets.
 
     This function is based on mutant_analysis_classes.Insertional_mutant_pool_dataset.find_genes_for_mutants,
-     but acts on simple position data instead of mutant objects; it uses mutant_analysis_classes.find_gene_by_pos.
+     but acts on simple position data instead of mutant objects; it uses mutant_analysis_classes.find_gene_by_pos_gff3.
     """ 
     gene_list = []
     # only look at genes, not sub-features
@@ -825,11 +825,11 @@ def find_genes_for_simulated(sim_dataset, genefile=mutant_utilities.DEFAULT_GENE
         for chromosome_record in gff_examine_file.GFF.parse(GENEFILE, limit_info=genefile_parsing_limits):
             chromosome = chromosome_record.id
             # for each position in sim_dataset on that chromosome, get the gene info based on the position
-            #   (position input to mutant_analysis_classes.find_gene_by_pos is a (strand, pos_before, pos_after tuple), 
+            #   (position input to mutant_analysis_classes.find_gene_by_pos_gff3 is a (strand, pos_before, pos_after tuple), 
             #  and add gene name to output list (ignore the other two outputs - orientation and feature).
             for strand in '+-':
                 for position in sim_dataset[(chromosome, strand)]:
-                    gene, _, _ = mutant_analysis_classes.find_gene_by_pos((strand, position, position+1), chromosome_record, 
+                    gene, _, _ = mutant_analysis_classes.find_gene_by_pos_gff3((strand, position, position+1), chromosome_record, 
                                                                      detailed_features=False, quiet=True)
                     gene_list.append(gene)
     return gene_list
