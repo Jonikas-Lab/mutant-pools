@@ -514,9 +514,10 @@ def find_hot_cold_spots(dataset, window_size, mappable_positions_20bp, mappable_
      (if None, the default chlamy file will be used) - need the lengths because the dataset positions and mappability data
      don't give the end position of each chromosome.
 
-    Return a 4-tuple of FDR-adjusted p-values, raw p-values, sides (1 if we had more mutants than expected, -1 if fewer),
-      and raw mutant counts, with each of these items being a chromosome:list_of_values_per_window dictionary 
-     the caller/recipient must take care of keeping track of the window size and offset in order for this data to be meaningful.
+    Return a 5-tuple of items: FDR-adjusted p-values, raw p-values, if_coldspot (True if fewer mutants than expected, False if more),
+      raw mutant counts, and expected mutant counts (based on mappability of given window and total genome mutant count), 
+      with each of these items being a chromosome:list_of_values_per_window dictionary.
+     The caller/recipient must take care of keeping track of the window size and offset in order for this data to be meaningful.
 
     Fraction_20bp gives the fraction of mutants that only have 20bp flanking regions (no 21bp ones) - this matters for mappability
      calculations, because the mappability of 20bp and 21bp flanking regions is different.
@@ -555,20 +556,21 @@ def find_hot_cold_spots(dataset, window_size, mappable_positions_20bp, mappable_
         dataset_positions = get_mutant_positions_from_dataset(dataset)
     else:
         dataset_positions = dataset
-    window_mutant_count_lists = get_histogram_data_from_positions(dataset_positions, **window_kwargs)
-    total_N_windows = sum(len(len_list) for len_list in window_mutant_count_lists.values())
+    window_mutant_counts = get_histogram_data_from_positions(dataset_positions, **window_kwargs)
+    total_N_windows = sum(len(len_list) for len_list in window_mutant_counts.values())
     if N_samples is None:   N_samples = total_N_windows
     # average mutants per window should only count the mutants covered by any of the windows 
     #  (exclude ones skipped due to non-zero offset at chromosome start or a non-full window at chromosome end)
     average_mutants_per_window = find_average_mutant_count(dataset, window_size, chromosome_lengths)
-    average_mutants_per_window_2 = sum(sum(counts) for counts in window_mutant_count_lists.values()) / total_N_windows
+    average_mutants_per_window_2 = sum(sum(counts) for counts in window_mutant_counts.values()) / total_N_windows
     if not quiet:
         print "%s window (offset %s) - average %.3g or %.3g mutants per window "%(format_bp(window_size), format_bp(window_offset), 
                                                                           average_mutants_per_window, average_mutants_per_window_2)
     window_raw_pvalues = {}
     window_adjusted_pvalues = {}
-    window_which_side_values = {}
-    for chrom, window_mutant_count_list in window_mutant_count_lists.items():
+    window_if_coldspot = {}
+    window_expected_mutant_counts = {}
+    for chrom, window_mutant_count_list in window_mutant_counts.items():
         # get the probability of a mutant landing in the window, 
         #  given the mappable lengths of the window and the total genome for 20 and 21bp cases, 
         #  and the fraction of mutants that is 20bp-only.
@@ -576,8 +578,9 @@ def find_hot_cold_spots(dataset, window_size, mappable_positions_20bp, mappable_
         window_probabilities_20 = window_mappable_length_lists[20][chrom] / genome_mappable_lengths[20]
         window_probabilities_21 = window_mappable_length_lists[21][chrom] / genome_mappable_lengths[21]
         window_probabilities = window_probabilities_20 * fraction_20bp + window_probabilities_21 * (1-fraction_20bp)
-        window_which_side_values[chrom] = numpy.array([-1 if m < average_mutants_per_window else 1 
-                                                       for m in window_mutant_count_list])
+        window_expected_mutant_count_list = window_probabilities * total_N_mutants
+        window_expected_mutant_counts[chrom] = window_expected_mutant_count_list
+        window_if_coldspot[chrom] = window_mutant_count_list < window_expected_mutant_count_list
         # calculate p-value for each window, using the binomial distribution 
         #  based on the window probability and window mutant number; convert to numpy array again
         raw_pvalues = [scipy.stats.binom_test(x=N_mutants_in_window, n=total_N_mutants, p=window_probability) 
@@ -591,22 +594,23 @@ def find_hot_cold_spots(dataset, window_size, mappable_positions_20bp, mappable_
         else:
             adjusted_pvalues = []
         window_adjusted_pvalues[chrom] = numpy.array(adjusted_pvalues)
-    return window_adjusted_pvalues, window_raw_pvalues, window_which_side_values, window_mutant_count_lists
+    return window_adjusted_pvalues, window_raw_pvalues, window_if_coldspot, window_mutant_counts, window_expected_mutant_counts
     # TODO unit-test this? How?
 
 
-def get_hot_cold_spot_list(pvalue_data_window_size_offset_dict, side_data_window_size_offset_dict, 
-                           mcount_data_window_size_offset_dict=None, average_mutants_per_window=None, 
-                           pval_cutoff=0.05, print_result_counts=True, print_info=True):
-    """ Transform p-value and side info into a list of (chrom, start, end, pvalue, kind, window_offset) tuples with pvalue<=cutoff.
+def get_hot_cold_spot_list(pvalue_data_window_size_offset_dict, ifcold_data_window_size_offset_dict, 
+                           mcount_data_window_size_offset_dict=None, expected_mcount_data_window_size_offset_dict=None,
+                           average_mutants_per_window=None, pval_cutoff=0.05, print_result_counts=True, print_info=True):
+    """ Transform p-value and ifcold info into a list of (chrom, start, end, pvalue, kind, window_offset) tuples with pvalue<=cutoff.
 
     First three arguments should be window_size:(window_offset:(chromosome:list_of_window_values))) triple nested dictionaries.
       - the p-values should be 0-1, and you should probably get FDR correction done on them first; 
-      - the sides should be -1 for coldspots and 1 for hotspots. 
+      - the ifcold values should be -1 for coldspots and 1 for hotspots. 
     Pval_cutoff should be a number between 0 and 1. 
 
-    Mcount_data_window_size_offset_dict should contain the number of mutants found in each window. It's optional - if None is given, 
-     mutant numbers will be shown as 'unknown'. 
+    Mcount_data_window_size_offset_dict should contain the number of mutants found in each window, 
+     and expected_mcount_data_window_size_offset_dict the expected number of mutants. 
+     Both are optional - if None is given, mutant numbers will be shown as 'unknown'. 
     Average_mutants_per_window should be a window_size:average_mutants dict, optional - the value is just printed next to the real 
      mutant count for each hot/coldspot reported, to help see the effect size.  If None, average values are printed as 'unknown'
 
@@ -616,35 +620,39 @@ def get_hot_cold_spot_list(pvalue_data_window_size_offset_dict, side_data_window
     defaultdict = collections.defaultdict
     if mcount_data_window_size_offset_dict is None:
         mcount_data_window_size_offset_dict = defaultdict(lambda: defaultdict(lambda: defaultdict(lambda: 'unknown')))
+    if expected_mcount_data_window_size_offset_dict is None:
+        expected_mcount_data_window_size_offset_dict = defaultdict(lambda: defaultdict(lambda: defaultdict(lambda: 'unknown')))
     if average_mutants_per_window is None:
         average_mutants_per_window = defaultdict(lambda: 'unknown')
     hc_data_list = []
     for window_size, pvalue_data_window_offset_dict in pvalue_data_window_size_offset_dict.items():
         for window_offset, pvalue_data in pvalue_data_window_offset_dict.items():
             N_spots_for_window_offset = 0
-            side_data = side_data_window_size_offset_dict[window_size][window_offset]
+            ifcold_data = ifcold_data_window_size_offset_dict[window_size][window_offset]
             mcount_data = mcount_data_window_size_offset_dict[window_size][window_offset]
+            expected_mcount_data = expected_mcount_data_window_size_offset_dict[window_size][window_offset]
             for chrom, pvalues in pvalue_data.items():
-                sides = side_data[chrom]
+                ifcold_vals = ifcold_data[chrom]
                 mcounts = mcount_data[chrom]
+                expected_mcounts = expected_mcount_data[chrom]
                 color_values = []
-                for N,(pvalue,side,mcount) in enumerate(zip(pvalues,sides,mcounts)):
+                for N,(pvalue,ifcold,mcount,expected) in enumerate(zip(pvalues,ifcold_vals,mcounts,expected_mcounts)):
                     if pvalue <= pval_cutoff:
                         N_spots_for_window_offset += 1
-                        kind = 'hotspot' if side>0 else 'coldspot'
+                        kind = 'coldspot' if ifcold else 'hotspot'
                         start_pos = N*window_size + window_offset
                         end_pos = (N+1)*window_size + window_offset
-                        hc_data_list.append((chrom, start_pos, end_pos, pvalue, kind, window_offset, mcount))
+                        hc_data_list.append((chrom, start_pos, end_pos, pvalue, kind, window_offset, mcount, expected))
             if print_result_counts:
                 print "%s results below adjusted p-value %s for data with %s window and offset %s"%(N_spots_for_window_offset, 
                                                                   pval_cutoff, format_bp(window_size), format_bp(window_offset))
     hc_data_list.sort(key=lambda x: (basic_seq_utilities.chromosome_sort_key(x[0]), x[1:]))
     if print_info:
-        for N,(chrom, start_pos, end_pos, pvalue, kind, offset, mcount) in enumerate(hc_data_list):
+        for N,(chrom, start_pos, end_pos, pvalue, kind, offset, mcount, expected) in enumerate(hc_data_list):
             window_size = end_pos-start_pos
-            print "%s %s-%s (window size %s) - %s, %.3g adjusted p-value (saw %s mutants, average %.3g) (#%s)"%(chrom, 
-                                                          format_bp(start_pos), format_bp(end_pos), format_bp(window_size), 
-                                                          kind, pvalue, mcount, average_mutants_per_window[window_size], N)
+            print "%s %s-%s (window size %s) - %s, %.3g adj. p-value (%s mutants, expected %.3g, avg %.3g) (#%s)"%(
+                                        chrom, format_bp(start_pos), format_bp(end_pos), format_bp(window_size), kind, 
+                                        pvalue, mcount, expected, average_mutants_per_window[window_size], N)
     return hc_data_list
     # TODO should unit-test this!
 
