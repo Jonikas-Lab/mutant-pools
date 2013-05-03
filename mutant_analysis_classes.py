@@ -1171,6 +1171,27 @@ class Dataset_summary_data():
             self.adjacent_max_distance = orig_max_distance 
         return string
 
+    @property
+    def all_genes_in_dataset(self):
+        """ The set of all genes with at least one mutant in the dataset. """
+        # the empty-set argument is needed in case there are no mutants in the dataset - set.union() with empty args is an error.
+        return set.union(set(), *[set(genes) for N_mutants,genes 
+                                  in self.dataset.get_gene_dict_by_mutant_number(self.dataset_name).items() if N_mutants>0])
+    @property
+    def N_genes_in_dataset(self):
+        """ The number of genes with at least one mutant in the dataset. """
+        return len(self.all_genes_in_dataset)
+    @property
+    def genes_with_multiple_mutants(self):
+        """ The set of all genes with at TWO OR MORE mutants in the dataset. """
+        # the empty-set argument is needed in case there are no mutants in the dataset - set.union() with empty args is an error.
+        return set.union(set(), *[set(genes) for N_mutants,genes 
+                                  in self.dataset.get_gene_dict_by_mutant_number(self.dataset_name).items() if N_mutants>1])
+    @property
+    def N_genes_with_multiple_mutants(self):
+        """ The number of genes with TWO OR MORE mutants in the dataset. """
+        return len(self.genes_with_multiple_mutants)
+
 
 class Insertional_mutant_pool_dataset():
     """ A dataset of insertional mutants - contains an iterable of Insertional_mutant objects, and a lot of extra data.
@@ -2313,7 +2334,7 @@ class Insertional_mutant_pool_dataset():
         """
         ### define a list of datasets+summaries that we'll be dealing with
         if not self.multi_dataset:  summaries_and_datasets = [(self.summary, None)]
-        else:                  summaries_and_datasets = [(self.summary[dataset],dataset) for dataset in self.dataset_order]
+        else:                       summaries_and_datasets = [(self.summary[dataset],dataset) for dataset in self.dataset_order]
         summaries, datasets = zip(*summaries_and_datasets)
 
         ### First set up a list of line descriptions and value-getter functions
@@ -2422,7 +2443,8 @@ class Insertional_mutant_pool_dataset():
 
         # print the gene annotation info, but only if there is any
         if any([summ.mutants_in_genes+summ.mutants_not_in_genes for summ in summaries]):
-            DVG.append((line_prefix+"Mutant cassettes on chromosomes with no gene data (cassette, some scaffolds, maybe chloroplast/mito) (% of total):", 
+            DVG.append((line_prefix+"Mutant cassettes on chromosomes with no gene data"
+                                   +" (cassette, some scaffolds, maybe chloroplast/mito) (% of total):", 
                         lambda summ: value_and_percentages(summ.mutants_undetermined, [summ.N_mutants]) ))
             DVG.append((line_prefix+"Mutant cassettes in intergenic spaces (% of total, % of known):", 
                         lambda summ: value_and_percentages(summ.mutants_not_in_genes, 
@@ -2443,15 +2465,11 @@ class Insertional_mutant_pool_dataset():
                                                         summ.merged_gene_feature_counts(merge_boundary_features)[feature], 
                                                         [summ.mutants_in_genes]) ))
 
-            _N_all_genes = lambda dataset: sum([len(genes) for N_mutants,genes 
-                                               in self.get_gene_dict_by_mutant_number(dataset).items() if N_mutants>0])
-            _N_genes_in_multiple_mutants = lambda dataset: sum([len(genes) for N_mutants,genes 
-                                               in self.get_gene_dict_by_mutant_number(dataset).items() if N_mutants>1])
             DVG.append((header_prefix+"Genes containing a mutant (% of all genes):", 
-                        lambda summ: value_and_percentages(_N_all_genes(summ.dataset_name), 
+                        lambda summ: value_and_percentages(summ.N_genes_in_dataset, 
                                                                    [self.total_genes_in_genome]) ))
             DVG.append((line_prefix+"Genes containing at least two mutants (% of all genes):", 
-                        lambda summ: value_and_percentages(_N_genes_in_multiple_mutants(summ.dataset_name),
+                        lambda summ: value_and_percentages(summ.N_genes_with_multiple_mutants,
                                                                    [self.total_genes_in_genome]) ))
             DVG.append((line_prefix+"  (total genes in genome annotation data):", 
                         lambda summ: "(%s)"%self.total_genes_in_genome ))
