@@ -19,6 +19,7 @@ from testing_utilities import run_functional_tests
 def do_test_run():
     """ Test run: run script on test infile, compare output to reference file."""
     test_folder = "test_data"
+    # TODO replace those with pickled infiles?  Since doing it this way uses the deprecated read_data_from_file method!  Although that'll be harder to maintain... Hmmm.
     dataset1 = "test_data/INPUT_mutants1_no-genes.txt"
     dataset2 = "test_data/INPUT_mutants2_with-genes.txt"
 
@@ -26,7 +27,6 @@ def do_test_run():
              ("join-datasets__with-names", "-D dataset1,dataset2 -o position %s %s -q"%(dataset1, dataset2)),
              ("join-datasets__other-order", "-D dataset2,dataset1 -o position %s %s -q"%(dataset2, dataset1)),
             ]
-    # TODO add run-test for pickled infiles!
     # MAYBE-TODO add run test for -A/-a option? 
     # MAYBE-TODO add run-tests for -X, -z, -Z?
 

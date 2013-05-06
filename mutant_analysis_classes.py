@@ -900,6 +900,7 @@ class Dataset_summary_data():
         self.dataset_name = dataset_name
         self.dataset = dataset
         # information on reads that aren't included in the dataset mutants - None or 0 by default
+        # TODO I should really go over this and figure out what should be None and what should be 0 and why!!
         self.discarded_read_count, self.discarded_wrong_start, self.discarded_no_cassette = None, None, None
         self.discarded_other_end = 0
         self.non_aligned_read_count, self.unaligned, self.multiple_aligned = 0, None, None
@@ -1241,7 +1242,7 @@ class Insertional_mutant_pool_dataset():
         # gene/annotation-related information - LATER-TODO should this even be here, or somewhere else?
         self.gene_annotation_header = []
         self.total_genes_in_genome = 0
-        # optionally read mutant data from infile
+        # optionally read mutant data from infile (TODO maybe should remove this, it's supposedly deprecated...)
         if infile is not None:
             self.read_data_from_file(infile)
 
