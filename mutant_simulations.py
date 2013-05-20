@@ -657,6 +657,54 @@ def get_hot_cold_spot_list(pvalue_data_window_size_offset_dict, ifcold_data_wind
     # TODO should unit-test this!
 
 
+def observed_mutants_in_window(chromosome, start_pos, end_pos, dataset):
+    """ Return the number of mutants in dataset that are on chromosome between start and end (inclusive). 
+
+    Dataset can be a mutant_analysis_classes.Insertional_mutant_pool_dataset instance, 
+     or a chrom:position_list or (chrom,strand):position_list dictionary (and position_list may be a list or numpy array!).
+    """
+    # If dataset is an object, get a generator of min_pos
+    if isinstance(dataset, mutant_analysis_classes.Insertional_mutant_pool_dataset):
+        positions_in_chromosome = (m.position.min_position for m in dataset if m.position.chromosome==chromosome)
+    # Otherwise assume dataset is a chrom:position_list or (chrom,strand):position_list dict, 
+    #  and just grab the position list for that chromosome, or [] if the chromosome isn't in the keys
+    elif isinstance(dataset.keys()[0], basestring):
+        positions_in_chromosome = dataset.get(chromosome, [])
+    else:
+        # CAREFUL: need to convert to lists before taking a sum, normally the values may be numpy arrays, which add funny!!
+        positions_in_chromosome = sum((list(dataset[key]) for key in dataset.keys() if key[0]==chromosome), [])
+    # get the number of positions that are between the start/end given
+    return sum(int(start_pos <= pos <= end_pos) for pos in positions_in_chromosome)
+    # TODO unit-test
+
+
+def expected_mutants_in_window(chromosome, start_pos, end_pos, mappable_positions_20bp, mappable_positions_21bp, 
+                               fraction_20bp, N_mutants, all_chromosomes=None):
+    """ Return the expected number of mutants in chromosome between start and end (inclusive), given genome mappability etc.
+
+    For descriptions of mappable_positions_*, fraction_20bp arguments, see help for find_hot_cold_spots function.
+    N_mutants should be the total number of mutants in the dataset (we're calculating how many of those are expected in the window);
+    all_chromosomes should be a list of chromosomes in which we're looking at mutants; if None, all mappable chromosomes are allowed.
+
+    The probability of a mutant falling in the given window is defined by the number of mappable positions in that window
+     vs the whole genome, separately for 20bp and 21bp flanking regions (mappable_positions_* arguments).
+    Given the total number of mutants (N_mutants), and how many of them are 20 vs 21bp (fraction_20bp),
+     the expected number of mutants in the given window can be calculated (again, separately for 20 and 21bp, then added together).
+    """
+    mappable_pos_in_window_20bp = observed_mutants_in_window(chromosome, start_pos, end_pos, mappable_positions_20bp)
+    mappable_pos_in_window_21bp = observed_mutants_in_window(chromosome, start_pos, end_pos, mappable_positions_21bp)
+    mappable_pos_total_20bp = sum(len(chrom_mapp_positions) for chrom,chrom_mapp_positions in mappable_positions_20bp.items() 
+                                  if (_get_chrom_either_strand(chrom) in all_chromosomes or all_chromosomes is None))
+    mappable_pos_total_21bp = sum(len(chrom_mapp_positions) for chrom,chrom_mapp_positions in mappable_positions_21bp.items() 
+                                  if (_get_chrom_either_strand(chrom) in all_chromosomes or all_chromosomes is None))
+    total_N_20bp = N_mutants * fraction_20bp
+    total_N_21bp = N_mutants - total_N_20bp
+    expected_N_20bp = total_N_20bp * (mappable_pos_in_window_20bp/mappable_pos_total_20bp)
+    expected_N_21bp = total_N_21bp * (mappable_pos_in_window_21bp/mappable_pos_total_21bp)
+    return expected_N_20bp+expected_N_21bp
+    # TODO looks like this gives the wrong output???
+    # TODO unit-test
+
 ################################# Simulating random size-N dataset, various options #######################################
 
 ###### help functions
