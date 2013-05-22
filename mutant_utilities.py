@@ -149,7 +149,7 @@ def filter_data_by_min_reference(reference_list, other_lists, min_reference_valu
 
 
 def replicate_reproducibility_info(dataset1, dataset2, readcount_cutoffs=[1,10,100,1000], ratio_cutoffs=[1.2,1.5,2,5,10], 
-                                   both_ways=True, real_min_reads_1=None, real_min_reads_2=None, quiet=False):
+                                   both_ways=True, higher_only=False, real_min_reads_1=None, real_min_reads_2=None, quiet=False):
     """ Return/print reproducibility information between two replicates: % of readcounts within 2x of each other, etc. 
 
     Answers two basic questions, for each N in readcount_cutoffs:
@@ -159,18 +159,24 @@ def replicate_reproducibility_info(dataset1, dataset2, readcount_cutoffs=[1,10,1
             Using each value in ratio_cutoffs for the ratio; using real or normalized readcount 
             (normalized is so that if one replicate has 2x more reads total than the other, the 2x ratio is counted as 1x etc; 
              still using raw readcounts for the cutoffs, because using normalized ones would probably be too hard to explain...)
+           If higher_only is True, this only excludes readcounts that are 2x/etc HIGHER in dataset1 than in dataset1 (normalized), 
+             rather than either higher or lower. 
         Also reports the total number of mutants with N+ reads: total, as a percentage of all mutants, and optionally 
          as a percentage of all "real" mutants, i.e. ones with at least real_min_reads_1 in dataset1 or real_min_reads_2 in dataset2 
           (if real_min_reads_* are both not None).
         Note that we're looking at mutants with >=X reads in one dataset, and putting no cutoff on the other; 
         If both_ways is False, we just do it one way (looking at mutants with N+ counts in A and checking presence/ratio in B); 
          if True, we do it both ways (A to B and B to A) and add the results together.
+        Both_ways and higher_only cannot both be True, since the first one implies we're treating the two samples the same 
+         and the second that we're treating them differently.
 
     For example, if we have two replicates A and B, with readcounts of (0,1,3,4) and (1,0,2,5) for the same 4 mutants:
         * looking at mutants with 1+ read (3 in A, 3 in B):
           - out of mutants with 1+ read in A, 2 are present in B; same the other way around - so total 67% present. 
-          - out of mutants with 1+ read in A, the ratios are 0:1, 2:3, 5:4 - so 1/3 within 1.3x, 2/3 within 2x (and 5x etc) 
-            (and the reverse for mutants with 1+ read in B, leading to the same final counts)
+          - out of mutants with 1+ read in A, the A:B ratios are 1:0, 3:2, 4:5 - so 1/3 within 1.3x, 2/3 within 2x (and 5x etc) 
+             (and the reverse for mutants with 1+ read in B, leading to the same final counts)
+            if we're looking higher_only, then 1/3 ratios are below 1.3x (and even 1x), 2/3 below 2x (and 5x etc)
+            (or if we were looking at mutants with 1+ read in B, the B:A ratios are 1:0, 2:3, 5:4 - same except 2 below 1.3x.)
         * looking at mutants with 3+ reads (2 in A, 1 in B):
           - out of mutants with 3+ reads in A, 2 are present in B; out of 1 in B, 1 present in A - so total 100% present.
           - the ratios are 2:3 and 5:4 for the two in A, and 4:5 for the one in B, so 2/3 within 1.3x, 3/3 within 2x.
@@ -193,6 +199,10 @@ def replicate_reproducibility_info(dataset1, dataset2, readcount_cutoffs=[1,10,1
 
     If quiet is True, don't print the data, just return it.  Note: printing is nicely formatted and has percentages.
     """
+    # MAYBE-TODO add example with a lot more mutants in A than B, or such, to illustrate difference between A/B, B/A, and both_ways?
+    # check if the arguments are consistent
+    if both_ways and higher_only:
+            raise ValueError("Both_ways and higher_only arguments cannot both be True!")
     # if the inputs are datasets instead of readcount lists, convert to readcount lists 
     #   (join the two datasets first so that both readcount lists are for the same mutant list)
     if isinstance(dataset1[0], int):
@@ -245,16 +255,23 @@ def replicate_reproducibility_info(dataset1, dataset2, readcount_cutoffs=[1,10,1
         N_present_in_B_dict[readcount_cutoff] = N_present_in_B
         # look at how many mutants are within given B:A readcount ratios (raw and normalized readcounts)
         if not quiet:
-            print '   - how many mutants are within a given readcount ratio between the replicates:'
+            if higher_only:     print '   - how many mutants have a readcount replicate1:2 ratio exceeding the given value:'
+            else:               print '   - how many mutants are within a given readcount ratio between the replicates:'
         info_strings_raw, info_strings_norm = [], []
         N_within_ratio_raw_dict[readcount_cutoff], N_within_ratio_norm_dict[readcount_cutoff] = {}, {}
         for ratio_cutoff in ratio_cutoffs:
-            N_within_ratio_raw = sum((1/ratio_cutoff <= b/a <= ratio_cutoff) for a,b in filtered_readcount_pairs)
+            # note that we're always taking a b/a ratio, not a/b, because we know a is non-zero, but we don't know that about b!
+            if higher_only:
+                # for the higher-only option we want to test a/b <= ratio_cutoff, i.e. 1/ratio_cutoff <= b/a
+                N_within_ratio_raw = sum((1/ratio_cutoff <= b/a) for a,b in filtered_readcount_pairs)
+                N_within_ratio_norm = sum((1/ratio_cutoff <= b/a) for a,b in filtered_norm_readcount_pairs)
+            else:
+                N_within_ratio_raw = sum((1/ratio_cutoff <= b/a <= ratio_cutoff) for a,b in filtered_readcount_pairs)
+                N_within_ratio_norm = sum((1/ratio_cutoff <= b/a <= ratio_cutoff) for a,b in filtered_norm_readcount_pairs)
             N_within_ratio_raw_dict[readcount_cutoff][ratio_cutoff] = N_within_ratio_raw
+            N_within_ratio_norm_dict[readcount_cutoff][ratio_cutoff] = N_within_ratio_norm
             info_strings_raw.append('%sx - %s'%(ratio_cutoff, 
                                                 'N/A' if N_filtered_in_A==0 else '%.0f%%'%(N_within_ratio_raw/N_filtered_in_A*100)))
-            N_within_ratio_norm = sum((1/ratio_cutoff <= b/a <= ratio_cutoff) for a,b in filtered_norm_readcount_pairs)
-            N_within_ratio_norm_dict[readcount_cutoff][ratio_cutoff] = N_within_ratio_norm
             info_strings_norm.append('%sx - %s'%(ratio_cutoff, 
                                                 'N/A' if N_filtered_in_A==0 else '%.0f%%'%(N_within_ratio_norm/N_filtered_in_A*100)))
         if not quiet:
@@ -280,7 +297,7 @@ class Testing(unittest.TestCase):
 
     def test__replicate_reproducibility_info(self):
         # the outputs are: N_filtered_dict, N_present_in_B_dict, N_within_ratio_raw_dict, N_within_ratio_norm_dict
-        ### 1 - BASIC TEST, based on docstring example.
+        ### BASIC TEST, based on docstring example.
         # checking both one-way options, and the both-way option (which should just be the sum of the two one-way ones)
         # In all of those, the two datasets have the same readcount sum, so the raw and normalized data should be the same
         #   (last two outputs), so we're only checking output 0-2, and checking that output3 is the same as output2.
@@ -303,7 +320,7 @@ class Testing(unittest.TestCase):
         data5 = replicate_reproducibility_info(dataA+dataB, dataB+dataA, readcount_cutoffs=[1, 3], ratio_cutoffs=[1.3, 2], 
                                                both_ways=False, quiet=True)
         assert data3 == data4 == data5
-        ### 2 - NORMALIZATION TEST, again based on docstring example.
+        ### NORMALIZATION TEST, again based on docstring example.
         # the normalized ratio counts should be the same as above, but the raw ones should be different.
         data = replicate_reproducibility_info([x*2 for x in dataA], dataB, readcount_cutoffs=[3], ratio_cutoffs=[1.3, 2], 
                                               both_ways=False, quiet=True)
@@ -314,7 +331,17 @@ class Testing(unittest.TestCase):
         data = replicate_reproducibility_info([x*2 for x in dataA], dataB, readcount_cutoffs=[3], ratio_cutoffs=[1.3, 2], 
                                               both_ways=True, quiet=True)
         assert data[:4] == ({3:3}, {3:3}, {3:{1.3:0, 2:2}}, {3:{1.3:2, 2:3}})
-        ### 3 - MUTANT-TOTAL AND REAL-MUTANT-TOTAL TEST
+        ### HIGHER_ONLY TEST, again based on docstring example, trying A>B and B>A
+        # only using one readcount cutoff for simplicity; normalized data should be same as raw, since totals are same
+        data1 = replicate_reproducibility_info(dataA, dataB, readcount_cutoffs=[1], ratio_cutoffs=[1, 1.3, 2, 5], 
+                                               both_ways=False, higher_only=True, quiet=True)
+        assert data1[:3] == ({1:3}, {1:2}, {1:{1:1, 1.3:1, 2:2, 5:2}})
+        assert data1[3] == data1[2]
+        data2 = replicate_reproducibility_info(dataB, dataA, readcount_cutoffs=[1], ratio_cutoffs=[1, 1.3, 2, 5], 
+                                               both_ways=False, higher_only=True, quiet=True)
+        assert data2[:3] == ({1:3}, {1:2}, {1:{1:1, 1.3:2, 2:2, 5:2}})
+        assert data2[3] == data2[2]
+        ### MUTANT-TOTAL AND REAL-MUTANT-TOTAL TEST
         # Just checking the last output (which I haven't checked before) - the mutant total and "real" total list.
         # Ignoring everything else (leaving defaults for readcount/ratio cutoffs)
         dataA, dataB = [0,1,3,4], [1,0,2,5]
@@ -333,13 +360,18 @@ class Testing(unittest.TestCase):
             data = replicate_reproducibility_info(dataA, dataB, both_ways=True, 
                                                   real_min_reads_1=real_min_1, real_min_reads_2=real_min_2, quiet=True)
             assert data[4] == expected_output
-        ### 4 - NO-CUTOFFS TEST
+        ### NO-CUTOFFS TEST
         # if cutoff lists are empty, we get empty dictionaries, no errors
         data = replicate_reproducibility_info(dataA, dataB, readcount_cutoffs=[], ratio_cutoffs=[], both_ways=True, quiet=True)
         assert data == ({}, {}, {}, {}, [6])
-        ### 5 - DIVISION BY ZERO TEST
+        ### DIVISION BY ZERO TEST
         # checks that we don't get an error raised when readcount cutoff is so high that nothing's left
         data = replicate_reproducibility_info(dataA, dataB, readcount_cutoffs=[100], ratio_cutoffs=[1,2], both_ways=True, quiet=True)
+        ### WRONG-ARGUMENTS TEST
+        # higher_only and both_ways cannot both be True
+        self.assertRaises(ValueError, replicate_reproducibility_info, dataA, dataB, both_ways=True, higher_only=True)
+        # the two datasets must be the same length, if given as readcount lists
+        self.assertRaises(ValueError, replicate_reproducibility_info, dataA+[3], dataB, both_ways=True, higher_only=True)
         # MAYBE-TODO test the actual printed data?  It's pretty straightforwardly derived from the outputted/tested data, though.
 
     # LATER-TODO add unit-tests for the remaining functions!
