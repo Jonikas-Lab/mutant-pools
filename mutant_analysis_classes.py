@@ -1731,11 +1731,12 @@ class Insertional_mutant_pool_dataset():
             for mutant in mutants_by_chromosome[chromosome]:
                 mutant.gene,mutant.orientation,mutant.gene_feature = SPECIAL_GENE_CODES.chromosome_not_in_reference,'-','-'
 
-    def add_gene_annotation(self, annotation_file, if_standard_Cre_file=False, custom_header=None, print_info=False):
+    def add_gene_annotation(self, annotation_file, if_standard_Phytozome_file=None, custom_header=None, print_info=False):
         """ Add gene annotation to each mutant, based on annotation_file. See parse_gene_annotation_file doc for detail."""
         from parse_annotation_file import parse_gene_annotation_file
         gene_annotation_dict, gene_annotation_header = parse_gene_annotation_file(annotation_file, 
-                     standard_Cre_file=if_standard_Cre_file, header_fields=custom_header, verbosity_level=int(print_info))
+                                                 standard_Phytozome_file=if_standard_Phytozome_file, header_fields=custom_header, 
+                                                 strip_gene_fields_start='.t', verbosity_level=int(print_info))
         # store the annotation header in self.summary, for printing
         if gene_annotation_header:  self.gene_annotation_header = gene_annotation_header
         else:                       self.gene_annotation_header = 'GENE_ANNOTATION_DATA'

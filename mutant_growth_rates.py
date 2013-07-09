@@ -17,7 +17,6 @@ from numpy import log2, mean, median, std, isnan, isinf
 # my modules
 import mutant_analysis_classes
 import mutant_join_datasets
-from parse_annotation_file import parse_gene_annotation_file
 
 
 def define_option_parser():

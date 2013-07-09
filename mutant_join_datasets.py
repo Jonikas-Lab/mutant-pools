@@ -61,8 +61,9 @@ def define_option_parser():
 
     parser.add_option('-A', '--gene_annotation_file', default=None, metavar='FILE', 
                       help="Tab-separated file to use to look up gene names/descriptions from IDs (default %default)")
-    parser.add_option('-a', '--annotation_file_is_standard', action='store_true', default=False,
-                      help="Use if file provided in -A is the standard Cre type (and missing a header) (default %default)")
+    parser.add_option('-a', '--annotation_file_standard_type', type='int', default=None, metavar='V', 
+                      help="Use if file provided in -A is a standard Phytozome annotation file (missing a header): "
+                          +"use value 4 for the one with chlamy v4.3 genome, or value 5 for v5 genome (default %default)")
 
     parser.add_option('-X', '--remove_mutants_from_file', metavar='FILE',
                       help='Remove all mutants present in FILE from the datasets (see -Y for read count cutoff).')
@@ -167,7 +168,7 @@ def main(infiles, outfile, options):
         if options.verbosity_level>1: 
             print "adding gene annotation from file %s - time %s."%(options.gene_annotation_file, time.ctime())
         multi_dataset.add_gene_annotation(options.gene_annotation_file, 
-                                               if_standard_Cre_file=options.annotation_file_is_standard)
+                                          if_standard_Phytozome_file=options.annotation_file_standard_type)
 
     # print full data to outfile, unless there is no outfile name given
     if outfile:

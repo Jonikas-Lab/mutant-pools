@@ -184,8 +184,9 @@ def define_option_parser():
 
     parser.add_option('-A', '--gene_annotation_file', default=None, metavar='FILE', 
                       help="Tab-separated file to use to look up gene names/descriptions from IDs (default %default)")
-    parser.add_option('-a', '--annotation_file_is_standard', action='store_true', default=False,
-                      help="Use if file provided in -A is the standard Cre type and (missing a header) (default %default)")
+    parser.add_option('-a', '--annotation_file_standard_type', type='int', default=None, metavar='V', 
+                      help="Use if file provided in -A is a standard Phytozome annotation file (missing a header): "
+                          +"use value 4 for the one with chlamy v4.3 genome, or value 5 for v5 genome (default %default)")
 
     ### output format options
     parser.add_option('-n', '--N_sequences_per_group', type='int', default=2, metavar='N', 
@@ -536,7 +537,7 @@ def main(infiles, outfile, options):
             if options.verbosity_level>1: 
                 print "adding gene annotation from file %s - time %s."%(options.gene_annotation_file, time.ctime())
             all_alignment_data.add_gene_annotation(options.gene_annotation_file, 
-                       if_standard_Cre_file=options.annotation_file_is_standard, print_info=(options.verbosity_level >= 2))
+                       if_standard_Phytozome_file=options.annotation_file_standard_type, print_info=(options.verbosity_level >= 2))
 
     ### output data to files
     save_dataset_files(all_alignment_data, outfile, options.verbosity_level, True, options.count_cassette, options.count_other, 
