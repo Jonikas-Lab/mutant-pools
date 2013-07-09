@@ -18,11 +18,11 @@ import general_utilities
 import basic_seq_utilities
 import mutant_analysis_classes
 
-DEFAULT_NUCLEAR_GENOME_FILE = os.path.expanduser('~/experiments/reference_data/genomes_and_indexes/Chlre4_notmasked.fa')
-DEFAULT_ALL_GENOME_FILE = os.path.expanduser('~/experiments/reference_data/genomes_and_indexes/Chlre4-nm_chl-mit.fa')
-DEFAULT_GENOME_CASSETTE_FILE = os.path.expanduser('~/experiments/reference_data/genomes_and_indexes/Chlre4-nm_chl-mit_cassette-pMJ013b.fa')
-DEFAULT_GENE_POS_FILE = os.path.expanduser('~/experiments/reference_data/chlamy_annotation/Creinhardtii_169_gene.gff3')
-DEFAULT_GENE_ANNOTATION_FILE = os.path.expanduser('~/experiments/reference_data/chlamy_annotation/Creinhardtii_169_annotation_info.txt')
+DEFAULT_NUCLEAR_GENOME_FILE = os.path.expanduser('~/experiments/reference_data/genomes_and_indexes/Chlre5_notmasked.fa')
+DEFAULT_ALL_GENOME_FILE = os.path.expanduser('~/experiments/reference_data/genomes_and_indexes/Chlre5-nm_chl-mit.fa')
+DEFAULT_GENOME_CASSETTE_FILE = os.path.expanduser('~/experiments/reference_data/genomes_and_indexes/Chlre5-nm_chl-mit_cassette-pMJ013b.fa')
+DEFAULT_GENE_POS_FILE = os.path.expanduser('~/experiments/reference_data/chlamy_annotation/Creinhardtii_236_gene.gff3')
+DEFAULT_GENE_ANNOTATION_FILE = os.path.expanduser('~/experiments/reference_data/chlamy_annotation/Creinhardtii_236_annotation_info.txt')
 
 STRAND_VAR_VALUES = ('+', '-', 'both', None)
 DEFAULT_BIN_SIZE = 20000
