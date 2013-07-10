@@ -11,6 +11,7 @@ import sys
 import unittest
 import os
 from collections import defaultdict
+import glob
 # other packages
 import numpy
 # my modules
@@ -63,6 +64,23 @@ def get_mutant_positions_from_dataset(dataset, strand=None):
         if strand is None or position.strand==strand:
             chromosome_position_dict[position.chromosome].append(position.min_position)
     return chromosome_position_dict
+
+
+def merge_dataset_files(file_list=[], file_glob_pattern=None):
+    """ Return single mutant dataset from adding all the inpu ones together (input can be filename list or glob pattern).
+    """
+    if (file_list and file_glob_pattern) or not (file_list or file_glob_pattern):
+        raise Exception("Must provide exactly one of file_list and file_glob_pattern!")
+    if file_glob_pattern:
+        file_list = glob.glob(file_glob_pattern)
+    # make empty dataset
+    full_dataset = mutant_analysis_classes.Insertional_mutant_pool_dataset()
+    # read each listed dataset file, merge into the full dataset, then delete single dataset
+    for infile in file_list:
+        curr_dataset = mutant_analysis_classes.read_mutant_file(infile)
+        full_dataset.merge_other_dataset(curr_dataset)
+        del curr_dataset
+    return full_dataset
 
 
 def get_histogram_data_from_positions(position_dict, bin_size=DEFAULT_BIN_SIZE, chromosome_lengths=None, chromosomes=None, 
