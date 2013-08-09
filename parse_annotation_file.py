@@ -75,22 +75,22 @@ def parse_gene_annotation_file(gene_annotation_filename, standard_Phytozome_file
     if len(header_fields) not in data_lengths:
         if verbosity_level>1 or (not pad_with_empty_fields and verbosity_level>0):
             print("Warning: header has a different number of fields than the data! "
-                  +"Header length: %s. Data lengths: %s"%(len(header),list(data_lengths)))
+                  +"Header length: %s. Data lengths: %s"%(len(header_fields),list(data_lengths)))
         mismatched_lengths = True
     if len(data_lengths)>1 and pad_with_empty_fields:
-        max_length = max(max(data_lengths), len(header))
+        max_length = max(max(data_lengths), len(header_fields))
         if verbosity_level>0:
             print "Data field numbers vary between rows - padding all lower-length data rows to length %s"%max_length
         for row in data_by_row:
             if len(row)<max_length:
                 row += ['' for x in range(max_length-len(row))]
-        if len(header)<max_length:
-            header += ['?' for x in range(max_length-len(header))]
+        if len(header_fields)<max_length:
+            header_fields += ['?' for x in range(max_length-len(header_fields))]
         mismatched_lengths = False
 
     # remove empty columns (only if all the data lengths match!)
     if remove_empty_columns and not mismatched_lengths:
-        data_length = len(header)
+        data_length = len(header_fields)
         columns_to_remove = []
         for pos in range(data_length):
             values = set([row[pos] for row in data_by_row])
@@ -98,14 +98,14 @@ def parse_gene_annotation_file(gene_annotation_filename, standard_Phytozome_file
                 value = values.pop()
                 if value.strip()=='':
                     if verbosity_level>0:
-                        if header:  print "Column %s (%s) is always empty - removing it."%(pos+1, header[pos])
+                        if header_fields:  print "Column %s (%s) is always empty - removing it."%(pos+1, header_fields[pos])
                         else:       print "Column %s is always empty - removing it."%(pos+1)
                     columns_to_remove.append(pos)
                 else:
                     if verbosity_level>0:
                         print "Note: all the values in column %s are the same! (%s)"%(pos+1, value)
         for pos in sorted(columns_to_remove, reverse=True):
-            if header:  del header[pos]
+            if header_fields:  del header_fields[pos]
             for row in data_by_row: 
                 del row[pos]
 
@@ -123,12 +123,12 @@ def parse_gene_annotation_file(gene_annotation_filename, standard_Phytozome_file
 
     # remove the first word from the header, since it should be "gene ID" or such; 
     #  change spaces to underscores in header fields for readability
-    if header:  
-        del header[gene_ID_column]
-        header = [s.replace(' ','_') for s in header]
+    if header_fields:  
+        del header_fields[gene_ID_column]
+        header_fields = [s.replace(' ','_') for s in header_fields]
 
     if verbosity_level>0:
         print " *** DONE Parsing gene annotation file"
-    return data_by_gene, header
+    return data_by_gene, header_fields
 
 # TODO add unit-tests or run/tests?  It's not exactly complicated...
