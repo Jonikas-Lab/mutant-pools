@@ -38,12 +38,12 @@ GENE_FEATURE_NAMES = { 'five_prime_UTR' : "5'UTR",
                        'three_prime_UTR' : "3'UTR",
                      }
 
-GENE_FEATURE_ORDER = { 'CDS':0, 'intron': 1, 
-                       'five_prime_UTR': 2, "5'UTR": 2, 
-                       'three_prime_UTR': 3, "3'UTR": 3, 
-                       "5'UTR_intron": 4, "3'UTR_intron": 4, 
-                       'boundary': 5, 
-                     }
+GENE_FEATURE_ORDER = defaultdict(lambda: 5, { 'CDS':0, 'intron': 1, 
+                                              'five_prime_UTR': 2, "5'UTR": 2, 
+                                              'three_prime_UTR': 3, "3'UTR": 3, 
+                                              "5'UTR_intron": 4, "3'UTR_intron": 4, 
+                                              'boundary': 6, 
+                                             })
 
 ### Simple help functions
 
@@ -371,11 +371,8 @@ def find_gene_by_pos_gff3(insertion_pos, chromosome_GFF_record, detailed_feature
             # if gene has no features listed, use 'no_mRNA' as gene_feature (different from '?' or '-')
             if len(gene.sub_features)==0:
                 inner_feature = 'no_mRNA'
-            # if gene feature/subfeature structure isn't as expected, print warning and return '??'
+            # if multiple mRNAs, just return 'MULTIPLE_SPLICE_VARIANTS' as feature instead of delving into it
             elif len(gene.sub_features)>1:
-                if not quiet:
-                    print("Warning: gene %s in gff file has multiple sub-features (mRNAs?)! "%gene_ID
-                          +"Returning 'MULTIPLE_SPLICE_VARIANTS' feature.")
                 inner_feature = 'MULTIPLE_SPLICE_VARIANTS'
                 # TODO implement going over all the splice variants of the gene (even ones the insertion doesn't touch - important
                 #  to know if all or some are affected!) and giving the feature info for all of them!  Comma-separated list.
@@ -432,7 +429,7 @@ def find_gene_by_pos_gff3(insertion_pos, chromosome_GFF_record, detailed_feature
                         elif ins_end > max([feature.location.end.position for feature in mRNA.sub_features]):
                             if gene.strand==1:    implied_feature = 'mRNA_after_exons'
                             elif gene.strand==-1: implied_feature = 'mRNA_before_exons'
-                        if ins_start < min([feature.location.start.position+1 for feature in CDS_features]):
+                        elif ins_start < min([feature.location.start.position+1 for feature in CDS_features]):
                             if gene.strand==1:    implied_feature = "5'UTR_intron"
                             elif gene.strand==-1: implied_feature = "3'UTR_intron"
                         elif ins_end > max([feature.location.end.position for feature in CDS_features]):
@@ -2355,9 +2352,7 @@ class Insertional_mutant_pool_dataset():
     def _sort_feature_list(feature_list):
         """ Sort feature list: biologically (CDS, intron, UTR, other, boundary), then alphabetically in each category. """
         # using a dictionary to assign each category a sorting position, with "other" (default) between UTR and boundary.
-        proper_feature_order = defaultdict(lambda: 6, GENE_FEATURE_ORDER
-                                           )
-        feature_count_sorted_list = sorted(feature_list, key=lambda f: (proper_feature_order[f],f))
+        feature_count_sorted_list = sorted(feature_list, key=lambda f: (GENE_FEATURE_ORDER[f],f))
         return feature_count_sorted_list
 
     @staticmethod
