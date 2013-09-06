@@ -3927,7 +3927,7 @@ class Testing_Insertional_mutant_pool_dataset(unittest.TestCase):
         assert mutant.unique_sequence_count == 1
 
     def _check_infile2(self, data2):
-        """ Check that data is as expected in test_data/count-aln__cassette-end-5prime.txt. """
+        """ Check that data is as expected in test_data/count-aln__with-gene-info_merged.txt. """
         # summary
         assert data2.summary.processed_read_count == data2.summary.aligned_read_count\
                 == data2.summary.perfect_read_count == 40
@@ -3939,8 +3939,8 @@ class Testing_Insertional_mutant_pool_dataset(unittest.TestCase):
         assert data2.summary.mutants_undetermined == 0
         assert data2.summary.mutant_counts_by_orientation == {'sense':37, 'antisense':2}
         assert data2.summary.mutant_counts_by_feature['CDS'] == 6
-        assert data2.summary.mutant_counts_by_feature['??'] == 2
-        assert data2.summary.mutant_counts_by_feature['CDS/three_prime_UTR'] == 1
+        assert data2.summary.mutant_counts_by_feature['??'] == 1
+        assert data2.summary.mutant_counts_by_feature["CDS/3'UTR"] == 1
         # mutant spot-checks
         mutant = data2.get_mutant('chromosome_A','+',position_before=20)
         assert mutant.position.chromosome == 'chromosome_A'
@@ -3960,7 +3960,7 @@ class Testing_Insertional_mutant_pool_dataset(unittest.TestCase):
         assert mutant.unique_sequence_count == 1
         assert mutant.gene == "test.geneA0_proper_plus"
         assert mutant.orientation == 'sense'
-        assert mutant.gene_feature == 'five_prime_UTR'
+        assert mutant.gene_feature == "5'UTR"
 
     def test__read_data_from_file(self):
         """ uses _check_infile1 and _check_infile2 functions for detail. """
