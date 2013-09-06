@@ -27,6 +27,8 @@ from deepseq_utilities import check_mutation_count_try_all_methods
 
 
 ### Constants
+MULTIPLE_GENE_JOIN = ' & '
+
 class SPECIAL_GENE_CODES(object):
     not_determined = "gene_unknown"
     chromosome_not_in_reference = "unknown_chrom"
@@ -465,8 +467,9 @@ def find_gene_by_pos_gff3(insertion_pos, chromosome_GFF_record, detailed_feature
     else: 
         if not quiet:
             print("Warning: Location (%s,%s) matched multiple genes! %s"%(ins_start, ins_end, ', '.join(zip(*gene_data_list)[0])))
-        return [' | '.join(multiple_vals) for multiple_vals in zip(*gene_data_list)]
+        return [MULTIPLE_GENE_JOIN.join(multiple_vals) for multiple_vals in zip(*gene_data_list)]
     # MAYBE-TODO add unit tests?  But this is included in a pretty thorough run-test, so may not be necessary.
+    # TODO add unit-test or run-test for overlapping genes!!
 
 
 def find_gene_by_pos_simple(insertion_pos, chromosome_gene_pos_dict, allow_multiple_genes=False):
