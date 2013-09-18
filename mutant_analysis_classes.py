@@ -466,7 +466,7 @@ def find_gene_by_pos_gff3(insertion_pos, chromosome_GFF_record, detailed_feature
     # if multiple genes found, return data like this: "gene1 | gene2", "sense | antisense", "intron | CDS/4'UTR" and print warning
     else: 
         if not quiet:
-            print("Warning: Location (%s,%s) matched multiple genes! %s"%(ins_start, ins_end, ', '.join(zip(*gene_data_list)[0])))
+            print("Warning: Location \"%s\" matched multiple genes! %s"%(insertion_pos, ', '.join(zip(*gene_data_list)[0])))
         return [MULTIPLE_GENE_JOIN.join(multiple_vals) for multiple_vals in zip(*gene_data_list)]
     # MAYBE-TODO add unit tests?  But this is included in a pretty thorough run-test, so may not be necessary.
     # TODO add unit-test or run-test for overlapping genes!!
