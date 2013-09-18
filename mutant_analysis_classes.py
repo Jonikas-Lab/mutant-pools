@@ -2551,6 +2551,20 @@ class Insertional_mutant_pool_dataset():
             OUTPUT.write('\n')
 
 
+    def _sort_data(self, sort_data_by=None):
+        """ Sort the mutants by position or readcount, or leave unsorted. """
+        all_mutants = iter(self)
+        if sort_data_by=='position':
+            sorted_data = sorted(all_mutants, key = lambda m: m.position)
+            # x.position here is an Insertion_position object and has a sensible cmp function
+        elif sort_data_by=='read_count':
+            if self.multi_dataset:  
+                raise MutantError("Sorting by readcount in print_data not implemented for multi-datasets!")
+            sorted_data = sorted(all_mutants, key = lambda m: (m.total_read_count,m.perfect_read_count,m.position), reverse=True)
+        else:
+            sorted_data = all_mutants
+        return sorted_data
+
     def print_data(self, OUTPUT=sys.stdout, sort_data_by=None, N_sequences=None, header_line=True, header_prefix="# "):
         """ Print full data, one line per mutant: position data, gene info, read counts, optionally sequences.
         (see the file header line for exactly what all the output fields are).
@@ -2587,23 +2601,14 @@ class Insertional_mutant_pool_dataset():
             OUTPUT.write(header_prefix + '\t'.join(header) + "\n")
 
         ### sort all mutants by position or readcount (for single datasets only for now), or don't sort at all
-        all_mutants = iter(self)
-        if sort_data_by=='position':
-            data = sorted(all_mutants, key = lambda m: m.position)
-            # x.position here is an Insertion_position object and has a sensible cmp function
-        elif sort_data_by=='read_count':
-            if self.multi_dataset:  
-                raise MutantError("Sorting by readcount in print_data not implemented for multi-datasets!")
-            data = sorted(all_mutants, key = lambda m: (m.total_read_count,m.perfect_read_count,m.position), reverse=True)
-        else:
-            data = all_mutants
+        sorted_mutants = self._sort_data(sort_data_by)
 
         # create "empty" annotation line with the correct number of fields, for genes that weren't in annotation file
         if self.gene_annotation_header:
             missing_gene_annotation_data = ['NO GENE DATA'] + ['' for x in self.gene_annotation_header[:-1]]
 
         ### for each mutant, print the mutant data line (different for normal and multi-datasets)
-        for mutant in data:
+        for mutant in sorted_mutants:
             mutant_data = [mutant.position.chromosome, mutant.position.strand, mutant.position.min_position, 
                            mutant.position.full_position, mutant.gene, mutant.orientation, mutant.gene_feature] 
             if not self.multi_dataset:
