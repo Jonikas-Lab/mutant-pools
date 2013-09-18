@@ -24,6 +24,7 @@ import HTSeq
 from general_utilities import write_header_data
 from testing_utilities import run_functional_tests
 import mutant_analysis_classes
+import mutant_Carette   # TODO this should be optional...
 
 def do_test_run():
     """ Test run: run script on test infile, compare output to reference file."""
@@ -103,6 +104,8 @@ def define_option_parser():
     parser.add_option('-r','--read_direction', choices=mutant_analysis_classes.SEQ_DIRECTIONS, default='forward',
                       metavar='|'.join(mutant_analysis_classes.SEQ_DIRECTIONS), 
                       help="Is the read in the forward or reverse direction compared to the cassette? (default %default).")
+    parser.add_option('--Carette', action="store_true", default=False, 
+                      help="Is this data from the Carette protocol instead of the MmeI one? (default %default).")
 
     parser.add_option('-D', '--adjacent_max_distance', type='int', default=1, metavar='N',
                       help="Count/merge adjacent mutants only if they're at most N bases distant; (default %default)")
@@ -422,11 +425,11 @@ def main(infiles, outfile, options):
     cassette_merging_outfile = outfile_basename + '_cassette_merging-info.txt'
 
     ### generate empty alignment set object with basic read position/orientation properties defined by options
-    all_alignment_data = mutant_analysis_classes.Insertional_mutant_pool_dataset(options.read_cassette_end, 
-                                                                                 options.read_direction=='reverse')
+    if options.Carette:     dataset_class = mutant_Carette.Insertional_mutant_pool_dataset_Carette
+    else:                   dataset_class = mutant_analysis_classes.Insertional_mutant_pool_dataset
+    all_alignment_data = dataset_class(options.read_cassette_end, options.read_direction=='reverse')
     if options.separate_cassette:
-        cassette_alignment_data = mutant_analysis_classes.Insertional_mutant_pool_dataset(options.read_cassette_end, 
-                                                                                 options.read_direction=='reverse')
+        cassette_alignment_data = dataset_class(options.read_cassette_end, options.read_direction=='reverse')
     # MAYBE-TODO refactor the whole bunch of "if options.separate_cassette:" clauses to avoid code duplication?
 
     ### parse preprocessing/alignment metadata file to get discarded/not-aligned/etc readcounts, pass to all_alignment_data
