@@ -1807,6 +1807,7 @@ class Insertional_mutant_pool_dataset():
         else:                       self.gene_annotation_header = 'GENE_ANNOTATION_DATA'
         return gene_annotation_dict
 
+    @staticmethod
     def _add_gene_annotation_to_mutant(mutant, gene_annotation_dict):
         annotations = []
         for gene in mutant.gene.split(MULTIPLE_GENE_JOIN):
