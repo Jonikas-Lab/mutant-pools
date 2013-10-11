@@ -1,9 +1,10 @@
 #!/usr/bin/env python
 
 import os
+from collections import defaultdict
 
 def parse_gene_annotation_file(gene_annotation_filename, standard_Phytozome_file=False, header_fields=None, gene_ID_column=0, 
-                               genes_start_with=None, remove_empty_columns=True, strip_gene_fields_start=None,
+                               genes_start_with=None, delete_columns=None, remove_empty_columns=True, strip_gene_fields_start=None,
                                pad_with_empty_fields=True, ignore_comments=False, verbosity_level=1):
     """ Parse tab-separated gene annotation file; return a geneID:data_list dict, and a column header list (if present).
 
@@ -19,10 +20,14 @@ def parse_gene_annotation_file(gene_annotation_filename, standard_Phytozome_file
 
     Optionally remove empty columns (i.e. fields that are empty in all lines).
     """
+    # TODO add description of all the other stuff to docstring!
     if not os.path.lexists(gene_annotation_filename):
         raise Exception("Couldn't find the %s gene annotation file!"%gene_annotation_filename)
     if verbosity_level>0:
         print " *** Parsing file %s for gene annotation info..."%gene_annotation_filename
+
+    if delete_columns is None:
+        delete_columns = []
 
     # special cases for the standard Phytozome annotation files
     if standard_Phytozome_file:
@@ -33,13 +38,16 @@ def parse_gene_annotation_file(gene_annotation_filename, standard_Phytozome_file
                              'best arabidopsis TAIR10 hit name', 'best arabidopsis TAIR10 hit symbol', 
                              'best arabidopsis TAIR10 hit defline', 
                              'best rice hit name', 'best rice hit symbol', 'best rice hit defline']
+            delete_columns = []
         elif standard_Phytozome_file==5:
             gene_ID_column = 1
-            header_fields = ['Phytozome transcript name', 
+            header_fields = ['Phytozome internal transcript ID', 'Phytozome gene locus name', 
+                             'Phytozome transcript name', 'Phytozome protein name', 
                              'PFAM', 'Panther', 'KOG', 'KEGG ec', 'KEGG Orthology', 'Gene Ontology terms', 
                              'best arabidopsis TAIR10 hit name', 'best arabidopsis TAIR10 hit symbol', 
                              'best arabidopsis TAIR10 hit defline', 
                              'best rice hit name', 'best rice hit symbol', 'best rice hit defline']
+            delete_columns = [0,2,3]
         else:
             raise Exception("Invalid value for standard_Phytozome_file type arg! %s given, 4/5 accepted."%standard_Phytozome_file)
 
@@ -110,25 +118,30 @@ def parse_gene_annotation_file(gene_annotation_filename, standard_Phytozome_file
                 del row[pos]
 
     # convert the list-format data into a by-gene dictionary
-    data_by_gene = {}
-    for row in data_by_row:
-        gene = row[gene_ID_column]
-        data = row[0:gene_ID_column] + row[gene_ID_column+1:]
+    data_by_gene = defaultdict(lambda: [set() for x in range(data_length)])
+    for data in data_by_row:
+        gene = data[gene_ID_column]
+        for col in sorted(delete_columns + [gene_ID_column], reverse=True):
+            del data[col]
         if strip_gene_fields_start is not None:
             gene = gene.split(strip_gene_fields_start)[0]
-        if gene in data_by_gene:
-            if verbosity_level>0:
-                print "Warning: gene %s appears twice in the data! Using the later appearance."%gene
-        data_by_gene[gene] = data
+        # We frequently get multiple lines, for different transcripts!  Just concatenate all of them.
+        for N,field in enumerate(data):
+            data_by_gene[gene][N].add(field)
 
     # remove the first word from the header, since it should be "gene ID" or such; 
     #  change spaces to underscores in header fields for readability
     if header_fields:  
-        del header_fields[gene_ID_column]
+        for col in sorted(delete_columns + [gene_ID_column], reverse=True):
+            del header_fields[col]
         header_fields = [s.replace(' ','_') for s in header_fields]
+
+    # At the end, change the sets to comma-separated strings, and also remove empty strings
+    for gene,data in data_by_gene.items():
+        data_by_gene[gene] = [' | '.join([f for f in fields if f.strip()]) for fields in data]
 
     if verbosity_level>0:
         print " *** DONE Parsing gene annotation file"
-    return data_by_gene, header_fields
+    return dict(data_by_gene), header_fields
 
 # TODO add unit-tests or run/tests?  It's not exactly complicated...
