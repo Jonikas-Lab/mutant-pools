@@ -15,12 +15,17 @@ from collections import defaultdict
 # other libraries
 import HTSeq
 # my modules
-from mutant_analysis_classes import MutantError, Insertion_position, Insertional_mutant, Insertional_mutant_pool_dataset, is_cassette_chromosome
+from mutant_analysis_classes import MutantError, Insertion_position, Insertional_mutant, Insertional_mutant_pool_dataset, is_cassette_chromosome, SEQ_ENDS, get_insertion_pos_from_flanking_region_pos
 from general_utilities import keybased_defaultdict, value_and_percentages
+from seq_basic_utilities import parse_fasta
 # there's a "from parse_annotation_file import parse_gene_annotation_file" in one function, not always needed
 
 
 # TODO need to implement new Insertion_position variant with uncertainty!  And modify the gene/feature finding function to deal with that...
+
+### Constants
+
+MAX_POSITION_DISTANCE = 1500
 
 
 ############################### Main classes describing the mutants and mutant sets #####################################
@@ -54,12 +59,58 @@ class Insertional_mutant_Carette(Insertional_mutant):
         raise MutantError("merge_mutant NOT IMPLEMENTED on Carette mutant object!")
         # TODO implement?  Just need to merge the read IDs and Carette read data...
 
-    def add_Carette_read(self, HTSeq_alignment, read_count=1):
-        self.Carette_genome_side_reads.append(HTSeq_alignment)
-        # TODO do we want to parse that further now, or just leave it like this until later?
-        # TODO should probably get gene info for those!  And annotation info!
+    def add_Carette_read(self, insertion_position, HTSeq_alignment=None, seq=None, N_errors=None, read_count=1):
+        """ Must provide either HTSeq_alignment (if aligned) or seq (if not).
+        If providing HTSeq_alignment, seq and N_errors will be ignored. 
+        Must provide insertion_position (which should be an Insertion_position instance if read is uniquely aligned, 
+         or None/"Multiple" or such if not); if HTSeq_alignment is given, method does NOT check that insertion_position matches it.
+        """
+        # TODO make sure this makes sense!
+        mutant = Insertional_mutant(insertion_position)
+        if HTSeq_alignment is not None and seq is not None:
+            raise MutantError("When running add_Carette_read, can't give BOTH HTSeq_alignment and seq!")
+        elif HTSeq_alignment is not None:
+            mutant.add_read(HTSeq_alignment, read_count)
+        elif seq is not None:
+            mutant.add_sequence_and_counts(seq, read_count)
+            if N_errors==0:
+                mutant.add_counts(0, read_count, 0)
+        else:
+            raise MutantError("When running add_Carette_read, must give HTSeq_alignment or seq!")
+        self.Carette_genome_side_reads.append(mutant)
+        # TODO should get gene info for those!  And annotation info!
 
-    def Carette_N_distinct_positions(self, max_distance=1000):
+    @property
+    def Carette_N_unaligned_reads(self):
+        return sum(1 for read_data in self.Carette_genome_side_reads if read_data.position in 'UNALIGNED MULTIPLE'.split())
+        # TODO if I change to treating multiple as aligned, will this need to change?
+        # TODO all this UNALIGNED/MULTIPLE stuff is text, should probably change it to constants!
+
+    @property
+    def Carette_N_genomic_reads(self):
+        N = 0
+        for read_data in self.Carette_genome_side_reads:
+            try:                    chrom = read_data.position.chromosome
+            except AttributeError:  continue
+            if not is_cassette_chromosome(chrom):
+                N += 1
+        return N
+
+    @property
+    def Carette_N_cassette_reads(self):
+        return len(self.Carette_genome_side_reads) - self.Carette_N_genomic_reads - self.Carette_N_unaligned_reads
+
+    @property
+    def Carette_N_genomic_chromosomes(self):
+        chroms = set()
+        for read_data in self.Carette_genome_side_reads:
+            # grab chromosome - unless read is unaligned, then ignore and go on to next one
+            try:                    chrom = read_data.position.chromosome
+            except AttributeError:  continue
+            chroms.add(chrom)
+        return sum(1 for chrom in chroms if not is_cassette_chromosome(chrom))
+            
+    def Carette_N_distinct_positions(self, max_distance=MAX_POSITION_DISTANCE):
         """ Return number of distinct insertion positions implied by Carette data (genomic, cassette, and #chromosomes).
 
         The output is a 3-tuple giving the number of distinct genome and cassette positions, 
@@ -73,14 +124,15 @@ class Insertional_mutant_Carette(Insertional_mutant):
         positions_by_chrom_strand = defaultdict(list)
         # add the cassette-side position (single)
         positions_by_chrom_strand[(self.position.chromosome, self.position.strand)].append(self.position.min_position)
-        # add all the genome-side read positions
-        for read in self.Carette_genome_side_reads:
-            if read.aligned:
-                positions_by_chrom_strand[(read.iv.chrom, read.iv.strand)].append(read.iv.start)
+        # add all the genome-side read positions; skip unaligned ones.
+        for read_data in self.Carette_genome_side_reads:
+            pos = read_data.position
+            try:                    positions_by_chrom_strand[(pos.chromosome, pos.strand)].append(pos.min_position)
+            except AttributeError:  continue
         # count total number of dictinct positions - different chromosomes or strands, or distance > max_distance
         total_distinct_positions_genome = 0
         total_distinct_positions_cassette = 0
-        # for each chromosome, go over all positions and only count ones every 1000bp as distinct
+        # for each chromosome, go over all positions and only count ones every MAX_POSITION_DISTANCE as distinct
         for chrom_strand, positions in positions_by_chrom_strand.items():
             positions.sort()
             distinct_positions = [positions[0]]
@@ -89,35 +141,92 @@ class Insertional_mutant_Carette(Insertional_mutant):
                     distinct_positions.append(pos)
             if is_cassette_chromosome(chrom_strand[0]):     total_distinct_positions_cassette += len(distinct_positions)
             else:                                           total_distinct_positions_genome += len(distinct_positions)
-        N_genomic_chromosomes = len(set([c for c in zip(*positions_by_chrom_strand)[0] if not is_cassette_chromosome(c)]))
-        return total_distinct_positions_genome, total_distinct_positions_cassette, N_genomic_chromosomes
+        return total_distinct_positions_genome, total_distinct_positions_cassette
     
+    def Carette_confirmation_status(self, side=None, max_distance=MAX_POSITION_DISTANCE, min_weird_distance=3):
+        """ Return status based on comparison of cassette-side and genome-side reads.
+
+        Also checks whether results make sense given which side of the cassette we're looking at, if provided
+        """
+        # TODO better docstring, unit-tests!
+        if not self.total_read_count:
+            return 'NOT_FOUND'
+        elif not self.Carette_N_genomic_reads + self.Carette_N_cassette_reads:
+            return 'NO_ALIGNED_READS'
+        # We take "sum(mutant.Carette_N_distinct_positions(max_allowed_distance)) > 1" to check for EITHER genomic OR cassette positions - TODO rewrite that method to be more obvious?
+        elif sum(self.Carette_N_distinct_positions(max_distance)) > 1:
+            return 'WRONG_POSITION'
+        else:
+            distances = []
+            for Carette_read_data in self.Carette_genome_side_reads:
+                try:                    distances.append(Carette_read_data.position.min_position - self.position.min_position)
+                except AttributeError:  pass
+            # check to make sure the position of the genomic-side reads MAKES SENSE vs the cassette-side (is earlier for +strand 5' and -strand 3', and later for the other two cases)
+            # TODO weird cases should print warning!
+            if (((self.position.strand=='+' and side=="5'") or (self.position.strand=='-' and side=="3'")) 
+                and max(distances) > min_weird_distance):
+                print "WEIRD case: genome-side Carette read reads %sbp past the insertion site inferred from cassette-side read! %s"%(max(distances), self.position)
+                return 'WEIRD'
+            elif (((self.position.strand=='-' and side=="5'") or (self.position.strand=='+' and side=="3'")) 
+                  and min(distances) < -min_weird_distance):
+                print "WEIRD case: genome-side Carette read reads %sbp past the insertion site inferred from cassette-side read! %s"%(abs(min(distances)), self.position)
+                return 'WEIRD'
+            else:
+                return 'CONFIRMED'
+
+    def Carette_max_confirmed_distance(self, max_distance=MAX_POSITION_DISTANCE):
+        """ Return the distance between the cassette-side read and the furthest-away same-area genome-side read.
+
+        Return NaN if no same-area genome-side reads.
+        """
+        # TODO better docstring, unit-tests!
+        distances = []
+        for Carette_read_data in self.Carette_genome_side_reads:
+            # Only look at the genome-side reads that match the cassette-side read position!
+            # There's a try/except because unaligned reads don't have proper positions.
+            try:                    
+                if (Carette_read_data.position.chromosome == self.position.chromosome 
+                    and Carette_read_data.position.strand == self.position.strand):
+                    pos_difference = abs(Carette_read_data.position.min_position - self.position.min_position)
+                else:
+                    continue
+            except AttributeError:  
+                continue
+            if pos_difference <= max_distance:
+                distances.append(pos_difference)
+        try:
+            return max(distances)
+        except ValueError:
+            return float('NaN')
+
     # TODO add new method that infers the approximate real insertion location!
 
     # TODO add new method that prints info!
-    def Carette_print_detail(self, OUTPUT=sys.stdout, max_distance=1000):
-        # TODO make max_distance default value a class variable, so it's the same in different functions?
+    def Carette_print_detail(self, OUTPUT=sys.stdout, max_distance=MAX_POSITION_DISTANCE):
         ### print summary line
-        N_distinct_genome, N_distinct_cassette, N_chroms_genome = self.Carette_N_distinct_positions(max_distance)
-        N_genomic_reads = sum(1 for aln in self.Carette_genome_side_reads if not is_cassette_chromosome(aln.iv.chrom))
-        OUTPUT.write(" * %s genome-side reads for %s distinct genomic positions (on %s chromosomes), "%(N_genomic_reads, 
-                                                                                        N_distinct_genome, N_chroms_genome)
-                     +"plus %s distinct cassette positions:\n"%(N_distinct_cassette))
+        N_distinct_genome, N_distinct_cassette = self.Carette_N_distinct_positions(max_distance)
+        OUTPUT.write(" * %s distinct genomic positions (on %s chromosomes; %s genomic reads), "%(N_distinct_genome, 
+                                                                 self.Carette_N_genomic_chromosomes, self.Carette_N_genomic_reads)
+                     +"plus %s distinct cassette positions (%s reads) and %s unaligned/multi-aligned reads:\n"%(N_distinct_cassette,
+                                                                 self.Carette_N_cassette_reads, self.Carette_N_unaligned_reads))
+        # TODO is that a useful summary?  Is it confusing that the casette-side read isn't included in the read numbers?
         ### print cassette-side position
-        OUTPUT.write("Cassette-side position::: %s, %s reads, top seq %s (%s reads)\n"%((self.position, self.total_read_count) + 
-                     self.get_main_sequence()))
+        OUTPUT.write("Cassette-side position:::\n")
+        main_pos_fields = [self.position.chromosome, self.position.strand, self.position.full_position, self.gene, self.orientation, 
+                           self.gene_feature, self.get_main_sequence()[0]] + self.gene_annotation
+        OUTPUT.write('\t'.join([str(x) for x in main_pos_fields]) + '\n')
         ### print lines for each of the Carette genome-side reads
         # sort the Carette reads by alignment position (chrom,strand,pos; unaligned go last)
-        OUTPUT.write("Carette protocol genome-side reads::: (SAM format)\n")
-        def _position_sort_key(HTSeq_read):
-            if not HTSeq_read.aligned:
-                return 1
-            return (0, HTSeq_read.iv.chrom, HTSeq_read.iv.strand, HTSeq_read.iv.start)
-        for alignment in sorted(self.Carette_genome_side_reads, key = _position_sort_key):
-            OUTPUT.write(alignment.get_sam_line() + '\n')
-            # TODO SAM format is stupid, switch to something sensible here! 
-            #   make sure direction is same as from cassette-side read if they actually match
-            #   add gene/annotation data for each position!
+        OUTPUT.write("Carette protocol genome-side reads:::\n")
+        for read_data in sorted(self.Carette_genome_side_reads, key = lambda x: x.position):
+            try: 
+                fields = [read_data.position.chromosome, read_data.position.strand, read_data.position.full_position]
+            except AttributeError:
+                fields = [read_data.position, '-', '-']
+            fields += [read_data.gene, read_data.orientation, read_data.gene_feature, read_data.get_main_sequence()[0]] 
+            fields += read_data.gene_annotation
+            OUTPUT.write('\t'.join([str(x) for x in fields]) + '\n')
+            # TODO add gene and annotation data for each position!
 
     # TODO TODO TODO finish implementing class!  What other methods to add/overwrite?
 
@@ -143,7 +252,11 @@ class Insertional_mutant_pool_dataset_Carette(Insertional_mutant_pool_dataset):
 
     # TODO method for filling in genome-side Carette data!  Something based on add_alignment_reader_to_data too
 
-    def add_Carette_genome_side_alignments_to_data(self, HTSeq_alignment_reader):
+    def add_Carette_genome_side_alignments_to_data(self, genome_side_infile, multiple_alignment=False):
+        if self.summary.cassette_end not in SEQ_ENDS:
+            raise MutantError("Can't run add_Carette_genome_side_alignments_to_data if cassette_end is unknown!")
+        if self.summary.reads_are_reverse not in [True,False]:
+            raise MutantError("Can't run add_Carette_genome_side_alignments_to_data if reads_are_reverse is unknown!")
         # TODO docstring!
         # We'll be going over a lot of genome-side reads, which are the paired-end-sequencing mates of 
         #  the cassette-side reads used for mutant positions. 
@@ -157,15 +270,47 @@ class Insertional_mutant_pool_dataset_Carette(Insertional_mutant_pool_dataset):
                 read_ID_to_position[read_ID] = mutant.position
 
         ### Go over all the reads in the HTSeq_alignment_reader, add them to the appropriate mutant
-        for aln in HTSeq_alignment_reader:
-            # if read is unaligned, add to unaligned count and skip to the next read
-            read_ID = aln.read.name
-            # TODO do the two paired-ends have slightly different IDs?
-            # grab the mutant that has the matching read; if no mutant matches the read ID, go on to next read
-            try:                mutant_pos = read_ID_to_position[read_ID]
-            except KeyError:    continue
-            mutant = self.get_mutant(mutant_pos)
-            mutant.add_Carette_read(aln)
+        if genome_side_infile.endswith('.sam'):
+            read_IDs = set()
+            for aln in HTSeq.SAM_Reader(genome_side_infile):
+                read_ID = aln.read.name
+                # grab the mutant that has the matching read; if no mutant matches the read ID, go on to next read
+                try:                mutant_pos = read_ID_to_position[read_ID]
+                except KeyError:    continue
+                mutant = self.get_mutant(mutant_pos)
+                # for multiple alignments, just give the sequence and ignore the position entirely. 
+                #  (have to keep track of read IDs, since there are likely to be multiple lines per read!)
+                # TODO implement those properly, with giving the alignment positions?  TRICKY to figure out how to print them!
+                if multiple_alignment:
+                    if read_ID in read_IDs:
+                        continue
+                    mutant.add_Carette_read(insertion_position='MULTIPLE', HTSeq_alignment=None, seq=aln.read.seq)
+                # for normal alignments, use full alignment to add read info
+                else:
+                    if read_ID in read_IDs:
+                        raise MutantError("File %s wasn't supposed to be multiple alignments - why is read %s there twice??"%(
+                            genome_side_infile, read_ID))
+                    # convert the HTSeq alignment data to an insertion position!
+                    #  the cassette end is obviously the same as for the whole dataset;
+                    #  reads_are_reverse is the OPPOSITE to the main dataset, since the two Carette reads go in opposite directions!
+                    insertion_position = get_insertion_pos_from_flanking_region_pos(aln.iv, cassette_end=self.summary.cassette_end, 
+                                                                            reads_are_reverse=(not self.summary.reads_are_reverse))
+                    mutant.add_Carette_read(insertion_position, aln)
+                read_IDs.add(read_ID)
+        # For fasta files, just assume it's unaligned, or multiple if that's set, and use the sequences.
+        elif genome_side_infile.endswith('.fa'):
+            if not multiple_alignment:
+                print "Assuming reads in %s are unaligned."%genome_side_infile
+                position_val = 'UNALIGNED'
+            else:
+                position_val = 'MULTIPLE'
+            for name,seq in parse_fasta(genome_side_infile):
+                try:                mutant_pos = read_ID_to_position[name]
+                except KeyError:    continue
+                mutant = self.get_mutant(mutant_pos)
+                mutant.add_Carette_read(insertion_position=position_val, HTSeq_alignment=None, seq=seq)
+        else:
+            raise MutantError("Don't know how to deal with file %s - not a .fa or .sam file!"%genome_side_infile)
 
     def read_data_from_file(self, infile, assume_new_sequences=False):
         raise MutantError("Not implemented for Carette datasets!")
@@ -180,9 +325,43 @@ class Insertional_mutant_pool_dataset_Carette(Insertional_mutant_pool_dataset):
         raise MutantError("Not implemented for Carette datasets!")
         # MAYBE-TODO this MIGHT actually work for Carette datasets, but I'm not sure and don't want to spend the time checking
 
-    # TODO need to write new function to write detailed Carette data (all Carette reads per mutant) to separate file!
-    def print_detailed_Carette_data(self, OUTPUT=sys.stdout, sort_data_by=None, max_distance=1000):
+    def find_genes_for_mutants(self, genefile, detailed_features=False, N_run_groups=3, verbosity_level=1):
+        """ To each mutant in the dataset, add the gene it's in (look up gene positions for each mutant using genefile).
+
+        ALSO add gene data to all the Carette-genome-side-read mutants inside each mutant!
+
+        If detailed_features is True, also look up whether the mutant is in an exon/intron/UTR.
+        Read the file in N_run_groups passes to avoid using up too much memory/CPU.
+        """ 
+        # Group all the mutants by chromosome, so that I can go over each chromosome in genefile separately
+        #   instead of reading in all the data at once (which uses a lot of memory)
+        #  Inclue both the main mutants, AND all the Carette genome-side read sub-mutants!
+        mutants_by_chromosome = defaultdict(set)
+        for mutant in self:
+            mutants_by_chromosome[mutant.position.chromosome].add(mutant)
+            for Carette_read_data in mutant.Carette_genome_side_reads:
+                try:                    mutants_by_chromosome[Carette_read_data.position.chromosome].add(Carette_read_data)
+                except AttributeError:  continue
+        self._find_genes_for_mutant_list(mutants_by_chromosome, genefile, detailed_features, N_run_groups, verbosity_level)
+
+    def add_gene_annotation(self, annotation_file, if_standard_Phytozome_file=None, custom_header=None, print_info=False):
+        """ Add gene annotation to each mutant, based on annotation_file. See parse_gene_annotation_file doc for detail."""
+        gene_annotation_dict = self._get_gene_annotation_dict(annotation_file, if_standard_Phytozome_file, custom_header, print_info)
+        # add the annotation info to each mutant (or nothing, if gene has no annotation), 
+        #  and to the Carette data sub-mutants
+        for mutant in self:
+            for curr_mutant in [mutant] + mutant.Carette_genome_side_reads:
+                try:                curr_mutant.gene_annotation = gene_annotation_dict[curr_mutant.gene]
+                except KeyError:    curr_mutant.gene_annotation = []
+        # LATER-TODO add this to the gene-info run-test case!
+
+    def print_detailed_Carette_data(self, OUTPUT=sys.stdout, sort_data_by=None, max_distance=MAX_POSITION_DISTANCE):
+        """ Write detailed Carette data (all reads per mutant) to separate file.
+        """
         # TODO docstring!
+
+        # TODO should probably add header
+        # TODO add annotation!
 
         ### sort all mutants by position or readcount (for single datasets only for now), or don't sort at all
         sorted_mutants = self._sort_data(sort_data_by)
@@ -191,7 +370,7 @@ class Insertional_mutant_pool_dataset_Carette(Insertional_mutant_pool_dataset):
         N_total = len(self)
         # using sum because you can't do len on generators
         N_single_genomic = sum(1 for m in self if m.Carette_N_distinct_positions(max_distance)[0]==1)
-        N_single_chrom = sum(1 for m in self if m.Carette_N_distinct_positions(max_distance)[2]==1)
+        N_single_chrom = sum(1 for m in self if m.Carette_N_genomic_chromosomes==1)
         N_cassette = sum(1 for m in self if m.Carette_N_distinct_positions(max_distance)[1]>0)
         OUTPUT.write("# %s mutants total; %s have one genomic location; "%(N_total, 
                                                                            value_and_percentages(N_single_genomic, [N_total]))
