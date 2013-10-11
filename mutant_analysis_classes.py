@@ -13,17 +13,17 @@ import sys, re
 import unittest
 from collections import defaultdict
 import itertools
-from numpy import median, round, isnan
 import copy
 import random
 # other libraries
+from numpy import median, round, isnan
 import HTSeq
 from BCBio import GFF
 # my modules
 from general_utilities import split_into_N_sets_by_counts, add_dicts_of_ints, sort_lists_inside_dict, keybased_defaultdict, value_and_percentages, FAKE_OUTFILE, NaN, nan_func, merge_values_to_unique, unpickle
 from basic_seq_utilities import SEQ_ENDS, SEQ_STRANDS, SEQ_DIRECTIONS, SEQ_ORIENTATIONS, position_test_contains, position_test_overlap, chromosome_sort_key, get_seq_count_from_collapsed_header
 from deepseq_utilities import check_mutation_count_try_all_methods
-# there's a "from parse_annotation_file import parse_gene_annotation_file" in one function, not always needed
+from parse_annotation_file import parse_gene_annotation_file
 
 
 ### Constants
@@ -202,8 +202,15 @@ class Insertion_position(object):
         return all_position_values
 
     def __cmp__(self,other):
-        """ Based on tuple-comparison of (chr_name, chr_number, min_pos, max_pos, strand) - in that order for sane sort."""
-        return cmp(self._make_key(), other._make_key())
+        """ Based on tuple-comparison of (chr_name, chr_number, min_pos, max_pos, strand) - in that order for sane sort.
+        
+        If other isn't an Insertion_position instance, assume self < other, I suppose (all we really needs is self != other.
+        """
+        try:
+            other_key = other._make_key()
+        except AttributeError:
+            return -1
+        return cmp(self._make_key(), other_key)
 
     # MAYBE-TODO do I also want a rough_comparison method, which would return True for ?-101 and 100-101 etc?  How about 100-101 and 100-102, then?
 
@@ -1737,7 +1744,7 @@ class Insertional_mutant_pool_dataset():
     def find_genes_for_mutants(self, genefile, detailed_features=False, N_run_groups=3, verbosity_level=1):
         """ To each mutant in the dataset, add the gene it's in (look up gene positions for each mutant using genefile).
 
-        If detailed_features is True, also look up whether the mutant is in an exon/intron/UTR (NOT IMPLEMENTED); 
+        If detailed_features is True, also look up whether the mutant is in an exon/intron/UTR.
         Read the file in N_run_groups passes to avoid using up too much memory/CPU.
         """ 
         if self.multi_dataset:  raise MutantError("find_genes_for_mutants not implemented for multi-datasets!")
@@ -1749,7 +1756,10 @@ class Insertional_mutant_pool_dataset():
         mutants_by_chromosome = defaultdict(set)
         for mutant in self:
             mutants_by_chromosome[mutant.position.chromosome].add(mutant)
+        self._find_genes_for_mutant_list(mutants_by_chromosome, genefile, detailed_features, N_run_groups, verbosity_level)
 
+    def _find_genes_for_mutant_list(self, mutants_by_chromosome, genefile, detailed_features=False, 
+                                    N_run_groups=3, verbosity_level=1):
         # First get the list of all chromosomes in the file, WITHOUT reading it all into memory
         with open(genefile) as GENEFILE:
             GFF_limit_data = GFF.GFFExaminer().available_limits(GENEFILE)
@@ -1787,20 +1797,34 @@ class Insertional_mutant_pool_dataset():
             for mutant in mutants_by_chromosome[chromosome]:
                 mutant.gene,mutant.orientation,mutant.gene_feature = SPECIAL_GENE_CODES.chromosome_not_in_reference,'-','-'
 
-    def add_gene_annotation(self, annotation_file, if_standard_Phytozome_file=None, custom_header=None, print_info=False):
-        """ Add gene annotation to each mutant, based on annotation_file. See parse_gene_annotation_file doc for detail."""
-        from parse_annotation_file import parse_gene_annotation_file
+
+    def _get_gene_annotation_dict(self, annotation_file, if_standard_Phytozome_file=None, custom_header=None, print_info=False):
         gene_annotation_dict, gene_annotation_header = parse_gene_annotation_file(annotation_file, 
                                                  standard_Phytozome_file=if_standard_Phytozome_file, header_fields=custom_header, 
                                                  strip_gene_fields_start='.t', verbosity_level=int(print_info))
         # store the annotation header in self.summary, for printing
         if gene_annotation_header:  self.gene_annotation_header = gene_annotation_header
         else:                       self.gene_annotation_header = 'GENE_ANNOTATION_DATA'
+        return gene_annotation_dict
+
+    def _add_gene_annotation_to_mutant(mutant, gene_annotation_dict):
+        annotations = []
+        for gene in mutant.gene.split(MULTIPLE_GENE_JOIN):
+            try:                annotations.append(gene_annotation_dict[gene])
+            except KeyError:    pass
+        if annotations:
+            annotations
+
+    def add_gene_annotation(self, annotation_file, if_standard_Phytozome_file=None, custom_header=None, print_info=False):
+        """ Add gene annotation to each mutant, based on annotation_file. See parse_gene_annotation_file doc for detail."""
         # add the annotation info to each mutant (or nothing, if gene has no annotation)
         # MAYBE-TODO should I even store gene annotation in each mutant, or just keep a separate per-gene dictionary?
+        gene_annotation_dict = self._get_gene_annotation_dict(annotation_file, if_standard_Phytozome_file, custom_header, print_info)
+
         for mutant in self:
-            try:                mutant.gene_annotation = gene_annotation_dict[mutant.gene]
-            except KeyError:    mutant.gene_annotation = []
+            self._add_gene_annotation_to_mutant(mutant, gene_annotation_dict)
+            # TODO what if there are multiple genes!  Then mutant.gene is &-separated, and should be parsed out and the annotation should be made &-separated too, rather than missing entirely!
+            # TODO do that for the Carette version too!
         # LATER-TODO add this to the gene-info run-test case!
 
 
