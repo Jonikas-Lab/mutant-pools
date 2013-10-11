@@ -221,11 +221,11 @@ def get_info_from_metadata_files(infiles, input_metadata_file, cassette_end, ver
     """
     # if the option specified no metadata files, total discarded readcount cannot be determined
     if input_metadata_file == 'NONE':
-        return 'unknown', 'unknown', 'unknown', 'unknown', 'unknown', 'unknown'
+        return 'unknown', 'unknown', 'unknown', 'unknown', 'unknown', 'unknown', 'unknown'
     # make sure the -m option has a value that will work with the number of infiles
     if len(infiles)>1 and not input_metadata_file=='AUTO':
         print "Warning: when multiple input files are given, the -m option must be NONE or AUTO - ignoring other value."
-        return 'unknown', 'unknown', 'unknown', 'unknown', 'unknown', 'unknown'
+        return 'unknown', 'unknown', 'unknown', 'unknown', 'unknown', 'unknown', 'unknown'
 
     # get the read counts for each infile; only return the total at the end, if all values are found
     counts_per_file = {'discarded':[], 'wrong_start':[], 'no_cassette':[], 'other_end':[], 'unaligned':[], 'multiple_aligned':[]}
@@ -321,8 +321,12 @@ def get_info_from_metadata_files(infiles, input_metadata_file, cassette_end, ver
                     print("Warning: metadata file %s didn't contain other-end readcount line! "%curr_input_metadata_file
                           +"Proceeding without it.")
                 counts_per_file['other_end'].append(0)
-            # for the purposes of this_end readcounts, other_end readcounts should be included in the discarded count.
-            counts_per_file['discarded'][-1] += counts_per_file['other_end'][-1]
+            # for the purposes of this_end readcounts, other_end readcounts should be included in the discarded count 
+            #  (UNLESS the discarded or other_end count is unknown, then just set discarded to that.)
+            if 'unknown' in (counts_per_file['discarded'][-1], counts_per_file['other_end'][-1]):
+                counts_per_file['discarded'][-1] = 'unknown'
+            else:
+                counts_per_file['discarded'][-1] += counts_per_file['other_end'][-1]
 
             ### unaligned read count (new-format only)
             for line in open(curr_input_metadata_file):
