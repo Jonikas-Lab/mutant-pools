@@ -15,7 +15,7 @@ from collections import defaultdict
 # other libraries
 import HTSeq
 # my modules
-from mutant_analysis_classes import MutantError, Insertion_position, Insertional_mutant, Insertional_mutant_pool_dataset, is_cassette_chromosome, SEQ_ENDS, get_insertion_pos_from_flanking_region_pos
+from mutant_analysis_classes import MutantError, Insertion_position, Insertional_mutant, Insertional_mutant_pool_dataset, is_cassette_chromosome, HTSeq_pos_to_tuple, SEQ_ENDS, SEQ_STRANDS
 from general_utilities import keybased_defaultdict, value_and_percentages
 from seq_basic_utilities import parse_fasta
 # there's a "from parse_annotation_file import parse_gene_annotation_file" in one function, not always needed
@@ -26,6 +26,43 @@ from seq_basic_utilities import parse_fasta
 ### Constants
 
 MAX_POSITION_DISTANCE = 1500
+
+def get_Carette_pos_from_flanking_region_pos(flanking_region_pos, cassette_end, reads_are_reverse=False, immutable_position=True):
+    """ Return a Insertion_position instance giving the position of the far end of Carette genome-side read.
+
+    The strand should be the same as that for the cassette-side read if the two are consistent.
+
+    Flanking_region_Pos should be a HTSeq.GenomicPosition instance, or a (chrom,start_pos,end_pos,strand) tuple
+      (the tuple should have 1-based end-inclusive positions, so AA is 1-2 in AATT; HTSeq positions are 0-based end-exclusive); 
+     cassette_end gives the side of the insertion that read is on; 
+     reads_are_reverse is True if the read is in reverse orientation to the cassette, False otherwise. 
+
+    See mutant_analysis_classes.get_insertion_pos_from_flanking_region_pos for how this is done for insertion positions.
+    This is somewhat different: we know the genome-side read is in opposite orientation from the cassette-side read
+     (since they're paired-end reads from the same data), so in order for the strand to match between these two ends, 
+     it has to be calculated in the opposite way. 
+    The position we're interested in is always the position of the START of the read 
+     (which according to most encodings is the end if the strand is -).
+
+    If immutable_position is True, the position will be made immutable after creation (this is reversible).
+    """
+    # note: For Carette cassette-side reads, 5' data has 5prime and reads_are_reverse=True, 3' data has 3prime and reads_are_reverse=False.  NOT DEALING WITH other cases!
+    try:                                chrom, start_pos, end_pos, strand = flanking_region_pos
+    except (TypeError, ValueError):     chrom, start_pos, end_pos, strand = HTSeq_pos_to_tuple(flanking_region_pos) 
+    if strand not in SEQ_STRANDS:       raise MutantError("Invalid strand %s! Must be one of %s"%(strand, SEQ_STRANDS))
+    if cassette_end not in SEQ_ENDS:    raise MutantError("Invalid end %s! Must be one of %s"%(cassette_end, SEQ_ENDS))
+    if start_pos < 1:                   raise MutantError("Flanking region positions must be positive!")
+    if start_pos > end_pos:             raise MutantError("Flanking region start can't be after end!")
+    if not ((cassette_end=='5prime' and reads_are_reverse==True) or (cassette_end=='3prime' and reads_are_reverse==False)):
+        raise MutantError("For a Carette read, reads have to read OUT of the cassette - check your end/direction!")
+    ### chromosome is always the same as read, so just leave it as is
+    ### we always want min_position to be the position of the start of the read, 
+    #     since that's the "outer" position in a paired-end set.
+    if strand=='+':     pos_before, pos_after = start_pos, None
+    else:               pos_before, pos_after = end_pos, None
+    ### cassette strand is the opposite to how it is with the cassette-side read
+    if cassette_end=='3prime':  strand = '-' if strand=='+' else '+'
+    return Insertion_position(chrom, strand, position_before=pos_before, position_after=pos_after, immutable=immutable_position)
 
 
 ############################### Main classes describing the mutants and mutant sets #####################################
@@ -220,13 +257,12 @@ class Insertional_mutant_Carette(Insertional_mutant):
         OUTPUT.write("Carette protocol genome-side reads:::\n")
         for read_data in sorted(self.Carette_genome_side_reads, key = lambda x: x.position):
             try: 
-                fields = [read_data.position.chromosome, read_data.position.strand, read_data.position.full_position]
+                fields = [read_data.position.chromosome, read_data.position.strand, read_data.position.min_position]
             except AttributeError:
                 fields = [read_data.position, '-', '-']
             fields += [read_data.gene, read_data.orientation, read_data.gene_feature, read_data.get_main_sequence()[0]] 
             fields += read_data.gene_annotation
             OUTPUT.write('\t'.join([str(x) for x in fields]) + '\n')
-            # TODO add gene and annotation data for each position!
 
     # TODO TODO TODO finish implementing class!  What other methods to add/overwrite?
 
@@ -290,11 +326,9 @@ class Insertional_mutant_pool_dataset_Carette(Insertional_mutant_pool_dataset):
                     if read_ID in read_IDs:
                         raise MutantError("File %s wasn't supposed to be multiple alignments - why is read %s there twice??"%(
                             genome_side_infile, read_ID))
-                    # convert the HTSeq alignment data to an insertion position!
-                    #  the cassette end is obviously the same as for the whole dataset;
-                    #  reads_are_reverse is the OPPOSITE to the main dataset, since the two Carette reads go in opposite directions!
-                    insertion_position = get_insertion_pos_from_flanking_region_pos(aln.iv, cassette_end=self.summary.cassette_end, 
-                                                                            reads_are_reverse=(not self.summary.reads_are_reverse))
+                    # convert the genome-side read HTSeq alignment data to an "insertion" position of the end of it!
+                    insertion_position = get_Carette_pos_from_flanking_region_pos(aln.iv, self.summary.cassette_end, 
+                                                                                  self.summary.reads_are_reverse)
                     mutant.add_Carette_read(insertion_position, aln)
                 read_IDs.add(read_ID)
         # For fasta files, just assume it's unaligned, or multiple if that's set, and use the sequences.
@@ -393,8 +427,25 @@ class Insertional_mutant_pool_dataset_Carette(Insertional_mutant_pool_dataset):
 class Testing_all(unittest.TestCase):
     """ Unit-tests for position-related classes and functions. """
 
-    def test__(self):
-        print "NO UNIT-TESTS IMPLEMENTED YET!"
+    def test__get_Carette_pos_from_flanking_region_pos(self):
+        pos_tuple = ('C', 3, 7, '+')
+        # note: For Carette cassette-side reads, 5' data has 5prime and reads_are_reverse=True, 3' data has 3prime and reads_are_reverse=False.  NOT DEALING WITH other cases - they should raise an error!
+        self.assertRaises(MutantError, get_Carette_pos_from_flanking_region_pos, pos_tuple, '5prime', reads_are_reverse=False)
+        self.assertRaises(MutantError, get_Carette_pos_from_flanking_region_pos, pos_tuple, '3prime', reads_are_reverse=True)
+        ### case with +strand original read ([|||] is cassette, ---...--- is the paired-end read, * is desired position): 
+        #   +strand cassette if 5' data, or -strand if 3':  *----......-----[|||||]
+        pos_tuple = ('C', 3, 7, '+')
+        pos = get_Carette_pos_from_flanking_region_pos(pos_tuple, '5prime', reads_are_reverse=True)
+        assert (pos.chromosome == 'C' and pos.strand=='+' and pos.min_position==3)
+        pos = get_Carette_pos_from_flanking_region_pos(pos_tuple, '3prime', reads_are_reverse=False)
+        assert (pos.chromosome == 'C' and pos.strand=='-' and pos.min_position==3)
+        ### the other case:  [|||||]----......-----*
+        #   -strand cassette if 5' data, or +strand if 3'
+        pos_tuple = ('C', 3, 7, '-')
+        pos = get_Carette_pos_from_flanking_region_pos(pos_tuple, '5prime', reads_are_reverse=True)
+        assert (pos.chromosome == 'C' and pos.strand=='-' and pos.min_position==7)
+        pos = get_Carette_pos_from_flanking_region_pos(pos_tuple, '3prime', reads_are_reverse=False)
+        assert (pos.chromosome == 'C' and pos.strand=='+' and pos.min_position==7)
 
 
 if __name__ == "__main__":
