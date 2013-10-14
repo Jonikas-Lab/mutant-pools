@@ -180,7 +180,7 @@ class Insertional_mutant_Carette(Insertional_mutant):
             else:                                           total_distinct_positions_genome += len(distinct_positions)
         return total_distinct_positions_genome, total_distinct_positions_cassette
     
-    def Carette_confirmation_status(self, side=None, max_distance=MAX_POSITION_DISTANCE, min_weird_distance=3):
+    def Carette_confirmation_status(self, side=None, max_distance=MAX_POSITION_DISTANCE, min_weird_distance=20):
         """ Return status based on comparison of cassette-side and genome-side reads.
 
         Also checks whether results make sense given which side of the cassette we're looking at, if provided
@@ -198,15 +198,18 @@ class Insertional_mutant_Carette(Insertional_mutant):
             for Carette_read_data in self.Carette_genome_side_reads:
                 try:                    distances.append(Carette_read_data.position.min_position - self.position.min_position)
                 except AttributeError:  pass
-            # check to make sure the position of the genomic-side reads MAKES SENSE vs the cassette-side (is earlier for +strand 5' and -strand 3', and later for the other two cases)
-            # TODO weird cases should print warning!
+            # check to make sure the position of the genomic-side reads MAKES SENSE vs the cassette-side 
+            #  (is at least M earlier for +strand 5' and -strand 3', and M later for the other two cases)
+            # TODO really, min_weird_distance default should probably depend on the read length...?
             if (((self.position.strand=='+' and side=="5'") or (self.position.strand=='-' and side=="3'")) 
-                and max(distances) > min_weird_distance):
-                print "WEIRD case: genome-side Carette read reads %sbp past the insertion site inferred from cassette-side read! %s"%(max(distances), self.position)
+                and max(distances) > -min_weird_distance):
+                print ("WEIRD case: a genome-side Carette read starts only %sbp from the insertion site! %s")%(abs(max(distances)), 
+                                                                                                             self.position)
                 return 'WEIRD'
             elif (((self.position.strand=='-' and side=="5'") or (self.position.strand=='+' and side=="3'")) 
-                  and min(distances) < -min_weird_distance):
-                print "WEIRD case: genome-side Carette read reads %sbp past the insertion site inferred from cassette-side read! %s"%(abs(min(distances)), self.position)
+                  and min(distances) < min_weird_distance):
+                print ("WEIRD case: a genome-side Carette read starts only %sbp from the insertion site! %s")%(min(distances), 
+                                                                                                             self.position)
                 return 'WEIRD'
             else:
                 return 'CONFIRMED'
