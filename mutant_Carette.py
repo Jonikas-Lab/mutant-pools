@@ -261,7 +261,10 @@ class Insertional_mutant_Carette(Insertional_mutant):
             except AttributeError:
                 fields = [read_data.position, '-', '-']
             fields += [read_data.gene, read_data.orientation, read_data.gene_feature, read_data.get_main_sequence()[0]] 
-            fields += read_data.gene_annotation
+            try:
+                fields += read_data.gene_annotation
+            except AttributeError:
+                pass
             OUTPUT.write('\t'.join([str(x) for x in fields]) + '\n')
 
     # TODO TODO TODO finish implementing class!  What other methods to add/overwrite?
