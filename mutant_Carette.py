@@ -96,14 +96,14 @@ class Insertional_mutant_Carette(Insertional_mutant):
         raise MutantError("merge_mutant NOT IMPLEMENTED on Carette mutant object!")
         # TODO implement?  Just need to merge the read IDs and Carette read data...
 
-    def add_Carette_read(self, insertion_position, HTSeq_alignment=None, seq=None, N_errors=None, read_count=1):
+    def add_Carette_read(self, new_position, HTSeq_alignment=None, seq=None, N_errors=None, read_count=1):
         """ Must provide either HTSeq_alignment (if aligned) or seq (if not).
         If providing HTSeq_alignment, seq and N_errors will be ignored. 
-        Must provide insertion_position (which should be an Insertion_position instance if read is uniquely aligned, 
-         or None/"Multiple" or such if not); if HTSeq_alignment is given, method does NOT check that insertion_position matches it.
+        Must provide new_position (which should be an Insertion_position instance if read is uniquely aligned, 
+         or None/"Multiple" or such if not); if HTSeq_alignment is given, method does NOT check that new_position matches it.
         """
         # TODO make sure this makes sense!
-        mutant = Insertional_mutant(insertion_position)
+        mutant = Insertional_mutant(new_position)
         if HTSeq_alignment is not None and seq is not None:
             raise MutantError("When running add_Carette_read, can't give BOTH HTSeq_alignment and seq!")
         elif HTSeq_alignment is not None:
@@ -115,7 +115,39 @@ class Insertional_mutant_Carette(Insertional_mutant):
         else:
             raise MutantError("When running add_Carette_read, must give HTSeq_alignment or seq!")
         self.Carette_genome_side_reads.append(mutant)
-        # TODO should get gene info for those!  And annotation info!
+        # Note: adding gene/annotation info for those is implemented in the dataset methods.
+
+    def improve_best_Carette_read(self, new_position, HTSeq_alignment, N_errors=None, max_distance=MAX_POSITION_DISTANCE):
+        """ Compare the read to the current best one - replace the best one if this is better.
+
+        "Better" meaning furthest away from the cassette-side read, while still remaining on the same chromosome, strand,
+            and within max_distance of it.
+         If both reads are on a different chromosome or strand than the cassette-side position (both are bad, really), 
+            the first one is kept.
+         If there is no current read, the new one is always used.
+        """
+        N_genome_side_reads = len(self.Carette_genome_side_reads)
+        # if there are more than one current reads, you're not using improve_best_Carette_read consistently!
+        if N_genome_side_reads > 1:
+            raise MutantError("Don't try using the improve_best_Carette_read when keeping more than one read!")
+        # if there are no current reads, add new one
+        elif not N_genome_side_reads:                               replace_read = True
+        # otherwise decide if new read is "better" than current:
+        else:                                                       
+            # if new read doesn't match the cassette-side position, it can't be better
+            if new_position.chromosome != self.position.chromosome: replace_read = False
+            elif new_position.strand != self.position.strand:       replace_read = False
+            else:
+                curr_dist = abs(self.Carette_genome_side_reads[0].position.min_position - self.position.min_position)
+                new_dist = abs(new_position.min_position - self.position.min_position)
+                if new_dist > max_distance:                         replace_read = False
+                elif new_dist > curr_dist:                          replace_read = True
+                else:                                               replace_read = False
+        # if decided to replace, just make self.Carette_genome_side_reads be the new mutant, discarding old version
+        if replace_read:
+            new_mutant = Insertional_mutant(new_position)
+            new_mutant.add_read(HTSeq_alignment)
+            self.Carette_genome_side_reads = [new_mutant]
 
     @property
     def Carette_N_unaligned_reads(self):
@@ -203,7 +235,7 @@ class Insertional_mutant_Carette(Insertional_mutant):
             # TODO really, min_weird_distance default should probably depend on the read length...?
             if (((self.position.strand=='+' and side=="5'") or (self.position.strand=='-' and side=="3'")) 
                 and max(distances) > -min_weird_distance):
-                print ("WEIRD case: a genome-side Carette read starts only %sbp from the insertion site! %s")%(abs(max(distances)), 
+                print ("WEIRD case: a genome-side Carette read starts only %sbp from the insertion site! %s")%(-max(distances), 
                                                                                                              self.position)
                 return 'WEIRD'
             elif (((self.position.strand=='-' and side=="5'") or (self.position.strand=='+' and side=="3'")) 
@@ -241,7 +273,6 @@ class Insertional_mutant_Carette(Insertional_mutant):
 
     # TODO add new method that infers the approximate real insertion location!
 
-    # TODO add new method that prints info!
     def Carette_print_detail(self, OUTPUT=sys.stdout, max_distance=MAX_POSITION_DISTANCE):
         ### print summary line
         N_distinct_genome, N_distinct_cassette = self.Carette_N_distinct_positions(max_distance)
@@ -294,12 +325,13 @@ class Insertional_mutant_pool_dataset_Carette(Insertional_mutant_pool_dataset):
 
     # TODO method for filling in genome-side Carette data!  Something based on add_alignment_reader_to_data too
 
-    def add_Carette_genome_side_alignments_to_data(self, genome_side_infile, multiple_alignment=False):
+    def add_Carette_genome_side_alignments_to_data(self, genome_side_infile, best_only=False, multiple_alignment=False, 
+                                                   max_distance_for_best=MAX_POSITION_DISTANCE):
+        # TODO docstring!
         if self.summary.cassette_end not in SEQ_ENDS:
             raise MutantError("Can't run add_Carette_genome_side_alignments_to_data if cassette_end is unknown!")
         if self.summary.reads_are_reverse not in [True,False]:
             raise MutantError("Can't run add_Carette_genome_side_alignments_to_data if reads_are_reverse is unknown!")
-        # TODO docstring!
         # We'll be going over a lot of genome-side reads, which are the paired-end-sequencing mates of 
         #  the cassette-side reads used for mutant positions. 
 
@@ -324,21 +356,26 @@ class Insertional_mutant_pool_dataset_Carette(Insertional_mutant_pool_dataset):
                 #  (have to keep track of read IDs, since there are likely to be multiple lines per read!)
                 # TODO implement those properly, with giving the alignment positions?  TRICKY to figure out how to print them!
                 if multiple_alignment:
+                    if best_only:
+                        raise MutantError("Multiple alignments make no sense with best_only flag!")
                     if read_ID in read_IDs:
                         continue
-                    mutant.add_Carette_read(insertion_position='MULTIPLE', HTSeq_alignment=None, seq=aln.read.seq)
+                    mutant.add_Carette_read(new_position='MULTIPLE', HTSeq_alignment=None, seq=aln.read.seq)
                 # for normal alignments, use full alignment to add read info
                 else:
                     if read_ID in read_IDs:
                         raise MutantError("File %s wasn't supposed to be multiple alignments - why is read %s there twice??"%(
                             genome_side_infile, read_ID))
                     # convert the genome-side read HTSeq alignment data to an "insertion" position of the end of it!
-                    insertion_position = get_Carette_pos_from_flanking_region_pos(aln.iv, self.summary.cassette_end, 
-                                                                                  self.summary.reads_are_reverse)
-                    mutant.add_Carette_read(insertion_position, aln)
+                    genome_side_position = get_Carette_pos_from_flanking_region_pos(aln.iv, self.summary.cassette_end, 
+                                                                                    self.summary.reads_are_reverse)
+                    if best_only:   mutant.improve_best_Carette_read(genome_side_position, aln, max_distance_for_best)
+                    else:           mutant.add_Carette_read(genome_side_position, aln)
                 read_IDs.add(read_ID)
         # For fasta files, just assume it's unaligned, or multiple if that's set, and use the sequences.
         elif genome_side_infile.endswith('.fa'):
+            if best_only:
+                raise MutantError("Fasta files (multiple or unaligned) make no sense with best_only flag!")
             if not multiple_alignment:
                 print "Assuming reads in %s are unaligned."%genome_side_infile
                 position_val = 'UNALIGNED'
@@ -348,7 +385,7 @@ class Insertional_mutant_pool_dataset_Carette(Insertional_mutant_pool_dataset):
                 try:                mutant_pos = read_ID_to_position[name]
                 except KeyError:    continue
                 mutant = self.get_mutant(mutant_pos)
-                mutant.add_Carette_read(insertion_position=position_val, HTSeq_alignment=None, seq=seq)
+                mutant.add_Carette_read(new_position=position_val, HTSeq_alignment=None, seq=seq)
         else:
             raise MutantError("Don't know how to deal with file %s - not a .fa or .sam file!"%genome_side_infile)
 
