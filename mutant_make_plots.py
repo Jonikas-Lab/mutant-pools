@@ -1,4 +1,4 @@
-#! /usr/bin/env python
+#! /usr/bin/env python2.7
 """
 For a list of RNAi library screen deepseq count or growth rate input files, plot the coverages/distributions (a line per input dataset showing the number of shRNAs with given count/growthrate values, on one graph) and/or the correlations (a subplot for each pair of datasets showing the scatterplot correlation between them, optionally also giving Spearman/Pearson correlation coefficients). 
 Note that this can be very slow with many/large datasets - use the -t/-s options to generate only the graphs you actually want.

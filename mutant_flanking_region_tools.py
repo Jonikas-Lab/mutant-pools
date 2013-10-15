@@ -1,4 +1,4 @@
-#! /usr/bin/env python
+#! /usr/bin/env python2.7
 
 """
 Various utilities for analysis of mutant flanking regions (in progress, may not be very clean).

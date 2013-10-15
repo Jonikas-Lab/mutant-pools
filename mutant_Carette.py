@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python2.7
 """
 Module containing classes and functions for analysis of deepseq data related to insertional mutant libraries.
 

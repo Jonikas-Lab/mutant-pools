@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python2.7
 """ Look at a gff file, print various overview info (to stdout, or outfile if given), check that everything looks sane.
 
 See option help messages (run with -h) for details.. 

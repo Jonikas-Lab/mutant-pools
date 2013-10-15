@@ -1,4 +1,4 @@
-#! /usr/bin/env python
+#! /usr/bin/env python2.7
 """
 Simulation functions for mutant datasets and related things.  Module - running it directly just runs tests.
  -- Weronika Patena, 2012

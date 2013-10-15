@@ -1,4 +1,4 @@
-#! /usr/bin/env python
+#! /usr/bin/env python2.7
 
 """
 VERY TEMPORARY PROGRAM to make joint tab-separated growthrate files (with annotation).
