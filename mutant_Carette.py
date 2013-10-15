@@ -428,8 +428,7 @@ class Insertional_mutant_pool_dataset_Carette(Insertional_mutant_pool_dataset):
         #  and to the Carette data sub-mutants
         for mutant in self:
             for curr_mutant in [mutant] + mutant.Carette_genome_side_reads:
-                try:                curr_mutant.gene_annotation = gene_annotation_dict[curr_mutant.gene]
-                except KeyError:    curr_mutant.gene_annotation = []
+                self._add_gene_annotation_to_mutant(curr_mutant, gene_annotation_dict)
         # LATER-TODO add this to the gene-info run-test case!
 
     def print_detailed_Carette_data(self, OUTPUT=sys.stdout, sort_data_by=None, max_distance=MAX_POSITION_DISTANCE):

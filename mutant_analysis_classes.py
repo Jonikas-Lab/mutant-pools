@@ -1809,23 +1809,31 @@ class Insertional_mutant_pool_dataset():
 
     @staticmethod
     def _add_gene_annotation_to_mutant(mutant, gene_annotation_dict):
+        """ Add gene annotation data to mutant.gene_annotation, including multiple-gene cases.
+
+        If mutant.gene is a single, this just gets the annotation list for it from gene_annotation_dict 
+         and puts that in mutant.gene_annotation (or [] if the gene isn't in gene_annotation_dict);
+        If mutant.gene is a MULTIPLE_GENE_JOIN-separated string with multiple gene IDs, this finds the annotation for all of them, 
+         zips them together and joins similarly with MULTIPLE_GENE_JOIN - for instance if gene was "A | B" and the annotations
+          for A were [a, 1, 100] and for B were [b, 2, 100], the resulting annotations would be ["a | b", "1 | 2", "100 | 100"].
+          No duplicate-removal is done; genes with no annotation are skipped.
+        """
         annotations = []
         for gene in mutant.gene.split(MULTIPLE_GENE_JOIN):
             try:                annotations.append(gene_annotation_dict[gene])
             except KeyError:    pass
-        if annotations:
-            annotations
+        annotations = [MULTIPLE_GENE_JOIN.join(a) for a in zip(*annotations)]
+        mutant.gene_annotation = annotations
+        # TODO unit-test!
 
     def add_gene_annotation(self, annotation_file, if_standard_Phytozome_file=None, custom_header=None, print_info=False):
         """ Add gene annotation to each mutant, based on annotation_file. See parse_gene_annotation_file doc for detail."""
         # add the annotation info to each mutant (or nothing, if gene has no annotation)
         # MAYBE-TODO should I even store gene annotation in each mutant, or just keep a separate per-gene dictionary?
         gene_annotation_dict = self._get_gene_annotation_dict(annotation_file, if_standard_Phytozome_file, custom_header, print_info)
-
+        # add the annotation info to each mutant (or nothing, if gene has no annotation), 
         for mutant in self:
             self._add_gene_annotation_to_mutant(mutant, gene_annotation_dict)
-            # TODO what if there are multiple genes!  Then mutant.gene is &-separated, and should be parsed out and the annotation should be made &-separated too, rather than missing entirely!
-            # TODO do that for the Carette version too!
         # LATER-TODO add this to the gene-info run-test case!
 
 
