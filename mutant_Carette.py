@@ -426,9 +426,13 @@ class Insertional_mutant_pool_dataset_Carette(Insertional_mutant_pool_dataset):
         gene_annotation_dict = self._get_gene_annotation_dict(annotation_file, if_standard_Phytozome_file, custom_header, print_info)
         # add the annotation info to each mutant (or nothing, if gene has no annotation), 
         #  and to the Carette data sub-mutants
+        N_annotated = 0
         for mutant in self:
             for curr_mutant in [mutant] + mutant.Carette_genome_side_reads:
-                self._add_gene_annotation_to_mutant(curr_mutant, gene_annotation_dict)
+                if_annotated = self._add_gene_annotation_to_mutant(curr_mutant, gene_annotation_dict)
+                if if_annotated:    N_annotated += 1
+        if print_info:          print "Added %s annotations"%N_annotated
+        elif not N_annotated:   print "Warning: No gene annotations found!"
         # LATER-TODO add this to the gene-info run-test case!
 
     def print_detailed_Carette_data(self, OUTPUT=sys.stdout, sort_data_by=None, max_distance=MAX_POSITION_DISTANCE):

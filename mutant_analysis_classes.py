@@ -1809,7 +1809,7 @@ class Insertional_mutant_pool_dataset():
 
     @staticmethod
     def _add_gene_annotation_to_mutant(mutant, gene_annotation_dict):
-        """ Add gene annotation data to mutant.gene_annotation, including multiple-gene cases.
+        """ Add gene annotation data to mutant.gene_annotation, including multiple-gene cases; return True if annotations found.
 
         If mutant.gene is a single, this just gets the annotation list for it from gene_annotation_dict 
          and puts that in mutant.gene_annotation (or [] if the gene isn't in gene_annotation_dict);
@@ -1818,12 +1818,24 @@ class Insertional_mutant_pool_dataset():
           for A were [a, 1, 100] and for B were [b, 2, 100], the resulting annotations would be ["a | b", "1 | 2", "100 | 100"].
           No duplicate-removal is done; genes with no annotation are skipped.
         """
+        # grab annotations for each gene
         annotations = []
         for gene in mutant.gene.split(MULTIPLE_GENE_JOIN):
             try:                annotations.append(gene_annotation_dict[gene])
             except KeyError:    pass
-        annotations = [MULTIPLE_GENE_JOIN.join(a) for a in zip(*annotations)]
-        mutant.gene_annotation = annotations
+        # make joint annotation (each field for all genes); 
+        #  make this look better by dealing with empty data specially - turn " & " into "" and " & x" into "- & x", 
+        joint_annotations = []
+        for ann in zip(*annotations):
+            if any(ann):
+                ann = [a if a else '-' for a in ann]
+                joint_annotations.append(MULTIPLE_GENE_JOIN.join(ann))
+            else:
+                joint_annotations.append('')
+        # MAYBE-TODO do duplicate-removal etc?  But that might just make things confusing - not obvious what goes with which gene.
+        mutant.gene_annotation = joint_annotations
+        if joint_annotations:   return True
+        else:                   return False
         # TODO unit-test!
 
     def add_gene_annotation(self, annotation_file, if_standard_Phytozome_file=None, custom_header=None, print_info=False):
@@ -1831,9 +1843,13 @@ class Insertional_mutant_pool_dataset():
         # add the annotation info to each mutant (or nothing, if gene has no annotation)
         # MAYBE-TODO should I even store gene annotation in each mutant, or just keep a separate per-gene dictionary?
         gene_annotation_dict = self._get_gene_annotation_dict(annotation_file, if_standard_Phytozome_file, custom_header, print_info)
-        # add the annotation info to each mutant (or nothing, if gene has no annotation), 
+        # add the annotation info to each mutant (or nothing, if gene has no annotation) 
+        N_annotated = 0
         for mutant in self:
-            self._add_gene_annotation_to_mutant(mutant, gene_annotation_dict)
+            if_annotated = self._add_gene_annotation_to_mutant(mutant, gene_annotation_dict)
+            if if_annotated:    N_annotated += 1
+        if print_info:          print "Added %s annotations"%N_annotated
+        elif not N_annotated:   print "Warning: No gene annotations found!"
         # LATER-TODO add this to the gene-info run-test case!
 
 
@@ -2659,9 +2675,9 @@ class Insertional_mutant_pool_dataset():
             #  (or if the mutant has no such attribute at all - possible for older-format datasets)
             if self.gene_annotation_header:
                 try:
-                    if mutant.gene_annotation:  mutant_data += mutant.gene_annotation
-                    else:                       mutant_data += missing_gene_annotation_data
-                except AttributeError:          mutant_data += missing_gene_annotation_data
+                    if any(mutant.gene_annotation):     mutant_data += mutant.gene_annotation
+                    else:                               mutant_data += missing_gene_annotation_data
+                except AttributeError:                  mutant_data += missing_gene_annotation_data
             OUTPUT.write('\t'.join([str(x) for x in mutant_data]))
             OUTPUT.write('\n')
 
