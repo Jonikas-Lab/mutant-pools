@@ -12,12 +12,14 @@ from __future__ import division
 import sys, re
 import unittest
 from collections import defaultdict
+from math import isnan
 # other libraries
 import HTSeq
 # my modules
 from mutant_analysis_classes import MutantError, Insertion_position, Insertional_mutant, Insertional_mutant_pool_dataset, is_cassette_chromosome, HTSeq_pos_to_tuple, SEQ_ENDS, SEQ_STRANDS
 from general_utilities import keybased_defaultdict, value_and_percentages
 from seq_basic_utilities import parse_fasta
+from deepseq_utilities import Fake_deepseq_objects
 # there's a "from parse_annotation_file import parse_gene_annotation_file" in one function, not always needed
 
 
@@ -117,7 +119,29 @@ class Insertional_mutant_Carette(Insertional_mutant):
         self.Carette_genome_side_reads.append(mutant)
         # Note: adding gene/annotation info for those is implemented in the dataset methods.
 
-    def improve_best_Carette_read(self, new_position, HTSeq_alignment, N_errors=None, max_distance=MAX_POSITION_DISTANCE):
+    def _decide_if_replace_read(self, new_position, max_distance):
+        """ Decide whether new position is "better" than old one - just refactored out of improve_best_Carette_read for convenience.
+        """
+        # if there are no current reads, add new one
+        if not len(self.Carette_genome_side_reads):             return True
+        # otherwise decide if new read is "better" than current:
+        # if new read doesn't match the cassette-side chromosome/strand, it can't be better, so don't replace
+        if new_position.chromosome != self.position.chromosome: return False
+        if new_position.strand != self.position.strand:         return False
+        # same if it doesn't meet the max_distance
+        new_dist = abs(new_position.min_position - self.position.min_position)
+        if new_dist > max_distance:                             return False
+        # if it does all these things, and the old one doesn't, replace
+        old_position = self.Carette_genome_side_reads[0].position
+        if old_position.chromosome != self.position.chromosome: return True
+        if old_position.strand != self.position.strand:         return True
+        old_dist = abs(old_position.min_position - self.position.min_position)
+        if old_dist > max_distance:                             return True
+        # if both the old and new position meet the basic conditions, pick the highest-distance one
+        if new_dist > old_dist:                                 return True
+        else:                                                   return False
+
+    def improve_best_Carette_read(self, new_position, HTSeq_alignment, max_distance=MAX_POSITION_DISTANCE, N_errors=None):
         """ Compare the read to the current best one - replace the best one if this is better.
 
         "Better" meaning furthest away from the cassette-side read, while still remaining on the same chromosome, strand,
@@ -126,25 +150,11 @@ class Insertional_mutant_Carette(Insertional_mutant):
             the first one is kept.
          If there is no current read, the new one is always used.
         """
-        N_genome_side_reads = len(self.Carette_genome_side_reads)
         # if there are more than one current reads, you're not using improve_best_Carette_read consistently!
-        if N_genome_side_reads > 1:
+        if len(self.Carette_genome_side_reads) > 1:
             raise MutantError("Don't try using the improve_best_Carette_read when keeping more than one read!")
-        # if there are no current reads, add new one
-        elif not N_genome_side_reads:                               replace_read = True
-        # otherwise decide if new read is "better" than current:
-        else:                                                       
-            # if new read doesn't match the cassette-side position, it can't be better
-            if new_position.chromosome != self.position.chromosome: replace_read = False
-            elif new_position.strand != self.position.strand:       replace_read = False
-            else:
-                curr_dist = abs(self.Carette_genome_side_reads[0].position.min_position - self.position.min_position)
-                new_dist = abs(new_position.min_position - self.position.min_position)
-                if new_dist > max_distance:                         replace_read = False
-                elif new_dist > curr_dist:                          replace_read = True
-                else:                                               replace_read = False
         # if decided to replace, just make self.Carette_genome_side_reads be the new mutant, discarding old version
-        if replace_read:
+        if self._decide_if_replace_read(new_position, max_distance):
             new_mutant = Insertional_mutant(new_position)
             new_mutant.add_read(HTSeq_alignment)
             self.Carette_genome_side_reads = [new_mutant]
@@ -493,6 +503,121 @@ class Testing_all(unittest.TestCase):
         pos = get_Carette_pos_from_flanking_region_pos(pos_tuple, '3prime', reads_are_reverse=False)
         assert (pos.chromosome == 'C' and pos.strand=='+' and pos.min_position==7)
 
+    @staticmethod
+    def _make_pos(pos):
+        """ Convenience function to make the args to Fake_HTSeq_genomic_pos from an Insertion_position """
+        return pos.chromosome, pos.strand, pos.min_position, pos.min_position+20
+
+    def test__add_Carette_read(self):
+        """ Also tests Carette_max_confirmed_distance """
+        Fake_HTSeq_alignment = Fake_deepseq_objects.Fake_HTSeq_alignment
+        pos0 = Insertion_position('chr1','+',position_before=100)
+        aln0 = Fake_HTSeq_alignment(seq='AAA', readname='read1', pos=self._make_pos(pos0))
+        mutant = Insertional_mutant_Carette(pos0)
+        assert mutant.total_read_count == 0
+        assert isnan(mutant.Carette_max_confirmed_distance(10))
+        mutant.add_read(aln0)
+        assert mutant.total_read_count == 1
+        pos1 = Insertion_position('chr1','+',position_before=0)
+        aln1 = Fake_HTSeq_alignment(seq='AAA', readname='read1', pos=self._make_pos(pos1))
+        mutant.add_Carette_read(pos1, HTSeq_alignment=aln1)
+        pos2 = Insertion_position('chr2','+',position_before=0)
+        aln2 = Fake_HTSeq_alignment(seq='AGA', readname='read1', pos=self._make_pos(pos2))
+        mutant.add_Carette_read(pos2, HTSeq_alignment=aln2)
+        pos3 = Insertion_position('chr1','-',position_before=0)
+        aln3 = Fake_HTSeq_alignment(seq='ACA', readname='read1', pos=self._make_pos(pos3))
+        mutant.add_Carette_read(pos3, HTSeq_alignment=aln3)
+        assert len(mutant.Carette_genome_side_reads) == 3
+        assert [m.position.chromosome for m in mutant.Carette_genome_side_reads] == 'chr1 chr2 chr1'.split()
+        assert [m.position.strand for m in mutant.Carette_genome_side_reads] == '+ + -'.split()
+        assert mutant.Carette_max_confirmed_distance(1000) == 100
+        assert mutant.Carette_max_confirmed_distance(100) == 100
+        assert isnan(mutant.Carette_max_confirmed_distance(10))
+
+    def test__improve_best_Carette_read(self):
+        """ Also tests Carette_max_confirmed_distance """
+        Fake_HTSeq_alignment = Fake_deepseq_objects.Fake_HTSeq_alignment
+        # make the cassette-side read
+        pos0 = Insertion_position('chr1','+',position_before=100)
+        aln0 = Fake_HTSeq_alignment(seq='AAA', readname='read1', pos=self._make_pos(pos0))
+        mutant = Insertional_mutant_Carette(pos0)
+        assert mutant.position.min_position == 100
+        assert mutant.total_read_count == 0
+        assert isnan(mutant.Carette_max_confirmed_distance(1000))
+        mutant.add_read(aln0)
+        assert mutant.total_read_count == 1
+        assert isnan(mutant.Carette_max_confirmed_distance(1000))
+        # add bad read first, then better ones, make sure they're replaced (or not, if both are equally bad)
+        pos1 = Insertion_position('chr2','+',position_before=10)
+        aln1 = Fake_HTSeq_alignment(seq='AGA', readname='read1', pos=self._make_pos(pos1))
+        mutant.improve_best_Carette_read(pos1, HTSeq_alignment=aln1, max_distance=50)
+        assert len(mutant.Carette_genome_side_reads) == 1
+        assert mutant.Carette_genome_side_reads[0].position.min_position == 10
+        assert isnan(mutant.Carette_max_confirmed_distance(1000))
+        pos2 = Insertion_position('chr1','-',position_before=11)
+        aln2 = Fake_HTSeq_alignment(seq='ACA', readname='read1', pos=self._make_pos(pos2))
+        mutant.improve_best_Carette_read(pos2, HTSeq_alignment=aln2, max_distance=50)
+        assert len(mutant.Carette_genome_side_reads) == 1
+        assert mutant.Carette_genome_side_reads[0].position.min_position == 10
+        assert isnan(mutant.Carette_max_confirmed_distance(1000))
+        pos3 = Insertion_position('chr1','+',position_before=12)
+        aln3 = Fake_HTSeq_alignment(seq='AAA', readname='read1', pos=self._make_pos(pos3))
+        mutant.improve_best_Carette_read(pos3, HTSeq_alignment=aln3, max_distance=50)
+        assert len(mutant.Carette_genome_side_reads) == 1
+        assert mutant.Carette_genome_side_reads[0].position.min_position == 10
+        assert isnan(mutant.Carette_max_confirmed_distance(1000))
+        pos4 = Insertion_position('chr1','+',position_before=80)
+        aln4 = Fake_HTSeq_alignment(seq='AAA', readname='read1', pos=self._make_pos(pos4))
+        mutant.improve_best_Carette_read(pos4, HTSeq_alignment=aln4, max_distance=50)
+        assert len(mutant.Carette_genome_side_reads) == 1
+        assert mutant.Carette_genome_side_reads[0].position.min_position == 80
+        assert mutant.Carette_max_confirmed_distance(1000) == 20
+        pos5 = Insertion_position('chr1','+',position_before=70)
+        aln5 = Fake_HTSeq_alignment(seq='AAA', readname='read1', pos=self._make_pos(pos5))
+        mutant.improve_best_Carette_read(pos5, HTSeq_alignment=aln5, max_distance=50)
+        assert len(mutant.Carette_genome_side_reads) == 1
+        assert mutant.Carette_genome_side_reads[0].position.min_position == 70
+        assert mutant.Carette_max_confirmed_distance(1000) == 30
+        # add good read first, then worse ones, make sure it's NOT replaced (remember to start with new mutant!)
+        mutant = Insertional_mutant_Carette(pos0)
+        mutant.add_read(aln0)
+        mutant.improve_best_Carette_read(pos5, HTSeq_alignment=aln5, max_distance=50)
+        assert len(mutant.Carette_genome_side_reads) == 1
+        assert mutant.Carette_genome_side_reads[0].position.min_position == 70
+        assert mutant.Carette_max_confirmed_distance(1000) == 30
+        mutant.improve_best_Carette_read(pos1, HTSeq_alignment=aln1, max_distance=50)
+        assert len(mutant.Carette_genome_side_reads) == 1
+        assert mutant.Carette_genome_side_reads[0].position.min_position == 70
+        assert mutant.Carette_max_confirmed_distance(1000) == 30
+        mutant.improve_best_Carette_read(pos2, HTSeq_alignment=aln2, max_distance=50)
+        assert len(mutant.Carette_genome_side_reads) == 1
+        assert mutant.Carette_genome_side_reads[0].position.min_position == 70
+        assert mutant.Carette_max_confirmed_distance(1000) == 30
+        mutant.improve_best_Carette_read(pos3, HTSeq_alignment=aln3, max_distance=50)
+        assert len(mutant.Carette_genome_side_reads) == 1
+        assert mutant.Carette_genome_side_reads[0].position.min_position == 70
+        assert mutant.Carette_max_confirmed_distance(1000) == 30
+        mutant.improve_best_Carette_read(pos4, HTSeq_alignment=aln4, max_distance=50)
+        assert len(mutant.Carette_genome_side_reads) == 1
+        assert mutant.Carette_genome_side_reads[0].position.min_position == 70
+        assert mutant.Carette_max_confirmed_distance(1000) == 30
+        # make sure wrong-strand closer-distance new read won't replace old right-strand one! (this was a bug once)
+        pos0 = Insertion_position('chr1','+',position_before=100)
+        aln0 = Fake_HTSeq_alignment(seq='AAA', readname='read1', pos=self._make_pos(pos0))
+        mutant = Insertional_mutant_Carette(pos0)
+        mutant.add_read(aln0)
+        pos5 = Insertion_position('chr1','+',position_before=70)
+        aln5 = Fake_HTSeq_alignment(seq='AAA', readname='read1', pos=self._make_pos(pos5))
+        mutant.improve_best_Carette_read(pos5, HTSeq_alignment=aln5, max_distance=1000)
+        assert len(mutant.Carette_genome_side_reads) == 1
+        assert mutant.Carette_genome_side_reads[0].position.min_position == 70
+        assert mutant.Carette_max_confirmed_distance(1000) == 30
+        pos6 = Insertion_position('chr1','-',position_before=11)
+        aln6 = Fake_HTSeq_alignment(seq='ACA', readname='read1', pos=self._make_pos(pos6))
+        mutant.improve_best_Carette_read(pos6, HTSeq_alignment=aln6, max_distance=1000)
+        assert len(mutant.Carette_genome_side_reads) == 1
+        assert mutant.Carette_genome_side_reads[0].position.min_position == 70
+        assert mutant.Carette_max_confirmed_distance(1000) == 30
 
 if __name__ == "__main__":
     """ Allows both running and importing of this file. """
