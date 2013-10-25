@@ -65,11 +65,18 @@ def define_option_parser():
                       help="Use if file provided in -A is a standard Phytozome annotation file (missing a header): "
                           +"use value 4 for the one with chlamy v4.3 genome, or value 5 for v5 genome (default %default)")
 
-    parser.add_option('-X', '--remove_mutants_from_file', metavar='FILE',
-                      help='Remove all mutants present in FILE from the datasets (see -Y for read count cutoff).')
-    parser.add_option('-z', '--remove_mutants_readcount_min', type='int', default=1, metavar='M',
+    parser.add_option('-x', '--remove_mutants_from_file', metavar='FILE',
+                      help='Remove all mutants present in FILE from the datasets (see -z/-p for read count cutoff).')
+    parser.add_option('-z', '--remove_from_file_readcount_min', type='int', default=1, metavar='M',
+                      help='When applying -x, only remove mutants with at least N reads in FILE (default %default).')
+    parser.add_option('-p', '--remove_from_file_min_is_perfect', action='store_true', default=False,
+                      help='When applying -x with -z M, compare M to perfect readcount, not total. (default %default).')
+
+    parser.add_option('-X', '--remove_mutants_not_from_file', metavar='FILE',
+                      help='Remove all mutants NOT present in FILE from the datasets (see -Z/-P for read count cutoff).')
+    parser.add_option('-Z', '--remove_not_from_file_readcount_min', type='int', default=1, metavar='M',
                       help='When applying -X, only remove mutants with at least N reads in FILE (default %default).')
-    parser.add_option('-Z', '--remove_mutants_min_is_perfect', action='store_true', default=False,
+    parser.add_option('-P', '--remove_not_from_file_min_is_perfect', action='store_true', default=False,
                       help='When applying -X with -z M, compare M to perfect readcount, not total. (default %default).')
 
     # TODO add --dont_count_cassette and --dont_count_other options like in mutant_count_alignments.py? 
@@ -153,15 +160,26 @@ def main(infiles, outfile, options):
     elif options.verbosity_level>0: multi_dataset.print_summary()
 
     ### optionally remove mutants based on another dataset
+    # remove mutants that ARE present in another file
     if options.remove_mutants_from_file:
         other_dataset = mutant_analysis_classes.read_mutant_file(options.remove_mutants_from_file)
         old_N = len(multi_dataset)
-        multi_dataset.remove_mutants_based_on_other_dataset(other_dataset, 
-                 readcount_min=options.remove_mutants_readcount_min, perfect_reads=options.remove_mutants_min_is_perfect)
+        multi_dataset.remove_mutants_in_other_dataset(other_dataset, 
+                 readcount_min=options.remove_from_file_readcount_min, perfect_reads=options.remove_from_file_min_is_perfect)
         if options.verbosity_level>0:   
             new_N = len(multi_dataset)
-            print "removed %s mutants based on %s - %s mutants remaining in combined dataset"%(old_N - new_N, 
+            print "removed %s mutants PRESENT in %s - %s mutants remaining in combined dataset"%(old_N - new_N, 
                                                                                    options.remove_mutants_from_file, new_N)
+    # remove mutants that are NOT present in another file
+    if options.remove_mutants_not_from_file:
+        other_dataset = mutant_analysis_classes.read_mutant_file(options.remove_mutants_not_from_file)
+        old_N = len(multi_dataset)
+        multi_dataset.remove_mutants_not_in_other_dataset(other_dataset, 
+                 readcount_min=options.remove_not_from_file_readcount_min, perfect_reads=options.remove_not_from_file_min_is_perfect)
+        if options.verbosity_level>0:   
+            new_N = len(multi_dataset)
+            print "removed %s mutants ABSENT in %s - %s mutants remaining in combined dataset"%(old_N - new_N, 
+                                                                                   options.remove_mutants_not_from_file, new_N)
 
     # if requested, add gene annotation info from separate file
     if options.gene_annotation_file:

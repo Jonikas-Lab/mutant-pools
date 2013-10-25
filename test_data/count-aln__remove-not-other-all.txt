@@ -1,0 +1,36 @@
+<REGEX># Command line this file was generated with: .*
+<REGEX># Path: .*
+<REGEX># Date: .*
+<REGEX># Full options: {.*}
+### SUMMARY:
+## Total reads in sample:	5+unknown
+## Reads discarded in preprocessing (% of total):	0 (0%)
+#  discarded due to wrong start (% of total):	0 (0%)
+#  discarded due to no cassette (% of total):	0 (0%)
+## Reads without a unique alignment (% of total, % of post-preprocessing):	unknown (unknown)
+#  unaligned reads (% of total, % of post-preprocessing):	unknown (unknown)
+#  multiply aligned reads (% of total, % of post-preprocessing):	unknown (unknown)
+## Uniquely aligned reads (% of total, % of post-preprocessing):	5 (100%, 100%)
+#  Perfectly aligned reads, no mismatches (% of aligned):	5 (100%)
+#  Reads with cassette direction matching chromosome + strand (% of aligned):	5 (100%)
+#  Reads with cassette direction matching chromosome - strand (% of aligned):	0 (0%)
+## Mutant merging/counts (deciding when different-position reads should be one mutant)	
+#   (adjacent-merging/counting max distance):	(1)
+#   (if we're including mutants in cassette and in non-nuclear chromosomes):	(False, False)
+#  merged same-strand adjacent mutant pairs and opposite-strand tandem pairs:	0, 0
+#  remaining same-position opposite-strand pairs (if not merged as tandems):	0
+#  remaining adjacent opposite-strand "toward-facing" pairs (those are definitely real):	0
+#  remaining adjacent opposite-strand "away-facing" pairs (% of toward-facing):	0 (N/A)
+#  remaining adjacent same-strand unmerged pairs (% of 2*toward-facing):	0 (N/A)
+## Distinct mutants (read groups) by cassette insertion position:	5
+#  (mutants with 2+, 10+, 100+, 1000+ reads):	(0, 0, 0, 0)
+#  (read location with respect to cassette: which end, which direction):	(5prime, forward)
+#  (average and median reads per mutant):	(1, 1)
+#  Most common mutant(s): reads (% of aligned) (position or count):	1 (20%) (5 mutants)
+### HEADER AND DATA:
+# chromosome	strand	min_position	full_position	gene	orientation	feature	total_reads	perfect_reads	N_sequence_variants
+chromosome_A	+	100	100-?	gene_unknown	?	?	1	1	1
+chromosome_A	+	200	200-?	gene_unknown	?	?	1	1	1
+chromosome_A	+	300	300-?	gene_unknown	?	?	1	1	1
+chromosome_A	+	400	400-?	gene_unknown	?	?	1	1	1
+chromosome_A	+	700	700-?	gene_unknown	?	?	1	1	1

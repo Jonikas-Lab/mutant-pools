@@ -53,9 +53,12 @@ def do_test_run():
                  ('merge-adjacent1-r3', "-MQ -D1 -w3 -Y0 -n0", [aln_infile3]),
                  ('merge-adjacent1-r1', "-MQ -D1 -w1 -Y0 -n0", [aln_infile3]),
                  ('merge-adjacent2-r3', "-MQ -D2 -w3 -Y0 -n0", [aln_infile3]), 
-                 ('remove-from-other-all', "-X %s -n0"%dataset_to_remove, [aln_infile2]), 
-                 ('remove-from-other-min4', "-X %s -z4 -n0"%dataset_to_remove, [aln_infile2]), 
-                 ('remove-from-other-perfect', "-X %s -Z -z4 -n0"%dataset_to_remove, [aln_infile2]),
+                 ('remove-from-other-all', "-x %s -n0"%dataset_to_remove, [aln_infile2]), 
+                 ('remove-from-other-min4', "-x %s -z4 -n0"%dataset_to_remove, [aln_infile2]), 
+                 ('remove-from-other-perfect', "-x %s -p -z4 -n0"%dataset_to_remove, [aln_infile2]),
+                 ('remove-not-other-all', "-X %s -n0"%dataset_to_remove, [aln_infile2]), 
+                 ('remove-not-other-min4', "-X %s -Z4 -n0"%dataset_to_remove, [aln_infile2]), 
+                 ('remove-not-other-perfect', "-X %s -P -Z4 -n0"%dataset_to_remove, [aln_infile2]),
                  ('old-infile-format', "-e 5prime -r forward -n3 -L", [aln_infile0]),
                 ]
     # MAYBE-TODO add run-test for a metadata file with 5' and 3' read counts?
@@ -87,8 +90,8 @@ def define_option_parser():
     from optparse import OptionParser
     parser = OptionParser(__doc__)
 
-    # taken:     aAbBcC-De---g-h---jJ--lLmMn-o---qQr---tTuUvVwWxXyYzZ  
-    # free:      ------d--EfF-G-HiI--kK-----N-OpP---RsS--------------  
+    # taken:     aAbBcC-De---g-h---jJ--lLmMn-o-pPqQr---tTuUvVwWxXyYzZ  
+    # free:      ------d--EfF-G-HiI--kK-----N-O-----RsS--------------  
 
     ### test options
     parser.add_option('-t','--test_functionality', action='store_true', default=False, 
@@ -134,11 +137,18 @@ def define_option_parser():
                       help="For adjacent and tandem merging/counts: include mutants in non-cassette non-nuclear chromosomes "
                           +"(like chloroplast and mitochondrial) (default %default)")
 
-    parser.add_option('-X', '--remove_mutants_from_file', metavar='FILE',
-                      help='Remove all mutants present in FILE from the datasets (see -z/-Z for read count cutoff).')
-    parser.add_option('-z', '--remove_mutants_readcount_min', type='int', default=1, metavar='M',
+    parser.add_option('-x', '--remove_mutants_from_file', metavar='FILE',
+                      help='Remove all mutants present in FILE from the datasets (see -z/-p for read count cutoff).')
+    parser.add_option('-z', '--remove_from_file_readcount_min', type='int', default=1, metavar='M',
+                      help='When applying -x, only remove mutants with at least N reads in FILE (default %default).')
+    parser.add_option('-p', '--remove_from_file_min_is_perfect', action='store_true', default=False,
+                      help='When applying -x with -z M, compare M to perfect readcount, not total. (default %default).')
+
+    parser.add_option('-X', '--remove_mutants_not_from_file', metavar='FILE',
+                      help='Remove all mutants NOT present in FILE from the datasets (see -Z/-P for read count cutoff).')
+    parser.add_option('-Z', '--remove_not_from_file_readcount_min', type='int', default=1, metavar='M',
                       help='When applying -X, only remove mutants with at least N reads in FILE (default %default).')
-    parser.add_option('-Z', '--remove_mutants_min_is_perfect', action='store_true', default=False,
+    parser.add_option('-P', '--remove_not_from_file_min_is_perfect', action='store_true', default=False,
                       help='When applying -X with -z M, compare M to perfect readcount, not total. (default %default).')
 
     parser.add_option('-c', '--ignore_cassette', action='store_true', default=False,
@@ -478,13 +488,22 @@ def main(infiles, outfile, options):
                                         treat_unknown_as_match = options.treat_unknown_as_match)
 
     ### optionally remove mutants based on another dataset - BEFORE adjacent mutant counting/merging
+    # remove mutants that ARE present in another file (also do it for cassette mutants if those are separate)
     if options.remove_mutants_from_file:
         other_dataset = mutant_analysis_classes.read_mutant_file(options.remove_mutants_from_file)
-        all_alignment_data.remove_mutants_based_on_other_dataset(other_dataset, 
-                 readcount_min=options.remove_mutants_readcount_min, perfect_reads=options.remove_mutants_min_is_perfect)
+        all_alignment_data.remove_mutants_in_other_dataset(other_dataset, 
+                 readcount_min=options.remove_from_file_readcount_min, perfect_reads=options.remove_from_file_min_is_perfect)
         if options.separate_cassette:
-            cassette_alignment_data.remove_mutants_based_on_other_dataset(other_dataset, 
-                 readcount_min=options.remove_mutants_readcount_min, perfect_reads=options.remove_mutants_min_is_perfect)
+            cassette_alignment_data.remove_mutants_in_other_dataset(other_dataset, 
+                 readcount_min=options.remove_from_file_readcount_min, perfect_reads=options.remove_from_file_min_is_perfect)
+    # remove mutants that are NOT present in another file (also do it for cassette mutants if those are separate)
+    if options.remove_mutants_not_from_file:
+        other_dataset = mutant_analysis_classes.read_mutant_file(options.remove_mutants_not_from_file)
+        all_alignment_data.remove_mutants_not_in_other_dataset(other_dataset, 
+                 readcount_min=options.remove_not_from_file_readcount_min, perfect_reads=options.remove_not_from_file_min_is_perfect)
+        if options.separate_cassette:
+            cassette_alignment_data.remove_mutants_not_in_other_dataset(other_dataset, 
+                 readcount_min=options.remove_not_from_file_readcount_min, perfect_reads=options.remove_not_from_file_min_is_perfect)
 
     ### optionally merge some mutant categories
     with open(mutant_merging_outfile, 'w') as MERGEFILE:

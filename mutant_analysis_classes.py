@@ -1707,7 +1707,7 @@ class Insertional_mutant_pool_dataset():
 
         # LATER-TODO what to do with cases where one dataset has a both-strand mutant and the other has a +strand or -strand one?  Should probably merge them, or if not, give an error (make that an option?).  And what about mutants with similar positions, like ?-101 and 100-? and 100-101?  (This would be relevant when merging 5' and 3' sets, for instance).  See half-implemented get_matching_position_mutants method.
 
-    def remove_mutants_based_on_other_dataset(self, other_dataset, readcount_min=1, perfect_reads=False):
+    def remove_mutants_in_other_dataset(self, other_dataset, readcount_min=1, perfect_reads=False):
         """ Remove any mutants with at least readcount_min reads in other_dataset (or perfect reads, if perfect_reads=True)
 
         This is based on EXACT position equality: a ?-101 mutant won't be removed due to a 100-? or 100-101 or 100-102 one.
@@ -1719,6 +1719,23 @@ class Insertional_mutant_pool_dataset():
         #  otherwise we'd be modifying the iterator while iterating through it, which isn't allowed.
         for mutant in list(self):
             if get_readcount(other_dataset.get_mutant(mutant.position)) >= readcount_min:
+                self.remove_mutant(mutant.position)
+        # TODO really I shouldn't be removing mutants outright, just noting them as removed or something...  In that case should they or should they not show up in "for m in self"?  Probably not - they should have a separate dictionary?
+        # TODO should I keep track of removed reads, and print in summary?  PROBABLY.
+        # LATER-TODO unit-test - it does have run-tests though.
+
+    def remove_mutants_not_in_other_dataset(self, other_dataset, readcount_min=1, perfect_reads=False):
+        """ Remove any mutants with at least readcount_min reads in other_dataset (or perfect reads, if perfect_reads=True)
+
+        This is based on EXACT position equality: a ?-101 mutant won't be removed due to a 100-? or 100-101 or 100-102 one.
+        """
+        # TODO do I want this to be based on non-exact position equality instead?
+        if perfect_reads:   get_readcount = lambda m: m.perfect_read_count
+        else:               get_readcount = lambda m: m.total_read_count
+        # go over all mutants in self; need to convert the iterator to a list to make a separate copy, 
+        #  otherwise we'd be modifying the iterator while iterating through it, which isn't allowed.
+        for mutant in list(self):
+            if get_readcount(other_dataset.get_mutant(mutant.position)) < readcount_min:
                 self.remove_mutant(mutant.position)
         # TODO really I shouldn't be removing mutants outright, just noting them as removed or something...  In that case should they or should they not show up in "for m in self"?  Probably not - they should have a separate dictionary?
         # TODO should I keep track of removed reads, and print in summary?  PROBABLY.
