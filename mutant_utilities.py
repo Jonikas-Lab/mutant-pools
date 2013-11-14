@@ -41,7 +41,7 @@ def get_chromosome_lengths(genome_file=None):
         return dict(chromosome_lengths)
     except IOError:
         file_info = "default " if original_input is None else ""
-        raise ValueError("%sgenome fasta file $s not found! Provide filename."%(file_info, genome_file))
+        raise ValueError("%sgenome fasta file %s not found! Provide filename."%(file_info, genome_file))
     # MAYBE-TODO should this be in basic_seq_utilities or somewhere?  Except for the specific default value...
 
 
