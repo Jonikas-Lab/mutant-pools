@@ -60,7 +60,8 @@ def _get_plotline_pos(middle_pos, total_width, total_N, N):
 def mutant_positions_and_data(datasets=[], dataset_formats=0, density_plots=True, colors=None, names=None, maxes_per_base=None, 
                               maxes_per_bin=None, strands=None, title='', bin_size=mutant_utilities.DEFAULT_BIN_SIZE, 
                               chromosome_lengths=None, interpolate=False, NaN_color='0.6', total_plotline_width=0.6, 
-                              condense_colorbars=True, include_scaffolds=False, include_cassette=False, include_other=False):
+                              condense_colorbars=True, no_colorbars=False, 
+                              include_scaffolds=False, include_cassette=False, include_other=False):
     """ Plot multiple datasets (mutant,position,density) across chromosomes, as position lines or density heatmaps.
 
     Each element in datasets must match the corresponding value in dataset_formats (or the value if only one is given:
@@ -232,58 +233,60 @@ def mutant_positions_and_data(datasets=[], dataset_formats=0, density_plots=True
     if len(all_datasets_and_info)>1:
         mplt.legend(prop=FontProperties(size='small'))
         # MAYBE-TODO nicer legend formatting?  Get rid of frame, thicker line, line up with colorbars or something?
-    # if desired, figure out sensible positioning to put smaller colorbars in two rows rather than have the default big ones
-    # MAYBE-TODO add option for more than two rows?
-    if condense_colorbars:
-        # column sizes
-        N_columns = numpy.ceil(len(all_heatmaps)/2)
-        col_width = 0.1
-        col_padding = 0.02
-        # bbox is the main figure shape - has attributes like xmin,xmax,ymin,ymax,height,width
-        ax = mplt.gca()
-        bbox = ax.get_position()
-        # set new axes position: decrease width to make room for colorbars, keep left/bottom/height as before (from bbox)
-        ax.set_position([bbox.xmin, bbox.ymin, bbox.width - (col_padding+col_width)*(N_columns-1), bbox.height])
-        mplt.draw()
-        bbox = ax.get_position()
-        # row positions/sizes
-        row_padding = 0.1*bbox.height
-        row_height = (bbox.height - row_padding) / 2
-        row_bottoms = [bbox.ymin + bbox.height/2 + row_padding/2, bbox.ymin]
-    # add colorbars for each heatmap, labeled with the dataset name
-    for N, (plot, name, if_normalized, real_maxcount) in enumerate(all_heatmaps):
-        colorbar_kwargs = {}
-        # optionally condense the colorbars: put in two rows, reduce spacing
+    # colorbars, if desired
+    if not no_colorbars:
+        # if desired, figure out sensible positioning to put smaller colorbars in two rows rather than have the default big ones
+        # MAYBE-TODO add option for more than two rows?
         if condense_colorbars:
-            row, column = N % 2, N // 2
-            col1_offset = 1 - N_columns * .05
-            # add_axes arguments are left,bottom,width,height
-            cax = mplt.gcf().add_axes((bbox.xmax + col_padding + col_width*column, row_bottoms[row], 0.012, row_height))
-            colorbar_kwargs['cax'] = cax
-        c = mplt.colorbar(plot, **colorbar_kwargs)
-        c.set_label("%s"%name + ("" if if_normalized else " (per %s)"%(basic_seq_utilities.format_base_distance(bin_size))))
-        # MAYBE-TODO put the heatmaps on the plot instead of on the side?  There's room...
-        # if if_normalized, scale the ticks to 0-100%
-        if if_normalized:
-            # c.vmin and c.vmax are the low/high of the colorbar
-            assert c.vmin==0, "Colorbar start isn't at 0, can't normalize to 0-100% properly!"
-            ticks_and_labels = [(c.vmax*fraction, "%d%%"%(fraction*100)) for fraction in (0, 0.25, 0.5, 0.75, 1)]
-        # otherwise, we don't need as many colorbar ticks as matplotlib likes - leave only the full-number ones
-        else:
-            ticks_and_labels = []
-            # c._ticker()[1] gives the tick positions
-            for x in c._ticker()[1]:
-                # x is a unicode string to start with; replace gets around a bug where matplotlib can't render the unicode minus sign
-                x = float(x.replace(u'\u2212', '-'))
-                if x==int(x):   ticks_and_labels.append( (x, str(int(x))) )
-        # if real_maxcount is higher than the colorbar max, add colorbar ticklabel or change last ticklabel to reflect that
-        colorbar_max, highest_tick_pos = c.vmax, ticks_and_labels[-1][0]
-        if real_maxcount > colorbar_max:
-            if abs(colorbar_max - highest_tick_pos) < 1:
-                ticks_and_labels[-1] = (highest_tick_pos, '%i-%i'%(highest_tick_pos, real_maxcount))
+            # column sizes
+            N_columns = numpy.ceil(len(all_heatmaps)/2)
+            col_width = 0.1
+            col_padding = 0.02
+            # bbox is the main figure shape - has attributes like xmin,xmax,ymin,ymax,height,width
+            ax = mplt.gca()
+            bbox = ax.get_position()
+            # set new axes position: decrease width to make room for colorbars, keep left/bottom/height as before (from bbox)
+            ax.set_position([bbox.xmin, bbox.ymin, bbox.width - (col_padding+col_width)*(N_columns-1), bbox.height])
+            mplt.draw()
+            bbox = ax.get_position()
+            # row positions/sizes
+            row_padding = 0.1*bbox.height
+            row_height = (bbox.height - row_padding) / 2
+            row_bottoms = [bbox.ymin + bbox.height/2 + row_padding/2, bbox.ymin]
+        # add colorbars for each heatmap, labeled with the dataset name
+        for N, (plot, name, if_normalized, real_maxcount) in enumerate(all_heatmaps):
+            colorbar_kwargs = {}
+            # optionally condense the colorbars: put in two rows, reduce spacing
+            if condense_colorbars:
+                row, column = N % 2, N // 2
+                col1_offset = 1 - N_columns * .05
+                # add_axes arguments are left,bottom,width,height
+                cax = mplt.gcf().add_axes((bbox.xmax + col_padding + col_width*column, row_bottoms[row], 0.012, row_height))
+                colorbar_kwargs['cax'] = cax
+            c = mplt.colorbar(plot, **colorbar_kwargs)
+            c.set_label("%s"%name + ("" if if_normalized else " (per %s)"%(basic_seq_utilities.format_base_distance(bin_size))))
+            # MAYBE-TODO put the heatmaps on the plot instead of on the side?  There's room...
+            # if if_normalized, scale the ticks to 0-100%
+            if if_normalized:
+                # c.vmin and c.vmax are the low/high of the colorbar
+                assert c.vmin==0, "Colorbar start isn't at 0, can't normalize to 0-100% properly!"
+                ticks_and_labels = [(c.vmax*fraction, "%d%%"%(fraction*100)) for fraction in (0, 0.25, 0.5, 0.75, 1)]
+            # otherwise, we don't need as many colorbar ticks as matplotlib likes - leave only the full-number ones
             else:
-                ticks_and_labels.append((int(colorbar_max), '%i-%i'%(int(colorbar_max), real_maxcount)))
-        # MAYBE-TODO also add a pointed end to the colorbar if that's the case, or whatever's normally used to signify truncation?  Using the extend arg to mplt.colorbar, so I'd have to do that up above
+                ticks_and_labels = []
+                # c._ticker()[1] gives the tick positions
+                for x in c._ticker()[1]:
+                    # replace gets around a bug where matplotlib can't render the unicode minus sign in the original x version
+                    x = float(x.replace(u'\u2212', '-'))
+                    if x==int(x):   ticks_and_labels.append( (x, str(int(x))) )
+            # if real_maxcount is higher than the colorbar max, add colorbar ticklabel or change last ticklabel to reflect that
+            colorbar_max, highest_tick_pos = c.vmax, ticks_and_labels[-1][0]
+            if real_maxcount > colorbar_max:
+                if abs(colorbar_max - highest_tick_pos) < 1:
+                    ticks_and_labels[-1] = (highest_tick_pos, '%i-%i'%(highest_tick_pos, real_maxcount))
+                else:
+                    ticks_and_labels.append((int(colorbar_max), '%i-%i'%(int(colorbar_max), real_maxcount)))
+            # MAYBE-TODO also add a pointed end to the colorbar if that's the case, or whatever's normally used to signify truncation?  Using the extend arg to mplt.colorbar, so I'd have to do that up above
         c.set_ticks(zip(*ticks_and_labels)[0])
         c.set_ticklabels(zip(*ticks_and_labels)[1])
         mplt.draw()
