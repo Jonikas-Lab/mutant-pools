@@ -11,10 +11,12 @@ from __future__ import division
 # basic libraries
 import sys, re
 import unittest
-from collections import defaultdict
+from collections import defaultdict, Counter
 from math import isnan
 # other libraries
 import HTSeq
+import matplotlib.pyplot as mplt
+import plotting_utilities
 # my modules
 from mutant_analysis_classes import MutantError, Insertion_position, Insertional_mutant, Insertional_mutant_pool_dataset, is_cassette_chromosome, HTSeq_pos_to_tuple, SEQ_ENDS, SEQ_STRANDS
 from general_utilities import keybased_defaultdict, value_and_percentages
@@ -25,7 +27,7 @@ from deepseq_utilities import Fake_deepseq_objects
 
 # TODO need to implement new Insertion_position variant with uncertainty!  And modify the gene/feature finding function to deal with that...
 
-### Constants
+############################### Constants and help functions #####################################
 
 MAX_POSITION_DISTANCE = 1500
 
@@ -119,29 +121,32 @@ class Insertional_mutant_Carette(Insertional_mutant):
         self.Carette_genome_side_reads.append(mutant)
         # Note: adding gene/annotation info for those is implemented in the dataset methods.
 
+    def _if_confirming_read(self, position, max_distance):
+        # read needs to match chromosome and strand to be consistent
+        if position.chromosome != self.position.chromosome:                         return False
+        if position.strand != self.position.strand:                                 return False
+        # it also needs to be below max_distance
+        if abs(position.min_position - self.position.min_position) > max_distance:  return False
+        return True
+        # TODO what about WEIRD cases, when it's the right distance but in the wrong direction? Those are rare enough to ignore for now, but should do something about them!
+
     def _decide_if_replace_read(self, new_position, max_distance):
         """ Decide whether new position is "better" than old one - just refactored out of improve_best_Carette_read for convenience.
         """
         # if there are no current reads, add new one
-        if not len(self.Carette_genome_side_reads):             return True
-        # otherwise decide if new read is "better" than current:
-        # if new read doesn't match the cassette-side chromosome/strand, it can't be better, so don't replace
-        if new_position.chromosome != self.position.chromosome: return False
-        if new_position.strand != self.position.strand:         return False
-        # same if it doesn't meet the max_distance
-        new_dist = abs(new_position.min_position - self.position.min_position)
-        if new_dist > max_distance:                             return False
-        # if it does all these things, and the old one doesn't, replace
+        if not len(self.Carette_genome_side_reads):                     return True
+        # if new read isn't "confirming", it can't be better
+        if not self._if_confirming_read(new_position, max_distance):    return False
+        # if the new one is "confirming" and the old one isn't, new one has to be better
         old_position = self.Carette_genome_side_reads[0].position
-        if old_position.chromosome != self.position.chromosome: return True
-        if old_position.strand != self.position.strand:         return True
-        old_dist = abs(old_position.min_position - self.position.min_position)
-        if old_dist > max_distance:                             return True
+        if not self._if_confirming_read(old_position, max_distance):    return True
         # if both the old and new position meet the basic conditions, pick the highest-distance one
+        new_dist = abs(new_position.min_position - self.position.min_position)
+        old_dist = abs(old_position.min_position - self.position.min_position)
         if new_dist > old_dist:                                 return True
         else:                                                   return False
 
-    def improve_best_Carette_read(self, new_position, HTSeq_alignment, max_distance=MAX_POSITION_DISTANCE, N_errors=None):
+    def improve_best_Carette_read(self, new_position, HTSeq_alignment, max_distance=MAX_POSITION_DISTANCE):
         """ Compare the read to the current best one - replace the best one if this is better.
 
         "Better" meaning furthest away from the cassette-side read, while still remaining on the same chromosome, strand,
@@ -158,6 +163,26 @@ class Insertional_mutant_Carette(Insertional_mutant):
             new_mutant = Insertional_mutant(new_position)
             new_mutant.add_read(HTSeq_alignment)
             self.Carette_genome_side_reads = [new_mutant]
+
+    def Carette_N_confirming_reads(self, max_distance=MAX_POSITION_DISTANCE):
+        """ Return the number of aligned genome-side reads that DON'T confirm the cassette-side position.
+
+        ("Confirm" means same chromosome, consistent strand, and at most max_distance away)
+        """
+        N = 0
+        for read_data in self.Carette_genome_side_reads:
+            # skip non-aligned reads
+            try:                    chrom = read_data.position.chromosome
+            except AttributeError:  continue
+            if self._if_confirming_read(read_data.position, max_distance):  N += 1
+        return N
+
+    def Carette_N_non_confirming_reads(self, max_distance=MAX_POSITION_DISTANCE):
+        """ Return the number of aligned genome-side reads that DON'T confirm the cassette-side position.
+
+        ("Confirm" means same chromosome, consistent strand, and at most max_distance away)
+        """
+        return self.Carette_N_genomic_reads + self.Carette_N_cassette_reads - self.Carette_N_confirming_reads(max_distance)
 
     @property
     def Carette_N_unaligned_reads(self):
@@ -478,7 +503,93 @@ class Insertional_mutant_pool_dataset_Carette(Insertional_mutant_pool_dataset):
     # TODO need to overwrite or modify print_data, to add columns that give some information on the Carette data!
 
 
-############################################### Unit-tests ##############################################################
+############################### Further analysis/plotting utilities #####################################
+
+# TODO should those be somewhere else?  In deconvolution, or plotting utilities, or separate Carette_utilities file?
+
+def add_Carette_to_deconvolution_data(DECONV_header, DECONV_data, Carette_5prime, Carette_3prime, 
+                                      max_allowed_distance, min_weird_distance):
+    """ Add Carette data (two extra fields) to deconvolution output mutant list.
+    """
+    # TODO more detail in docstring!
+    NEW_deconv_data = []
+    NEW_deconv_header = DECONV_header[:2] + 'Carette_status Carette_distance'.split() + DECONV_header[2:]
+    status_counts = defaultdict(int)
+    for fields in DECONV_data:
+        position = Insertion_position(fields[7], fields[8], full_position=fields[10], immutable=True)
+        side = fields[6]
+        if side=="5'":      mutant = Carette_5prime.get_mutant(position)
+        else:               mutant = Carette_3prime.get_mutant(position)
+        status = mutant.Carette_confirmation_status(side, max_allowed_distance, min_weird_distance=min_weird_distance)
+        status_distance = mutant.Carette_max_confirmed_distance(max_allowed_distance)
+        if isnan(status_distance): status_distance = '-'
+        else:                            status_distance = str(status_distance)
+        status_counts[status] += 1
+        NEW_deconv_data.append(fields[:2] + tuple([status, status_distance]) + fields[2:])
+    for status,count in sorted(status_counts.items()):
+       print "%s: %s"%(status, value_and_percentages(count, [len(NEW_deconv_data)]))
+    return NEW_deconv_header, NEW_deconv_data, status_counts
+     # TODO unit-test!
+
+def get_all_distances(deconv_data):
+    """ Return lists of max confirmed distances for all mutants and separated into various categories.
+    """
+    # TODO more detail in docstring!
+    distances_all, distances_genomic, distances_cassette = [], [], []
+    distances_by_side_genomic, distances_by_quality_genomic = defaultdict(list), defaultdict(list)
+    distances_by_side_cassette, distances_by_quality_cassette = defaultdict(list), defaultdict(list)
+    for line in deconv_data:
+        # ignore cases with no max confirmed distance
+        if line[3] == '-':    continue
+        dist = int(line[3])
+        distances_all.append(dist)
+        if is_cassette_chromosome(line[9]):
+            distances_cassette.append(dist)
+            distances_by_side, distances_by_quality = distances_by_side_cassette, distances_by_quality_cassette
+        else:
+            distances_genomic.append(dist)
+            distances_by_side, distances_by_quality = distances_by_side_genomic, distances_by_quality_genomic
+        distances_by_side[line[8]].append(dist)
+        categories = line[4:6]
+        if 'unmapped' in categories:    distances_by_quality['unmapped'].append(dist)
+        elif 'poor' in categories:      distances_by_quality['poor'].append(dist)
+        elif 'decent' in categories:    distances_by_quality['decent'].append(dist)
+        elif 'good' in categories:      distances_by_quality['good'].append(dist)
+        elif 'best' in categories:      distances_by_quality['best'].append(dist)
+        else:                           print "weird categories??? %s"%' '.join(line)
+    return distances_all, distances_genomic, distances_cassette, distances_by_side_genomic, distances_by_quality_genomic, distances_by_side_cassette, distances_by_quality_cassette
+    # TODO unit-test!
+
+def distance_histogram(distance_datasets, labels=None, colors=None, linestyles=None, N_bins=50, histtype='step', normalized=True, 
+                       outfile=None, filetypes='svg png', x_max=None, sample_info=''):
+    """ Plot histogram of the distances in the given datasets; optionally save to file. 
+    """
+    mplt.figure()
+    max_y = 0
+    for N, distances in enumerate(distance_datasets):
+        if not len(distances):
+            print "Dataset %s contains no data! Skipping."%N
+            continue
+        plot_kwargs = {}
+        if labels:      plot_kwargs['label'] = "%s (%s)"%(labels[N], len(distances))
+        if colors:      plot_kwargs['color'] = colors[N]
+        if linestyles:  plot_kwargs['linestyle'] = linestyles[N]
+        y_values, _, _ = mplt.hist(distances, bins=N_bins, histtype=histtype, normed=str(normalized), **plot_kwargs)
+        max_y = max(max_y, max(y_values))
+    mplt.xlabel('highest distance between cassette-side and genome-side reads')
+    mplt.ylim(-max_y/20, max_y*1.1)
+    if x_max is not None:
+        mplt.xlim(mplt.xlim()[0], x_max)
+    if normalized:  mplt.ylabel('fraction of mutants')
+    else:           mplt.ylabel('number of mutants')
+    if labels:
+        mplt.legend()
+    mplt.title("Carette confirmed distance distribution" + "\n(%s)"%sample_info if sample_info else "")
+    if outfile:
+        plotting_utilities.savefig(outfile, filetypes)
+    mplt.close()
+
+############################################### Tests ##############################################################
 
 class Testing_all(unittest.TestCase):
     """ Unit-tests for position-related classes and functions. """
