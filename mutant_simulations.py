@@ -63,7 +63,7 @@ format_bp = lambda x: basic_seq_utilities.format_base_distance(x, False)    # th
 
 ### genome mappability by position
 
-def genome_mappable_slices(slice_len, genome_seq=None, print_info=True):
+def genome_mappable_slices(slice_len, genome_seq, print_info=True):
     """ Return a chrom:position_array dict giving the positions of all the unique slice_len seq slices. 
     
     Look at all slices of length slice_len in each chromosome (overlapping - for AATGG with len 2, look at AA, AT, TG, GG)
@@ -77,7 +77,6 @@ def genome_mappable_slices(slice_len, genome_seq=None, print_info=True):
     """
     # keep original genome_seq, because we'll want it for the second pass, and generators only work once
     original_genome_seq = genome_seq
-    if genome_seq is None:           genome_seq = DEFAULT_ALL_GENOME_FILE
     if isinstance(genome_seq, str):  genome_seq = basic_seq_utilities.parse_fasta(genome_seq)
     else:                            genome_seq = genome_seq.iteritems()
     ### This is done in two passes over the whole genome, to improve memory usage. The original version was done in one pass.
@@ -130,7 +129,6 @@ def genome_mappable_slices(slice_len, genome_seq=None, print_info=True):
     ### Second pass - go over all chromosomes again, and save the positions of known unique sequences.
     # restart genome_seq generator
     genome_seq = original_genome_seq
-    if genome_seq is None:              genome_seq = DEFAULT_ALL_GENOME_FILE
     if isinstance(genome_seq, str):     genome_seq = basic_seq_utilities.parse_fasta(genome_seq)
     else:                               genome_seq = genome_seq.iteritems()
     unique_seq_positions_by_chrom = {}
@@ -186,15 +184,17 @@ def genome_mappable_insertion_sites(flanking_region_length=21, mappable_slice_po
      the same as flanking_region_length), and genome_seq will be ignored; 
      if it's None, genome_mappable_slices will be used to generate that data (takes a while, and a lot of memory!).
 
-    Genome_seq can be a list of (chr_name,chr_seq) tuples, or the path to a fasta file containing the genome; 
-     default file will be used if None. 
+    Genome_seq can be a list of (chr_name,chr_seq) tuples, or the path to a fasta file containing the genome.
     """
     if end_sequenced not in basic_seq_utilities.SEQ_ENDS:
         raise Exception('Invalid end_sequenced %s! Must be in %s.'%(end_sequenced, basic_seq_utilities.SEQ_ENDS))
     reads_are_reverse = False if end_sequenced=='5prime' else True
     # get a chromosome:mappable_slice_start_pos_list dict, if not provided already (this is the only use of genome_seq)
     if mappable_slice_pos_dict is None:
-        mappable_slice_pos_dict = genome_mappable_slices(flanking_region_length, genome_seq, print_info)
+        if genome_seq is not None:
+            mappable_slice_pos_dict = genome_mappable_slices(flanking_region_length, genome_seq, print_info)
+        else:
+            raise Exception('Either mappable_slice_pos_dict or genome_seq must be given!')
     # convert the mappable slice chromosome/position values into mappable insertion locations, 
     #  treating them as end_sequenced flanking regions - each flanking region should give TWO mappable positions, 
     #   one on each side, with opposite strands (with the insertion position strand depending on end_sequenced)
