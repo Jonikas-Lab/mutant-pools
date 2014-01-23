@@ -234,7 +234,7 @@ def mutant_positions_and_data(datasets=[], dataset_formats=0, density_plots=True
         mplt.legend(prop=FontProperties(size='small'))
         # MAYBE-TODO nicer legend formatting?  Get rid of frame, thicker line, line up with colorbars or something?
     # colorbars, if desired
-    if not no_colorbars:
+    if not no_colorbars and len(all_heatmaps)>0:
         # if desired, figure out sensible positioning to put smaller colorbars in two rows rather than have the default big ones
         # MAYBE-TODO add option for more than two rows?
         if condense_colorbars:
