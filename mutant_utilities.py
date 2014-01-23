@@ -19,7 +19,7 @@ import general_utilities
 import basic_seq_utilities
 import mutant_analysis_classes
 
-DEFAULT_NUCLEAR_GENOME_FILE = os.path.expanduser('~/experiments/reference_data/genomes_and_indexes/Chlre5_notmasked.fa')
+DEFAULT_NUCLEAR_GENOME_FILE = os.path.expanduser('~/experiments/reference_data/genomes_and_indexes/Creinhardtii_236_notmasked.fa')
 DEFAULT_ALL_GENOME_FILE = os.path.expanduser('~/experiments/reference_data/genomes_and_indexes/Chlre5-nm_chl-mit.fa')
 DEFAULT_GENOME_CASSETTE_FILE = os.path.expanduser('~/experiments/reference_data/genomes_and_indexes/Chlre5-nm_chl-mit_cassette-pMJ013b.fa')
 DEFAULT_GENE_POS_FILE = os.path.expanduser('~/experiments/reference_data/chlamy_annotation/Creinhardtii_236_gene.gff3')
