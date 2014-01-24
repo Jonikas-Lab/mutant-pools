@@ -29,6 +29,9 @@ GFF_strands = {1:'+', -1:'-'}
 
 ### Help functions used in main - the inputs are GFF objects from an already parsed file
 
+class NoRNAError(Exception):        pass
+class MultipleRNAError(Exception):  pass
+
 def check_for_overlapping_genes(sequence_record):
     """ Given a GFF sequence record (from BCBio.GFF parser), return list of tuples of IDs of overlapping genes.  
     Not perfect: may miss some of the overlaps if some genes are completely contained within other genes (raises warning), 
@@ -142,15 +145,19 @@ def get_feature_start_end(feature_record):
 def get_gene_start_end_excluding_UTRs(gene_record):
     """ Get the start of the first CDS feature and the end of the last one, (as numbers, 1-based, end-inclusive).
 
-    If gene has no mRNAs or more than one, just return None.
+    If gene has no mRNAs or more than one, raise exception.
 
     BCBio uses 0-based end-exclusive positions, so the first two bases are 0-2; this uses 1-based end-inclusive, so they're 1-2.
     """
-    if len(gene_record.sub_features) != 1:  return None
+    if len(gene_record.sub_features) == 0:  
+        raise NoRNAError("Gene %s has no RNA - can't determine CDS start/end!"%gene_record.id)
+    if len(gene_record.sub_features) > 1:   
+        raise MultipleRNAError("Gene %s has multiple RNAs - can't determine single CDS start/end!"%gene_record.id)
     features = gene_record.sub_features[0].sub_features
     CDS_positions = [get_feature_start_end(feature) for feature in features if feature.type=='CDS']
     CDS_starts, CDS_ends = zip(*CDS_positions)
     return min(CDS_starts), max(CDS_ends)
+    # TODO unit-test!
 
 
 def gene_positions(genefile, include_chromosome=True, include_strand=True, coding_only=False, ignore_strange_cases=False):
@@ -177,10 +184,10 @@ def gene_positions(genefile, include_chromosome=True, include_strand=True, codin
                 if not coding_only:
                     full_pos_info += get_feature_start_end(gene_record)
                 else:
-                    start_end = get_gene_start_end_excluding_UTRs(gene_record)
-                    if start_end is None:
+                    try:    start_end = get_gene_start_end_excluding_UTRs(gene_record)
+                    except (NoRNAError, MultipleRNAError):
                         if ignore_strange_cases:    continue
-                        else:                       raise Exception("Gene %s has 0 or more than 1 mRNAs!"%gene_record.id)
+                        else:                       raise
                     full_pos_info += start_end
                 gene_positions[gene_record.id] = full_pos_info
     return gene_positions
