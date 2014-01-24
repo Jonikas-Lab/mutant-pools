@@ -24,6 +24,7 @@ import mutant_analysis_classes
 import mutant_utilities
 from mutant_utilities import get_histogram_data_from_positions, get_mutant_positions_from_dataset, get_chromosome_lengths, get_20bp_fraction
 import gff_examine_file
+from gff_examine_file import MultipleRNAError, NoRNAError
 
 # constants, help functions, etc
 format_bp = lambda x: basic_seq_utilities.format_base_distance(x, False)    # the False is to not approximate
@@ -271,30 +272,66 @@ def _next_feature(feature_iterator, curr_pos):
             break
     return feature
 
-def _next_gene(gene_iterator, curr_pos, gene_mappable_lengths, gene_mappable_lengths_binned, N_bins, exclude_UTRs_in_bins):
-    """ Advance the gene until curr_pos <= gene_end, and return (gene_record,ID,start,end); don't catch StopIteration. 
+def _next_gene_for_mapp(gene_iterator, curr_mapp_pos, gene_mappable_lengths, gene_mappable_lengths_binned, 
+                        N_bins, exclude_UTRs_in_bins, skip_multiple_splice_variants=True):
+    """ Advance the gene until curr_mapp_pos <= gene_end, and return (gene_record,ID,start,end); don't catch StopIteration. 
 
-    This assumes the gene does need to be advanced at least once (i.e. that curr_pos is over the current gene end).
+    The point of this is that curr_mapp_pos should be the next mappable position, and the current position of gene_iterator
+     is around the previous mappable position - so advance gene_iterator to the first gene that has any mappable positions, 
+     and for all genes in between, just add them to gene_mappable_lengths and gene_mappable_lengths_binned 
+      with all mappable lengths set to zero.
+    If curr_mapp_pos is None, assume there are no more mappable positions until the end of gene_iterator 
+     (which is probably the chromosome), so go to the end.
+
+    This also advances the feature_iterator of the gene, likewise going on to the first feature that overlaps curr_mapp_pos.
+
+    If skip_multiple_splice_variants is True, genes with multiple splice variants are treated as follows:
+        - STILL COUNTED for total gene mappable lengths, AND for binned mappable lengths IF exclude_UTRs_in_bins is False, 
+            since splice variants aren't relevant to that!
+        - SKIPPED for the purposes of binned mappable lengths if exclude_UTRs_in_bins is True: 
+            bin_start and bin_end are set to gene_start so that the binned length is 0
+        - SKIPPED for feature mappable length - feature_iterator is set to contain a single gene-length feature 
+            named MULTIPLE_SPLICE_VARIANTS, which can be thrown away later if desired.
+      If there's a gene with multiple splice variants and skip_multiple_splice_variants is False, an exception will be raised.
+
+    This assumes the gene does need to be advanced at least once (i.e. that curr_mapp_pos > current gene end).
     """
-    # if no curr_pos given, just go over all the genes - set curr_pos to infinity so it's always > gene_end
+    # if no curr_mapp_pos given, just go over all the genes
     gene_end = 0
-    while curr_pos is None or curr_pos > gene_end:
+    while curr_mapp_pos is None or curr_mapp_pos > gene_end:
         gene_record = gene_iterator.next()
         gene_name = gene_record.id
         gene_start, gene_end = gff_examine_file.get_feature_start_end(gene_record)
         # get the start/end of the length we want binned mappabilies of
         if exclude_UTRs_in_bins is False:   bin_start, bin_end = gene_start, gene_end
-        else:                               bin_start, bin_end = gff_examine_file.get_gene_start_end_excluding_UTRs(gene_record)
+        else:                               
+            try:                            bin_start, bin_end = gff_examine_file.get_gene_start_end_excluding_UTRs(gene_record)
+            except MultipleRNAError:        
+                # if "skipping" a gene due to multiple splice variants, just make a fake zero-length region for binning,
+                #   since we don't want to skip it entirely (we want to add it to gene_mappable_lengths!), and at the end 
+                #   to make a full Gene object, bin_start and bin_end are required.
+                #   doing features, to make a 
+                if skip_multiple_splice_variants:   bin_start, bin_end = gene_start, gene_start
+                else:                               raise
         # when starting a new gene, set its mappable total and binned lengths to 0
         gene_mappable_lengths[gene_name] = 0
         gene_mappable_lengths_binned[gene_name] = [0 for _ in range(N_bins)]
     # now create the final gene record, including a feature iterator
-    assert len(gene_record.sub_features) == 1, "Gene %s has 0 or more than 1 mRNAs!"%gene_name
-    feature_iterator = iter(sorted([Feature(feature.type, *gff_examine_file.get_feature_start_end(feature)) 
-                                    for feature in gene_record.sub_features[0].sub_features], key=lambda feature: feature.start))
+    if len(gene_record.sub_features) == 0:  
+        raise NoRNAError("Gene %s has no RNA - can't determine feature mappability!"%gene_name)
+    # if we have a gene with one splice variant, make a feature iterator for it. 
+    if len(gene_record.sub_features) == 1:   
+        feature_iterator = iter(sorted([Feature(feature.type, *gff_examine_file.get_feature_start_end(feature)) 
+                                        for feature in gene_record.sub_features[0].sub_features], key=lambda feature: feature.start))
+    # if multiple splice variants, raise exception if desired, otherwise make the feature iterator be a fake single feature.
+    else:
+        if skip_multiple_splice_variants:
+            feature_iterator = iter([Feature('MULTIPLE_SPLICE_VARIANTS', gene_start, gene_end)])
+        else:
+            raise MultipleRNAError("Gene %s has multiple RNAs - can't determine single CDS start/end!"%gene_name)
     gene_strand = gff_examine_file.GFF_strands[gene_record.strand]
     gene = Gene(gene_record, gene_name, gene_start, gene_end, gene_strand, bin_start, bin_end, feature_iterator)
-    feature = _next_feature(feature_iterator, curr_pos)
+    feature = _next_feature(feature_iterator, curr_mapp_pos)
     return gene, feature
 
 def _save_gene_bin_mappability(mappable_positions, gene, gene_mappable_lengths_binned, N_bins):
@@ -327,23 +364,23 @@ def gene_mappability(mappability_by_flanking_region, genefile=mutant_utilities.D
     if not split_into_bins > 1:  raise Exception("split_into_bins must be >1!")
     gene_mappable_lengths = {}
     gene_mappable_lengths_binned = {}
-    feature_total_mappable_lengths = {'CDS':0, 'five_prime_UTR':0, 'three_prime_UTR':0}
+    feature_total_mappable_lengths = {'CDS':0, 'five_prime_UTR':0, 'three_prime_UTR':0, 'MULTIPLE_SPLICE_VARIANTS':0}
     # define some convenience functions to avoid re-typing things - note that these don't use the given variables as defaults, 
     #  so they're NOT closures, they don't store the at-definition value of the given variables, 
     #   but just using their at-call-time values as if they were globals (which they are), as far as I can tell.
-    next_gene = lambda (curr_pos): _next_gene(genes_by_start_pos, curr_pos, gene_mappable_lengths, 
-                                              gene_mappable_lengths_binned, split_into_bins, exclude_UTRs_in_bins)
+    next_gene = lambda (curr_pos): _next_gene_for_mapp(genes_by_start_pos, curr_pos, gene_mappable_lengths, 
+                                                       gene_mappable_lengths_binned, split_into_bins, exclude_UTRs_in_bins)
     save_gene_binned_mappability = lambda: _save_gene_bin_mappability(curr_gene_mappable_positions, curr_gene, 
                                                                       gene_mappable_lengths_binned, split_into_bins)
     # go over the gff genefile by chromosome
     # MAYBE-TODO this currently mixes GFF parsing and getting the mappability data - would it be better to separate them?
     #  I could write a gff_examine_file.py function to get the positions of all the features, 
     #   but dealing with that would probably be more complicated than just doing it the current way...
-    # TODO what about chromosomes that aren't in GENEFILE at all??  Those need to be taken into account too! FIX THAT!
+    # chromosomes that aren't in GENEFILE presumably have no genes - no need to care about them.
     with open(os.path.expanduser(genefile)) as GENEFILE:
         for chromosome_record in gff_examine_file.GFF.parse(GENEFILE):
             chromosome = chromosome_record.id
-            # if this chromosome has no genes, go on to the next one
+            # if this chromosome has no genes, go on to the next one - we only care about genes here.
             if not len(chromosome_record.features):
                 continue
             genes_by_start_pos = iter(sorted(chromosome_record.features, key=lambda gene_record:gene_record.location.start.position))
@@ -398,13 +435,16 @@ def gene_mappability(mappability_by_flanking_region, genefile=mutant_utilities.D
             except StopIteration:   pass
 
     # add 'gene', 'intron', 'intergenic' and 'all' categories to feature_total_mappable_lengths, calculating from existing data
+    # LATER-TODO this is still ignoring UTR introns, i.e. counting them as introns!  Should fix that, but it's complicated...  
+    # Well, UTR introns aren't that difficult from other introns - and anyway hopefully there isn't a lot of them.
     feature_total_mappable_lengths['all'] = sum( sum( len(chrom_mappable_positions) 
                                                       for chrom_mappable_positions in mappability_dict.values() ) 
                                                  for mappability_dict in mappability_by_flanking_region.values() )
     feature_total_mappable_lengths['gene'] = sum(gene_mappable_lengths.values())
     feature_total_mappable_lengths['intergenic'] = feature_total_mappable_lengths['all'] - feature_total_mappable_lengths['gene']
-    mapp_exon_and_UTR = sum(feature_total_mappable_lengths[feature] for feature in 'CDS five_prime_UTR three_prime_UTR'.split())
-    feature_total_mappable_lengths['intron'] = feature_total_mappable_lengths['gene'] - mapp_exon_and_UTR
+    feature_total_mappable_lengths['intron'] = feature_total_mappable_lengths['gene'] - sum(feature_total_mappable_lengths[x] 
+                                                    for x in "CDS five_prime_UTR three_prime_UTR MULTIPLE_SPLICE_VARIANTS".split())
+    # MAYBE-TODO remove the throwaway MULTIPLE_SPLICE_VARIANTS category?
     # Convert all the results from counts of mappable positions to actual mappable lengths (<= real lengths).
     #  Note that all the mappable lengths are actually just the counts of mappable positions right now: 
     #   so if mappability_by_flanking_region was generated with one flanking region length, 
@@ -1076,7 +1116,7 @@ class Testing(unittest.TestCase):
                     assert gene_mapp == {'gene1_plus':0, 'gene2_minus':0}
                     assert gene_mapp_2bins == {'gene1_plus':[0,0], 'gene2_minus':[0,0]}
                     assert feature_mapp == {'CDS':0, 'five_prime_UTR':0, 'three_prime_UTR':0, 
-                                            'intron':0, 'gene':0, 'intergenic':0, 'all':0}
+                                            'intron':0, 'gene':0, 'intergenic':0, 'all':0, 'MULTIPLE_SPLICE_VARIANTS':0}
         ### test 2: intergenic mappable positions only (for simplicity); testing mappability multiplier and strandedness.
         #  If we have mappability on a DIFFERENT chromosome that has no genes on it, 
         #   we get non-zero intergenic/all feature mappability values.
@@ -1097,7 +1137,7 @@ class Testing(unittest.TestCase):
                                                                             2, exclude_UTRs_in_bins)
                 assert (gene_mapp, gene_mapp_2bins) == ({'gene1_plus':0, 'gene2_minus':0}, {'gene1_plus':[0,0], 'gene2_minus':[0,0]})
                 assert feature_mapp == {'CDS':0, 'five_prime_UTR':0, 'three_prime_UTR':0, 'intron':0, 'gene':0, 
-                                        'intergenic':mapp_count, 'all':mapp_count}
+                                        'intergenic':mapp_count, 'all':mapp_count, 'MULTIPLE_SPLICE_VARIANTS':0}
         ### test 3: some realistic mappable positions (some gene, some intergenic; remember gene2 is -strand!)
         # help function to auto-make mappability_data: assume flank-length and chromosome; use every position twice, once per strand
         _make_mapp_data = lambda mappability_val: {10: {'chrA': sorted(mappability_val*2)}}
@@ -1105,26 +1145,31 @@ class Testing(unittest.TestCase):
         gene_mapp, gene_mapp_2bins, feature_mapp = gene_mappability(_make_mapp_data([150,250,251, 1000, 1150,1250, 2000]), 
                                                                     test_gene_infile, 2, exclude_UTRs_in_bins=False)
         assert (gene_mapp,gene_mapp_2bins) == ({'gene1_plus':3, 'gene2_minus':2}, {'gene1_plus':[3,0], 'gene2_minus':[0,2]})
-        assert feature_mapp == {'CDS':3, 'five_prime_UTR':1, 'three_prime_UTR':0, 'intron':1, 'gene':5, 'intergenic':2, 'all':7}
+        assert feature_mapp == {'CDS':3, 'five_prime_UTR':1, 'three_prime_UTR':0, 'intron':1, 'gene':5, 'intergenic':2, 'all':7, 
+                                'MULTIPLE_SPLICE_VARIANTS':0}
         # version with exclude_UTRs_in_bins=True - only gene_mapp_2bins is changed, since one gene1 position was UTR
         gene_mapp, gene_mapp_2bins, feature_mapp = gene_mappability(_make_mapp_data([150,250,251, 1000, 1150,1250, 2000]), 
                                                                     test_gene_infile, 2, exclude_UTRs_in_bins=True)
         assert (gene_mapp,gene_mapp_2bins) == ({'gene1_plus':3, 'gene2_minus':2}, {'gene1_plus':[2,0], 'gene2_minus':[0,2]})
-        assert feature_mapp == {'CDS':3, 'five_prime_UTR':1, 'three_prime_UTR':0, 'intron':1, 'gene':5, 'intergenic':2, 'all':7}
+        assert feature_mapp == {'CDS':3, 'five_prime_UTR':1, 'three_prime_UTR':0, 'intron':1, 'gene':5, 'intergenic':2, 'all':7, 
+                                'MULTIPLE_SPLICE_VARIANTS':0}
         ## test 3b: checking edges - mappable positions right at the edge of intron/feature/intergenic
         gene_mapp, gene_mapp_2bins, feature_mapp = gene_mappability(_make_mapp_data([400,401, 600,601, 700,701, 
                                                                                      1100,1101, 1200,1201]), 
                                                                     test_gene_infile, 2, exclude_UTRs_in_bins=False)
         assert (gene_mapp,gene_mapp_2bins) == ({'gene1_plus':5, 'gene2_minus':3}, {'gene1_plus':[1,4], 'gene2_minus':[0,3]})
-        assert feature_mapp == {'CDS':4, 'five_prime_UTR':0, 'three_prime_UTR':2, 'intron':2, 'gene':8, 'intergenic':2, 'all':10}
+        assert feature_mapp == {'CDS':4, 'five_prime_UTR':0, 'three_prime_UTR':2, 'intron':2, 'gene':8, 'intergenic':2, 'all':10, 
+                                'MULTIPLE_SPLICE_VARIANTS':0}
         # version with exclude_UTRs_in_bins=True - only gene_mapp_2bins is changed, since two gene1 positions were UTR
         gene_mapp, gene_mapp_2bins, feature_mapp = gene_mappability(_make_mapp_data([400,401, 600,601, 700,701, 
                                                                                      1100,1101, 1200,1201]), 
                                                                     test_gene_infile, 2, exclude_UTRs_in_bins=True)
         assert (gene_mapp,gene_mapp_2bins) == ({'gene1_plus':5, 'gene2_minus':3}, {'gene1_plus':[1,2], 'gene2_minus':[0,3]})
-        assert feature_mapp == {'CDS':4, 'five_prime_UTR':0, 'three_prime_UTR':2, 'intron':2, 'gene':8, 'intergenic':2, 'all':10}
+        assert feature_mapp == {'CDS':4, 'five_prime_UTR':0, 'three_prime_UTR':2, 'intron':2, 'gene':8, 'intergenic':2, 'all':10, 
+                                'MULTIPLE_SPLICE_VARIANTS':0}
         # MAYBE-TODO add separate tests of the help functions?
         # MAYBE-TODO add tests for error/weird cases? overlapping features, 0-length stuff, etc...
+        # TODO add multiple splice variant cases to unit-tests!
         
     # LATER-TODO add unit-tests for other stuff!
 
