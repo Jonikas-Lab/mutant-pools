@@ -712,9 +712,10 @@ def genes_with_N_mutants(dataset, subset_sizes=100, max_N_mutants=3, N_mutants_c
     # default total_genes: extract from dataset if possible; 
     #  if not (dataset missing that attribute, dataset is a mutant list, or dataset value is None as well), use hardcoded default. 
     if total_genes is None:
-        try:                    total_genes = dataset.total_genes_in_genome
-        except AttributeError:  pass
-        if total_genes is None: total_genes = 17114
+        try:                    
+            total_genes = dataset.total_genes_in_genome
+        except AttributeError:  
+            raise Exception("Can't determine the total number of genes from the dataset - provide as an argument!")
 
     # if subset_sizes is a number, make it a list by using it as a range increment
     if not hasattr(subset_sizes, '__len__'):
@@ -744,7 +745,7 @@ def genes_with_N_mutants(dataset, subset_sizes=100, max_N_mutants=3, N_mutants_c
             plot_kwargs = {} 
             if N_mutants_colors:    plot_kwargs['color'] = N_mutants_colors[N_mutants-1]
             if rasterize_data:      plot_kwargs['rasterized'] = True
-            mplt.plot(len(dataset), gene_counts, '.', linewidth=0, markeredgecolor='black',**plot_kwargs)
+            mplt.plot(len(dataset), gene_counts, '.', linewidth=0, markeredgecolor='None',**plot_kwargs)
     # add a line at the total gene number - TODO this doesn't work right... figure out sensible xmin/xmax values, reset xlim
     mplt.legend(loc='upper left', prop=FontProperties(size='medium'))
 
