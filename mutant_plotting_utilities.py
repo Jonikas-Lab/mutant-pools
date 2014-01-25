@@ -955,14 +955,14 @@ def insertions_over_gene_length_pvalues(mutant_data_by_orientation, gene_effecti
 
 ### bar-chart of the density of insertions in different gene features, for all genes combined
 
-def _adjust_feature_mutant_counts(feature_mutant_counts):
+def _adjust_feature_mutant_counts(feature_mutant_counts, ignore_UTR_introns=True):
     """ Make adjustments to a raw feature mutant count to make it fit desired format for insertion_density_by_feature.
 
     Changes made:
     - change '-' to 'intergenic'
     - add the 'all' category (sum of all other categories - assumes categories are non-overlapping!)
     - add the 'intergenic' category ('all' minus 'gene')
-    - remove the feature-boundary categories (usually below 1%) 
+    - remove the feature-boundary categories (usually below 1%) and the overlapping-gene categories
         (they'll still be counted in the 'all' and 'gene' categories, just not as separate feature categories)
     """
     # make a new copy of the input before making any changes
@@ -975,6 +975,10 @@ def _adjust_feature_mutant_counts(feature_mutant_counts):
     # remove the boundary mutants - AFTER getting the all/gene categories, so they're still counted in those!
     for feature in list(feature_mutant_counts):
        if '/' in feature:  del feature_mutant_counts[feature]
+       if '&' in feature:  del feature_mutant_counts[feature]
+    if ignore_UTR_introns==True:
+        feature_mutant_counts['five_prime_UTR'] = feature_mutant_counts.pop("5'UTR") + feature_mutant_counts.pop("5'UTR_intron")
+        feature_mutant_counts['three_prime_UTR'] = feature_mutant_counts.pop("3'UTR") + feature_mutant_counts.pop("3'UTR_intron")
     return feature_mutant_counts
 
 def insertion_density_by_feature(dataset, feature_lengths, separate_sense_antisense=True, show_both_for_all=True, 
@@ -995,7 +999,7 @@ def insertion_density_by_feature(dataset, feature_lengths, separate_sense_antise
     Ignores insertions on feature boundaries (usually <1%) - they're not counted as a separate feature, 
      but still included in gene/all insertion counts.
     """
-    features_printable = "all intergenic gene exon intron 5'UTR 3'UTR"
+    features_printable = "all intergenic gene exon intron 5'UTR 3'UTR MULTIPLE_SPLICE_VARIANTS"
     features_order = features_printable.replace("5'", "five_prime_").replace("3'", "three_prime_").replace('exon','CDS').split()
     ### if not separating sense and antisense, just get the feature counts and densities and plot them as a single set of bars
     if not separate_sense_antisense:
