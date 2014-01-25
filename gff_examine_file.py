@@ -208,15 +208,15 @@ def gene_lengths(genefile, exclude_UTRs=False, ignore_strange_cases=False):
     return gene_lengths
 
 
-def feature_total_lengths(genefile, ignore_strange_cases=False, genome_fasta_file=DEFAULT_NUCLEAR_GENOME_FILE):
+def feature_total_lengths(genefile, ignore_multiple_splice_variants=False, genome_fasta_file=DEFAULT_NUCLEAR_GENOME_FILE):
     """ Return a dict containing the total lengths of all genes, exons, introns, 5' and 3' UTRs, and intergenic spaces. 
 
     Using the feature names from the gff file - usually "CDS" is used instead of "exon", 
      since technically "exon" would include the UTRs, and here we want to separate them.
 
-    If  a gene doesn't have an mRNA with exons, or has multiple mRNAs, raise an Exception, 
-     unless ignore_strange_cases is True, then just ignore those cases for the purpose of total gene feature lengths
-      (but not for total gene length).
+    If  a gene doesn't have an mRNA, raise exception. 
+    If it has multiple RNAs, raise exception, unless ignore_multiple_splice_variants is True, then just ignore those cases 
+     for the purpose of total gene feature lengths (but not for total gene length).
 
     To get the correct total intergenic space size, input the path to a genome_fasta_file containing the chromosome sequences, 
      to get chromosome lengths, since the gff genefile file doesn't have those.  
@@ -233,20 +233,27 @@ def feature_total_lengths(genefile, ignore_strange_cases=False, genome_fasta_fil
         for chromosome_record in GFF.parse(GENEFILE, base_dict=fasta_seq_dict):
             total_genome_length += len(chromosome_record.seq)
             for gene_record in chromosome_record.features:
-                feature_total_lengths['gene'] += (gene_record.location.end.position - gene_record.location.start.position)
-                if len(gene_record.sub_features) != 1:
-                    if ignore_strange_cases:    continue
-                    else:                       raise Exception("Gene %s has 0 or more than 1 mRNAs!"%gene_record.id)
-                features = gene_record.sub_features[0].sub_features
-                for feature in features:
-                    feature_total_lengths[feature.type] += (feature.location.end.position - feature.location.start.position)
+                gene_length = gene_record.location.end.position - gene_record.location.start.position
+                feature_total_lengths['gene'] += gene_length
+                if len(gene_record.sub_features) == 0:
+                    raise NoRNAError("Gene %s has no RNA - can't determine CDS start/end!"%gene_record.id)
+                if len(gene_record.sub_features) > 1:
+                    if ignore_multiple_splice_variants:    
+                        feature_total_lengths['MULTIPLE_SPLICE_VARIANTS'] += gene_length
+                        continue
+                    else:                       
+                        raise MultipleRNAError("Gene %s has multiple RNAs - can't determine single CDS start/end!"%gene_record.id)
+                else:
+                    features = gene_record.sub_features[0].sub_features
+                    for feature in features:
+                        feature_total_lengths[feature.type] += (feature.location.end.position - feature.location.start.position)
     # calculate total intron length from total gene and exon/UTR length
     feature_total_lengths['intron'] = feature_total_lengths['gene'] - sum(length for feature,length 
                                                                           in feature_total_lengths.items() if feature != 'gene')
     # calculate total intergenic length from total genome and gene length
     feature_total_lengths['all'] = total_genome_length
     feature_total_lengths['intergenic'] = total_genome_length - feature_total_lengths['gene']
-    return feature_total_lengths
+    return dict(feature_total_lengths)
 
 
 ### Functions for parsing JGI GFF2-format file 
