@@ -484,7 +484,8 @@ def plot_hot_cold_spot_overlapping(hc_spot_list, pval_cutoffs, all_chromosomes=N
         else:
             raise Exception("If pval_cutoffs isn't length 2-3, must provide pval_cutoff_colors, no default!")
     if all_chromosomes is None:
-        all_chromosomes = list(set(hc_data[0] for hc_data in hc_spot_list))
+        all_chromosomes = sorted(set(hc_data[0] for hc_data in hc_spot_list))
+        # TODO but they'll be sorted wrong, if numbers are involved!
     else:
         all_chromosomes = list(all_chromosomes)
     if chrom_numbers is None:
