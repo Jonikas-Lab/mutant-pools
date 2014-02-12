@@ -61,6 +61,7 @@ def do_test_run():
                  ('remove-not-other-perfect', "-X %s -P -Z4 -n0"%dataset_to_remove, [aln_infile2]),
                  ('old-infile-format', "-e 5prime -r forward -n3 -L", [aln_infile0]),
                 ]
+    # TODO add run-test for removing data from multiple files?
     # MAYBE-TODO add run-test for a metadata file with 5' and 3' read counts?
     # MAYBE-TODO add run-tests for other mutant-merging options?  But they all have pretty good unit-tests.
     # MAYBE-TODO add run-test for --gene_annotation_file?
@@ -137,8 +138,9 @@ def define_option_parser():
                       help="For adjacent and tandem merging/counts: include mutants in non-cassette non-nuclear chromosomes "
                           +"(like chloroplast and mitochondrial) (default %default)")
 
-    parser.add_option('-x', '--remove_mutants_from_file', metavar='FILE',
-                      help='Remove all mutants present in FILE from the datasets (see -z/-p for read count cutoff).')
+    parser.add_option('-x', '--remove_mutants_from_file', metavar='FILE1,FILE2',
+                      help='Remove all mutants present in FILE1,FILE2,etc from the datasets (see -z/-p for read count cutoff).'
+                          +' Any number of files is allowed - must be comma-separated without spaces.')
     parser.add_option('-z', '--remove_from_file_readcount_min', type='int', default=1, metavar='M',
                       help='When applying -x, only remove mutants with at least N reads in FILE (default %default).')
     parser.add_option('-p', '--remove_from_file_min_is_perfect', action='store_true', default=False,
@@ -490,13 +492,15 @@ def main(infiles, outfile, options):
     ### optionally remove mutants based on another dataset - BEFORE adjacent mutant counting/merging
     # remove mutants that ARE present in another file (also do it for cassette mutants if those are separate)
     if options.remove_mutants_from_file:
-        other_dataset = mutant_analysis_classes.read_mutant_file(options.remove_mutants_from_file)
-        all_alignment_data.remove_mutants_in_other_dataset(other_dataset, 
-                 readcount_min=options.remove_from_file_readcount_min, perfect_reads=options.remove_from_file_min_is_perfect)
-        if options.separate_cassette:
-            cassette_alignment_data.remove_mutants_in_other_dataset(other_dataset, 
-                 readcount_min=options.remove_from_file_readcount_min, perfect_reads=options.remove_from_file_min_is_perfect)
+        for other_file in options.remove_mutants_from_file.split(','):
+            other_dataset = mutant_analysis_classes.read_mutant_file(other_file)
+            all_alignment_data.remove_mutants_in_other_dataset(other_dataset, 
+                     readcount_min=options.remove_from_file_readcount_min, perfect_reads=options.remove_from_file_min_is_perfect)
+            if options.separate_cassette:
+                cassette_alignment_data.remove_mutants_in_other_dataset(other_dataset, 
+                     readcount_min=options.remove_from_file_readcount_min, perfect_reads=options.remove_from_file_min_is_perfect)
     # remove mutants that are NOT present in another file (also do it for cassette mutants if those are separate)
+    # TODO should I implement using multiple files here too?
     if options.remove_mutants_not_from_file:
         other_dataset = mutant_analysis_classes.read_mutant_file(options.remove_mutants_not_from_file)
         all_alignment_data.remove_mutants_not_in_other_dataset(other_dataset, 
