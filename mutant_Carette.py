@@ -589,6 +589,25 @@ def distance_histogram(distance_datasets, labels=None, colors=None, linestyles=N
         plotting_utilities.savefig(outfile, filetypes)
     mplt.close()
 
+def plot_confirmed_dist_vs_percent(dataset, dataset_name, min_genomic_reads=1, min_conf_reads=1, max_allowed_distance=3000,
+                                   markersize=4, alpha=0.3, color='black'):
+    """ Make a max-confirmed-distance vs %-confirming-reads scatterplot.
+    """
+    D = max_allowed_distance
+    basic_mutant_data = [(m.Carette_max_confirmed_distance(D), m.Carette_N_confirming_reads(D), m.Carette_N_non_confirming_reads(D)) 
+                         for m in dataset]
+    filtered_data = [x for x in basic_mutant_data if x[1]+x[2]>min_genomic_reads and x[1]>min_conf_reads]
+    print "Filtering data (only include mutants with at least %s total genomic reads and at least %s confirming reads): %s/%s passed filter"%(min_genomic_reads, min_conf_reads, len(filtered_data), len(basic_mutant_data))
+    max_conf_len = [x[0] for x in filtered_data]
+    percent_wrong_reads = [x[2]/(x[1]+x[2])*100 for x in filtered_data]
+    mplt.plot(max_conf_len, percent_wrong_reads, 
+              marker='.', markerfacecolor=color, markersize=markersize, linestyle='None', markeredgecolor='None', alpha=alpha)
+    mplt.xlabel('max distance between cassette-side sequence and matching genome-side read')
+    mplt.ylabel("% reads that don't match the cassette-side sequence")
+    mplt.ylim(-1, 101)
+    mplt.title('Data on Carette genome-side reads confirming the cassette-side sequence,\n dataset %s, min %s total and %s confirming reads.'%(dataset_name, min_genomic_reads, min_conf_reads))
+
+
 ############################################### Tests ##############################################################
 
 class Testing_all(unittest.TestCase):
