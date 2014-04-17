@@ -590,7 +590,7 @@ def distance_histogram(distance_datasets, labels=None, colors=None, linestyles=N
     mplt.close()
 
 def plot_confirmed_dist_vs_percent(dataset, dataset_name, min_genomic_reads=1, min_conf_reads=1, mutant_filter=None, 
-                                   max_allowed_distance=3000, markersize=4, alpha=0.3, color='black'):
+                                   xmax=None, max_allowed_distance=3000, markersize=4, alpha=0.3, color='black'):
     """ Make a max-confirmed-distance vs %-confirming-reads scatterplot.
     """
     D = max_allowed_distance
@@ -608,6 +608,7 @@ def plot_confirmed_dist_vs_percent(dataset, dataset_name, min_genomic_reads=1, m
     mplt.xlabel('max distance between cassette-side sequence and matching genome-side read')
     mplt.ylabel("% reads that don't match the cassette-side sequence")
     mplt.ylim(-1, 101)
+    if xmax is not None:    mplt.xlim(0, xmax)
     mplt.title('Data on Carette genome-side reads confirming the cassette-side sequence,\n dataset %s, min %s total and %s confirming reads.'%(dataset_name, min_genomic_reads, min_conf_reads))
 
 
