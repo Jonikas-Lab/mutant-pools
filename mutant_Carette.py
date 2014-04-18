@@ -30,6 +30,10 @@ from deepseq_utilities import Fake_deepseq_objects
 ############################### Constants and help functions #####################################
 
 MAX_POSITION_DISTANCE = 1500
+UNALIGNED_POSITION = "UNALIGNED"
+MULTI_ALIGNED_POSITION = "MULTIPLE"
+BAD_POSITIONS = [UNALIGNED_POSITION, MULTI_ALIGNED_POSITION]
+# TODO make all the code below use this!
 
 def get_Carette_pos_from_flanking_region_pos(flanking_region_pos, cassette_end, reads_are_reverse=False, immutable_position=True):
     """ Return a Insertion_position instance giving the position of the far end of Carette genome-side read.
@@ -107,6 +111,9 @@ class Insertional_mutant_Carette(Insertional_mutant):
          or None/"Multiple" or such if not); if HTSeq_alignment is given, method does NOT check that new_position matches it.
         """
         # TODO make sure this makes sense!
+        if not isinstance(new_position, Insertion_position) and new_position not in BAD_POSITIONS:
+            raise MutantError("Carette read position %s is unacceptable - must be Insertion_position object or one of %s!"%(
+                new_position, ', '.join(BAD_POSITIONS)))
         mutant = Insertional_mutant(new_position)
         if HTSeq_alignment is not None and seq is not None:
             raise MutantError("When running add_Carette_read, can't give BOTH HTSeq_alignment and seq!")
@@ -186,9 +193,8 @@ class Insertional_mutant_Carette(Insertional_mutant):
 
     @property
     def Carette_N_unaligned_reads(self):
-        return sum(1 for read_data in self.Carette_genome_side_reads if read_data.position in 'UNALIGNED MULTIPLE'.split())
+        return sum(1 for read_data in self.Carette_genome_side_reads if (read_data.position in BAD_POSITIONS))
         # TODO if I change to treating multiple as aligned, will this need to change?
-        # TODO all this UNALIGNED/MULTIPLE stuff is text, should probably change it to constants!
 
     @property
     def Carette_N_genomic_reads(self):
@@ -284,10 +290,11 @@ class Insertional_mutant_Carette(Insertional_mutant):
     def Carette_max_confirmed_distance(self, max_distance=MAX_POSITION_DISTANCE):
         """ Return the distance between the cassette-side read and the furthest-away same-area genome-side read.
 
-        Return NaN if no same-area genome-side reads.
+        Return 0 if no same-area genome-side reads, and NaN if there are no uniquely aligned genome-side reads at all.
         """
-        # TODO better docstring, unit-tests!
         distances = []
+        if self.Carette_N_confirming_reads(max_distance) + self.Carette_N_non_confirming_reads(max_distance) == 0:
+            return float('NaN')
         for Carette_read_data in self.Carette_genome_side_reads:
             # Only look at the genome-side reads that match the cassette-side read position!
             # There's a try/except because unaligned reads don't have proper positions.
@@ -304,7 +311,8 @@ class Insertional_mutant_Carette(Insertional_mutant):
         try:
             return max(distances)
         except ValueError:
-            return float('NaN')
+            return 0
+        # this is basically unit-tested by the tests for add_Carette_read and improve_best_Carette_read
 
     # TODO add new method that infers the approximate real insertion location!
 
@@ -395,7 +403,7 @@ class Insertional_mutant_pool_dataset_Carette(Insertional_mutant_pool_dataset):
                         raise MutantError("Multiple alignments make no sense with best_only flag!")
                     if read_ID in read_IDs:
                         continue
-                    mutant.add_Carette_read(new_position='MULTIPLE', HTSeq_alignment=None, seq=aln.read.seq)
+                    mutant.add_Carette_read(new_position=MULTI_ALIGNED_POSITION, HTSeq_alignment=None, seq=aln.read.seq)
                 # for normal alignments, use full alignment to add read info
                 else:
                     if read_ID in read_IDs:
@@ -413,9 +421,9 @@ class Insertional_mutant_pool_dataset_Carette(Insertional_mutant_pool_dataset):
                 raise MutantError("Fasta files (multiple or unaligned) make no sense with best_only flag!")
             if not multiple_alignment:
                 print "Assuming reads in %s are unaligned."%genome_side_infile
-                position_val = 'UNALIGNED'
+                position_val = UNALIGNED_POSITION
             else:
-                position_val = 'MULTIPLE'
+                position_val = MULTI_ALIGNED_POSITION
             for name,seq in parse_fasta(genome_side_infile):
                 try:                mutant_pos = read_ID_to_position[name]
                 except KeyError:    continue
@@ -644,6 +652,7 @@ class Testing_all(unittest.TestCase):
 
     def test__add_Carette_read(self):
         """ Also tests Carette_max_confirmed_distance """
+        # make the cassette-side read
         Fake_HTSeq_alignment = Fake_deepseq_objects.Fake_HTSeq_alignment
         pos0 = Insertion_position('chr1','+',position_before=100)
         aln0 = Fake_HTSeq_alignment(seq='AAA', readname='read1', pos=self._make_pos(pos0))
@@ -652,6 +661,13 @@ class Testing_all(unittest.TestCase):
         assert isnan(mutant.Carette_max_confirmed_distance(10))
         mutant.add_read(aln0)
         assert mutant.total_read_count == 1
+        assert isnan(mutant.Carette_max_confirmed_distance(10))
+        # add unaligned or multi-aligned Carette read - the max confirmed distance should still be NaN
+        mutant.add_Carette_read(new_position=UNALIGNED_POSITION, HTSeq_alignment=None, seq='AAA')
+        assert isnan(mutant.Carette_max_confirmed_distance(10))
+        mutant.add_Carette_read(new_position=MULTI_ALIGNED_POSITION, HTSeq_alignment=None, seq='AAA')
+        assert isnan(mutant.Carette_max_confirmed_distance(10))
+        # add Carette reads - a confirming one, a non-confirming one, and a weird one.
         pos1 = Insertion_position('chr1','+',position_before=0)
         aln1 = Fake_HTSeq_alignment(seq='AAA', readname='read1', pos=self._make_pos(pos1))
         mutant.add_Carette_read(pos1, HTSeq_alignment=aln1)
@@ -661,12 +677,13 @@ class Testing_all(unittest.TestCase):
         pos3 = Insertion_position('chr1','-',position_before=0)
         aln3 = Fake_HTSeq_alignment(seq='ACA', readname='read1', pos=self._make_pos(pos3))
         mutant.add_Carette_read(pos3, HTSeq_alignment=aln3)
-        assert len(mutant.Carette_genome_side_reads) == 3
-        assert [m.position.chromosome for m in mutant.Carette_genome_side_reads] == 'chr1 chr2 chr1'.split()
-        assert [m.position.strand for m in mutant.Carette_genome_side_reads] == '+ + -'.split()
+        assert len(mutant.Carette_genome_side_reads) == 5
+        aligned_mutants = [m for m in mutant.Carette_genome_side_reads if m.position not in BAD_POSITIONS]
+        assert [m.position.chromosome for m in aligned_mutants] == 'chr1 chr2 chr1'.split()
+        assert [m.position.strand for m in aligned_mutants] == '+ + -'.split()
         assert mutant.Carette_max_confirmed_distance(1000) == 100
         assert mutant.Carette_max_confirmed_distance(100) == 100
-        assert isnan(mutant.Carette_max_confirmed_distance(10))
+        assert mutant.Carette_max_confirmed_distance(10) == 0
 
     def test__improve_best_Carette_read(self):
         """ Also tests Carette_max_confirmed_distance """
@@ -682,24 +699,26 @@ class Testing_all(unittest.TestCase):
         assert mutant.total_read_count == 1
         assert isnan(mutant.Carette_max_confirmed_distance(1000))
         # add bad read first, then better ones, make sure they're replaced (or not, if both are equally bad)
+        #  (max confirmed distance should change from NaN to 0 once there are some non-confirming reads, 
+        #   then to a positive value once there are some confirming reads)
         pos1 = Insertion_position('chr2','+',position_before=10)
         aln1 = Fake_HTSeq_alignment(seq='AGA', readname='read1', pos=self._make_pos(pos1))
         mutant.improve_best_Carette_read(pos1, HTSeq_alignment=aln1, max_distance=50)
         assert len(mutant.Carette_genome_side_reads) == 1
         assert mutant.Carette_genome_side_reads[0].position.min_position == 10
-        assert isnan(mutant.Carette_max_confirmed_distance(1000))
+        assert mutant.Carette_max_confirmed_distance(1000) == 0
         pos2 = Insertion_position('chr1','-',position_before=11)
         aln2 = Fake_HTSeq_alignment(seq='ACA', readname='read1', pos=self._make_pos(pos2))
         mutant.improve_best_Carette_read(pos2, HTSeq_alignment=aln2, max_distance=50)
         assert len(mutant.Carette_genome_side_reads) == 1
         assert mutant.Carette_genome_side_reads[0].position.min_position == 10
-        assert isnan(mutant.Carette_max_confirmed_distance(1000))
+        assert mutant.Carette_max_confirmed_distance(1000) == 0
         pos3 = Insertion_position('chr1','+',position_before=12)
         aln3 = Fake_HTSeq_alignment(seq='AAA', readname='read1', pos=self._make_pos(pos3))
         mutant.improve_best_Carette_read(pos3, HTSeq_alignment=aln3, max_distance=50)
         assert len(mutant.Carette_genome_side_reads) == 1
         assert mutant.Carette_genome_side_reads[0].position.min_position == 10
-        assert isnan(mutant.Carette_max_confirmed_distance(1000))
+        assert mutant.Carette_max_confirmed_distance(1000) == 0
         pos4 = Insertion_position('chr1','+',position_before=80)
         aln4 = Fake_HTSeq_alignment(seq='AAA', readname='read1', pos=self._make_pos(pos4))
         mutant.improve_best_Carette_read(pos4, HTSeq_alignment=aln4, max_distance=50)
