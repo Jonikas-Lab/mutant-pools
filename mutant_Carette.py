@@ -597,7 +597,7 @@ def distance_histogram(distance_datasets, labels=None, colors=None, linestyles=N
         plotting_utilities.savefig(outfile, filetypes)
     mplt.close()
 
-def plot_confirmed_dist_vs_percent(dataset, dataset_name, min_genomic_reads=1, min_conf_reads=1, mutant_filter=None, 
+def plot_confirmed_dist_vs_percent(dataset, dataset_name, min_genomic_reads=1, min_conf_reads=0, mutant_filter=None, 
                                    xmax=None, max_allowed_distance=3000, markersize=4, alpha=0.3, color='black'):
     """ Make a max-confirmed-distance vs %-confirming-reads scatterplot.
     """
@@ -606,7 +606,7 @@ def plot_confirmed_dist_vs_percent(dataset, dataset_name, min_genomic_reads=1, m
     else:               mutants = dataset
     filtered_data = [(m.Carette_max_confirmed_distance(D), m.Carette_N_confirming_reads(D), m.Carette_N_non_confirming_reads(D)) 
                      for m in mutants]
-    filtered_data_2 = [x for x in filtered_data if x[1]+x[2]>min_genomic_reads and x[1]>min_conf_reads]
+    filtered_data_2 = [x for x in filtered_data if x[1]+x[2] >= min_genomic_reads and x[1] >= min_conf_reads]
     print "Filtering data: %s total mutants, %s passed general filter, %s passed readcount filter."%(len(dataset), 
                                                                                      len(filtered_data), len(filtered_data_2))
     max_conf_len = [x[0] for x in filtered_data_2]
@@ -616,7 +616,8 @@ def plot_confirmed_dist_vs_percent(dataset, dataset_name, min_genomic_reads=1, m
     mplt.xlabel('max distance between cassette-side sequence and matching genome-side read')
     mplt.ylabel("% reads that don't match the cassette-side sequence")
     mplt.ylim(-1, 101)
-    if xmax is not None:    mplt.xlim(0, xmax)
+    if xmax is None:    xmax = mplt.xlim()[1]
+    mplt.xlim(-10, xmax)
     mplt.title('Data on Carette genome-side reads confirming the cassette-side sequence,\n dataset %s, min %s total and %s confirming reads.'%(dataset_name, min_genomic_reads, min_conf_reads))
 
 
