@@ -327,7 +327,9 @@ class Insertional_mutant_Carette(Insertional_mutant):
         ### print cassette-side position
         OUTPUT.write("Cassette-side position:::\n")
         main_pos_fields = [self.position.chromosome, self.position.strand, self.position.full_position, self.gene, self.orientation, 
-                           self.gene_feature, self.get_main_sequence()[0]] + self.gene_annotation
+                           self.gene_feature, self.get_main_sequence()[0]]
+        try:                    main_pos_fields += self.gene_annotation
+        except AttributeError:  pass
         OUTPUT.write('\t'.join([str(x) for x in main_pos_fields]) + '\n')
         ### print lines for each of the Carette genome-side reads
         # sort the Carette reads by alignment position (chrom,strand,pos; unaligned go last)
@@ -338,10 +340,8 @@ class Insertional_mutant_Carette(Insertional_mutant):
             except AttributeError:
                 fields = [read_data.position, '-', '-']
             fields += [read_data.gene, read_data.orientation, read_data.gene_feature, read_data.get_main_sequence()[0]] 
-            try:
-                fields += read_data.gene_annotation
-            except AttributeError:
-                pass
+            try:                    fields += read_data.gene_annotation
+            except AttributeError:  pass
             OUTPUT.write('\t'.join([str(x) for x in fields]) + '\n')
 
     # TODO TODO TODO finish implementing class!  What other methods to add/overwrite?
