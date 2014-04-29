@@ -506,9 +506,93 @@ class Insertional_mutant_pool_dataset_Carette(Insertional_mutant_pool_dataset):
         for mutant in sorted_mutants:
             mutant.Carette_print_detail(OUTPUT, max_distance)
 
+    def _sort_data(self, sort_data_by=None):
+        """ Sort the mutants by position or readcount, or leave unsorted. """
+        all_mutants = iter(self)
+        if sort_data_by=='position':
+            sorted_data = sorted(all_mutants, key = lambda m: m.position)
+            # x.position here is an Insertion_position object and has a sensible cmp function
+        elif sort_data_by=='read_count':
+            if self.multi_dataset:  
+                raise MutantError("Sorting by readcount in print_data not implemented for multi-datasets!")
+            sorted_data = sorted(all_mutants, key = lambda m: (m.total_read_count,m.perfect_read_count,m.position), reverse=True)
+        else:
+            sorted_data = all_mutants
+        return sorted_data
+
     # TODO need to overwrite or modify print_summary (could probably use refactoring!)
 
-    # TODO need to overwrite or modify print_data, to add columns that give some information on the Carette data!
+    def print_data(self, OUTPUT=sys.stdout, sort_data_by=None, N_sequences=None, header_line=True, header_prefix="# "):
+        """ Print full data, one line per mutant: position data, gene info, read counts, Carette status/info.
+        (see the file header line for exactly what all the output fields are).
+
+        For a normal dataset, print position/gene info (7 fields), total_reads, perfect_reads, N_sequence_variants, 
+         the N_sequences most common sequences and counts (alternating, taking 2*N_sequences fields), 
+         and gene annotation if it exists (arbitrary number of tab-separated fields).
+
+        For a multi-dataset, print position/gene info (7 fields), the main sequence (taken over all the datasets),
+         then reads_in_<x> and perfect_in_<x> for each dataset (total and perfect reads - total 2*N_datasets fields), 
+         then gene annotation if it exists.
+
+        Data is printed to OUTPUT, which should be an open file object (stdout by default).
+         Output is tab-separated, with optional header starting with "# ".  
+        """
+        # TODO update docstring details!
+        if self.multi_dataset and N_sequences is not None and N_sequences!=1:
+            raise MutantError("Only one sequence can currently be printed in print_data for multi-datasets!")
+        if N_sequences is None and not self.multi_dataset:     N_sequences = 2
+
+        ### print the header line (different for normal and multi-datasets)
+        if header_line:
+            header = ['chromosome','strand','min_position','full_position', 
+                      'Carette-conf-dist', 'Carette-N-conf-reads', 'Carette-N-wrong-reads',
+                      'gene','orientation','feature']
+            if not self.multi_dataset:
+                header += ['total_reads','perfect_reads', 'N_sequence_variants']
+                for N in range(1,N_sequences+1):    
+                    header += ['read_sequence_%s'%N, 'seq_%s_count'%N]
+            else:
+                header += ['main_sequence']
+                for dataset_name in self.dataset_order:
+                    header += ['reads_in_%s'%dataset_name, 'perfect_in_%s'%dataset_name]
+            header += self.gene_annotation_header
+            OUTPUT.write(header_prefix + '\t'.join(header) + "\n")
+
+        ### sort all mutants by position or readcount (for single datasets only for now), or don't sort at all
+        sorted_mutants = self._sort_data(sort_data_by)
+
+        # create "empty" annotation line with the correct number of fields, for genes that weren't in annotation file
+        if self.gene_annotation_header:
+            missing_gene_annotation_data = ['NO GENE DATA'] + ['' for x in self.gene_annotation_header[:-1]]
+
+        ### for each mutant, print the mutant data line (different for normal and multi-datasets)
+        for mutant in sorted_mutants:
+            position = mutant.position
+            mutant_data = [position.chromosome, position.strand, position.min_position, position.full_position]
+            mutant_data += [mutant.Carette_max_confirmed_distance(), 
+                            mutant.Carette_N_confirming_reads(), mutant.Carette_N_non_confirming_reads()]
+            mutant_data += [mutant.gene, mutant.orientation, mutant.gene_feature] 
+            if not self.multi_dataset:
+                mutant_data += [mutant.total_read_count, mutant.perfect_read_count, mutant.unique_sequence_count]
+                for N in range(1,N_sequences+1):
+                    mutant_data += list(mutant.get_main_sequence(N))
+                    # MAYBE-TODO also give the length and number of mutations for each sequence? Optionally?  
+                    #   Length is easy, but do I even keep track of mutation number?  I probably should...
+            else:
+                mutant_data += [mutant.get_main_sequence(1)[0]]
+                for dataset_name in self.dataset_order:
+                    mutant_data += [mutant.by_dataset[dataset_name].total_read_count, 
+                                    mutant.by_dataset[dataset_name].perfect_read_count]
+            # add gene annotation, or a line with the right number of fields if gene annotation is missing
+            #  (or if the mutant has no such attribute at all - possible for older-format datasets)
+            if self.gene_annotation_header:
+                try:
+                    if any(mutant.gene_annotation):     mutant_data += mutant.gene_annotation
+                    else:                               mutant_data += missing_gene_annotation_data
+                except AttributeError:                  mutant_data += missing_gene_annotation_data
+            OUTPUT.write('\t'.join([str(x) for x in mutant_data]))
+            OUTPUT.write('\n')
+
 
 
 ############################### Further analysis/plotting utilities #####################################
