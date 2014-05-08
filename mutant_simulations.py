@@ -638,6 +638,19 @@ def find_hot_cold_spots(dataset, window_size, mappable_positions_20bp, mappable_
     # TODO unit-test this? How?
 
 
+def get_hot_cold_spot_data(hc_windowsizes_offsets, DATASET, chromosome_lengths, m20, m21, fraction_20bp=None, quiet=False):
+    """ Convenience function to run find_hot_cold_spots for many windowsizes and offsets and collate the data. """
+    average_mutants_per_window = {}
+    hc_spot_qvals, hc_spot_pvals, hc_spot_ifcold, hc_spot_mcounts, hc_spot_expected_mcounts = {}, {}, {}, {}, {}
+    for window_size,offset_list in sorted(hc_windowsizes_offsets.items()):
+        average_mutants_per_window[window_size] = find_average_mutant_count(DATASET, window_size, chromosome_lengths)
+        hc_spot_qvals[window_size], hc_spot_pvals[window_size], hc_spot_ifcold[window_size], hc_spot_mcounts[window_size], hc_spot_expected_mcounts[window_size] = {}, {}, {}, {}, {}
+        for offset in sorted(offset_list):
+            hc_data = find_hot_cold_spots(DATASET, window_size, m20, m21, offset, fraction_20bp, chromosome_lengths=chromosome_lengths, quiet=quiet)
+            hc_spot_qvals[window_size][offset], hc_spot_pvals[window_size][offset], hc_spot_ifcold[window_size][offset], hc_spot_mcounts[window_size][offset], hc_spot_expected_mcounts[window_size][offset] = hc_data
+    return average_mutants_per_window, hc_spot_qvals, hc_spot_pvals, hc_spot_ifcold, hc_spot_mcounts, hc_spot_expected_mcounts
+
+
 def get_hot_cold_spot_list(pvalue_data_window_size_offset_dict, ifcold_data_window_size_offset_dict, 
                            mcount_data_window_size_offset_dict=None, expected_mcount_data_window_size_offset_dict=None,
                            average_mutants_per_window=None, pval_cutoff=0.05, print_result_counts=True, print_info=True):
