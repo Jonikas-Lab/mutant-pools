@@ -1,26 +1,44 @@
 #!/usr/bin/env python2.7
 
+# standard library
+from __future__ import division
+import sys
+import unittest
 import os
 from collections import defaultdict
+
+
+HEADER_FIELDS_v4 = ['Phytozome transcript name', 
+                    'PFAM', 'Panther', 'KOG', 'KEGG ec', 'KEGG Orthology', 
+                    'best arabidopsis TAIR10 hit name', 'best arabidopsis TAIR10 hit symbol', 'best arabidopsis TAIR10 hit defline', 
+                    'best rice hit name', 'best rice hit symbol', 'best rice hit defline']
+
+HEADER_FIELDS_v5 = ['Phytozome internal transcript ID', 
+                    'Phytozome gene locus name', 'Phytozome transcript name', 'Phytozome protein name', 
+                    'PFAM', 'Panther', 'KOG', 'KEGG ec', 'KEGG Orthology', 'Gene Ontology terms', 
+                    'best arabidopsis TAIR10 hit name', 'best arabidopsis TAIR10 hit symbol', 'best arabidopsis TAIR10 hit defline', 
+                    'best rice hit name', 'best rice hit symbol', 'best rice hit defline']
+
 
 def parse_gene_annotation_file(gene_annotation_filename, standard_Phytozome_file=False, header_fields=None, gene_ID_column=0, 
                                genes_start_with=None, delete_columns=None, remove_empty_columns=True, strip_gene_fields_start=None,
                                pad_with_empty_fields=True, ignore_comments=False, verbosity_level=1):
-    """ Parse tab-separated gene annotation file; return a geneID:data_list dict, and a column header list (if present).
+    """ Parse tab-separated gene annotation file; return (gene:annotation_list, header_list) tuple.
 
-    Try to automatically detect if the file has a header; optionally use header provided; 
-     return None for header if none was provided or detected. 
-    
     If standard_Phytozome_file is non-zero, use special case headers for standard Phytozome files:
         v4 annotation file (Creinhardtii_169_annotation_info.txt) if value is 4, v5 (Creinhardtii_236_readme.txt) if 5.
-        (those files don't have included headers! And the formats sometimes change, so this isn't a guarantee.)
+        (those files don't have included headers - they're hardcoded. And the formats sometimes change, so this isn't a guarantee.)
+    Otherwise, header can be provided with header_fields - if None, the first line of the file is assumed to be the header.
 
-    Optionally shorten the gene name by truncating it starting with the strip_gene_fields_start value if found (if not None):
-        for example if strip_gene_fields_start is '.t', Cre01.g123450.t2.1 would become Cre01.g123450.
+    Use column gene_ID_column to determine gene IDs; optionally shorten the gene name by truncating it starting with the 
+     strip_gene_fields_start value if found (if not None) - e.g. if value is '.t', Cre01.g123450.t2.1 would become Cre01.g123450.
+    If genes_start_with is not None, make sure all gene IDs start with it.
 
-    Optionally remove empty columns (i.e. fields that are empty in all lines).
+    If pad_with_empty_fields is True, pad shorter lines to the max length. 
+    If ignore_comments is True, skip lines starting with #.
+
+    Print some info/warnings to stdout depending on verbosity_level (0 - nothing, 1 - some, 2 - max).
     """
-    # TODO add description of all the other stuff to docstring!
     if not os.path.lexists(gene_annotation_filename):
         raise Exception("Couldn't find the %s gene annotation file!"%gene_annotation_filename)
     if verbosity_level>0:
@@ -32,34 +50,30 @@ def parse_gene_annotation_file(gene_annotation_filename, standard_Phytozome_file
     # special cases for the standard Phytozome annotation files
     if standard_Phytozome_file:
         strip_gene_fields_start = '.t'
-        if standard_Phytozome_file==4:
+        if standard_Phytozome_file == 4:
             gene_ID_column = 0
-            header_fields = ['Phytozome transcript name', 'PFAM', 'Panther', 'KOG', 'KEGG ec', 'KEGG Orthology', 
-                             'best arabidopsis TAIR10 hit name', 'best arabidopsis TAIR10 hit symbol', 
-                             'best arabidopsis TAIR10 hit defline', 
-                             'best rice hit name', 'best rice hit symbol', 'best rice hit defline']
+            header_fields = list(HEADER_FIELDS_v4)  # using list() to make a separate copy, since it'll be modified!)
             delete_columns = []
-        elif standard_Phytozome_file==5:
+        elif standard_Phytozome_file == 5:
             gene_ID_column = 1
-            header_fields = ['Phytozome internal transcript ID', 'Phytozome gene locus name', 
-                             'Phytozome transcript name', 'Phytozome protein name', 
-                             'PFAM', 'Panther', 'KOG', 'KEGG ec', 'KEGG Orthology', 'Gene Ontology terms', 
-                             'best arabidopsis TAIR10 hit name', 'best arabidopsis TAIR10 hit symbol', 
-                             'best arabidopsis TAIR10 hit defline', 
-                             'best rice hit name', 'best rice hit symbol', 'best rice hit defline']
+            header_fields = list(HEADER_FIELDS_v5)  # using list() to make a separate copy, since it'll be modified!)
             delete_columns = [0,2,3]
         else:
             raise Exception("Invalid value for standard_Phytozome_file type arg! %s given, 4/5 accepted."%standard_Phytozome_file)
 
-    # parse the whole file into lists of tab-separated fields
-    # MAYBE-TODO this reads in the whole file at once - not very efficient! Change to a generator?  
-    #  (except we need special treatment for the first line which may or may not be a header line...)
+    ### Parse the whole file into lists of tab-separated fields
+    #    (could change to a generator, but most of the data has to stay in memory anyway in a different format, so probably no point)
+    #    (and we need special treatment for the first line which may or may not be a header line...)
     data_by_row = []
     for line in open(gene_annotation_filename):
         if ignore_comments and line[0]=='#':    continue
         fields = line.strip().split('\t')
         data_by_row.append(fields)
+    if verbosity_level>0:
+        print "Parsed %s lines"%len(data_by_row)
         
+    # if header is given, use list() to make a separate copy, since it will be modified
+    header_fields = list(header_fields)
     # if header not given, assume the first line is a header
     if header_fields is None:
         header_fields = data_by_row[0]
@@ -97,6 +111,8 @@ def parse_gene_annotation_file(gene_annotation_filename, standard_Phytozome_file
         mismatched_lengths = False
 
     # remove empty columns (only if all the data lengths match!)
+    if remove_empty_columns and mismatched_lengths:
+        raise Exception("Cannot remove empty columns if different lines have different numbers of columns!")
     if remove_empty_columns and not mismatched_lengths:
         data_length = len(header_fields)
         columns_to_remove = []
@@ -106,8 +122,8 @@ def parse_gene_annotation_file(gene_annotation_filename, standard_Phytozome_file
                 value = values.pop()
                 if value.strip()=='':
                     if verbosity_level>0:
-                        if header_fields:  print "Column %s (%s) is always empty - removing it."%(pos+1, header_fields[pos])
-                        else:       print "Column %s is always empty - removing it."%(pos+1)
+                        if header_fields:   print "Column %s (%s) is always empty - removing it."%(pos+1, header_fields[pos])
+                        else:               print "Column %s is always empty - removing it."%(pos+1)
                     columns_to_remove.append(pos)
                 else:
                     if verbosity_level>0:
@@ -117,8 +133,13 @@ def parse_gene_annotation_file(gene_annotation_filename, standard_Phytozome_file
             for row in data_by_row: 
                 del row[pos]
 
-    # convert the list-format data into a by-gene dictionary
-    data_by_gene = defaultdict(lambda: [set() for x in range(data_length)])
+    data_length = len(header_fields)
+    assert data_length >= max(len(row) for row in data_by_row)
+
+    ### convert the list-format data into a by-gene dictionary
+    # we're removing one column that was the gene ID, and some other columns - that's the final length
+    final_data_length = data_length - 1 - len(delete_columns)
+    data_by_gene = defaultdict(lambda: [set() for x in range(final_data_length)])
     for data in data_by_row:
         gene = data[gene_ID_column]
         for col in sorted(delete_columns + [gene_ID_column], reverse=True):
@@ -144,4 +165,29 @@ def parse_gene_annotation_file(gene_annotation_filename, standard_Phytozome_file
         print " *** DONE Parsing gene annotation file"
     return dict(data_by_gene), header_fields
 
-# TODO add unit-tests or run/tests?  It's not exactly complicated...
+
+class Testing(unittest.TestCase):
+    """ Runs unit-tests for this module. """
+
+    def test__parse_gene_annotation_file_v5(self):
+        # do it twice just to make sure the results are the same - earlier I had a bug where they weren't!
+        for x in (1,2):
+            data, header = parse_gene_annotation_file('test_data/INPUT_annotation_file_v5.txt', standard_Phytozome_file=5, 
+                                                      verbosity_level=0)
+            assert header == ['PFAM', 'Panther', 'KOG', 'KEGG_ec', 'KEGG_Orthology', 'Gene_Ontology_terms', 
+                              'best_arabidopsis_TAIR10_hit_name', 'best_arabidopsis_TAIR10_hit_symbol', 
+                              'best_arabidopsis_TAIR10_hit_defline']
+            assert set(data.keys()) == set(['Cre01.g000150', 'Cre01.g000100', 'g8754'])
+            assert data['Cre01.g000100'] == ['' for x in header]
+            assert data['g8754'] == ['', 'PTHR13693:SF10,PTHR13693', '', '', '', '', 'AT5G04620.2', 'ATBIOF,BIOF', 'biotin F']
+            assert data['Cre01.g000150'] == ['PF02535', 'PTHR11040,PTHR11040:SF30', 'KOG1558', 'KEGGstuff', 'KEGGstuff2', 
+                                             'GO:0046873,GO:0030001,GO:0055085,GO:0016020', 'AT2G04032.1', 'ZIP7', 
+                                             'zinc transporter 7 precursor']
+
+    # MAYBE-TODO add a v4 unit-test too, and for other formats?
+
+
+if __name__=='__main__':
+    """ If module is run directly, run tests. """
+    print "This is a module for import by other programs - it doesn't do anything on its own.  Running tests..."
+    unittest.main()
