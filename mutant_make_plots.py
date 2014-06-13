@@ -150,7 +150,8 @@ def _make_sample_label_text(sample_name, sample, datatype, min_value=0, end_spac
 # Generates a figure with a subplot for each pair, labeled, with correlation coefficient.
 # INPUT: all_data is a name->data dictionary, where data is a (details,total_counts) tuple,
 #  in which details is a library_oligo_name->deepseq_counts dictionary.
-def plot_all_correlations(all_data, plot_scale, figname, print_correlation=False, min_value=0.1, mutants_to_color=None):
+def plot_all_correlations(all_data, plot_scale, figname, print_correlation=False, min_value=0.1, 
+                          min_value_to_plot=None, mutants_to_color=None):
     """ _________
     all_data will be an (sample_data, sample_headers, mutant_data) tuple.
     """
@@ -196,14 +197,13 @@ def plot_all_correlations(all_data, plot_scale, figname, print_correlation=False
     # TODO what to do if it's a logscale plot of growth rates?  What kinds of growth rate values do we normally see, what's a good minimum?
     # TODO remember to change the scale from 0.1 to 0 too!
     min_value = min_value if plot_scale=='log' else None
-    min_val_to_plot = None
     grey_out_min = None
-    # MAYBE-TODO min_val_to_plot and grey_out_min could also be a list with a different minimum for each sample...
-    print "min_value: %s; min_val_to_plot: %s, grey_out_min: %s"%(min_value, min_val_to_plot, grey_out_min)
+    # MAYBE-TODO min_value_to_plot and grey_out_min could also be a list with a different minimum for each sample...
+    print "min_value: %s; min_value_to_plot: %s, grey_out_min: %s"%(min_value, min_value_to_plot, grey_out_min)
     # TODO minimize_tick_labels and same_scale_both_plots should be command-line options
     minimize_tick_labels = False
     same_scale_both_plots = True
-    # TODO min_value and min_val_to_plot should probably be merged?  Just one min_value and one True/False variable specifying whether values under min_value should be set to min_value or removed.
+    # TODO min_value and min_value_to_plot should probably be merged?  Just one min_value and one True/False variable specifying whether values under min_value should be set to min_value or removed.
     need_title = bool(title_verbosity)
     for i in range(N_samples):
         base_sample_i = _get_single_clean_sample(sample_data, i, min_value=min_value)
@@ -214,12 +214,12 @@ def plot_all_correlations(all_data, plot_scale, figname, print_correlation=False
             if verbose:
                 print "Plotting sample %s (length %s) vs sample %s (length %s) (out of %s samples)"%(i,len(base_sample_i), 
                                                                                      j,len(base_sample_j), N_samples)
-            sample_i, sample_j = remove_nan_inf_from_two_samples(base_sample_i, base_sample_j, min_val=min_val_to_plot)
+            sample_i, sample_j = remove_nan_inf_from_two_samples(base_sample_i, base_sample_j, min_val=min_value_to_plot)
             if not (sample_i and sample_j):
                 print "Error: no datapoints left in samples %s and %s after removing nan/inf values!"%(i,j)
                 continue
             if verbose:
-                print "After removing nan/inf values and values below %s, %s datapoints left."%(min_val_to_plot, 
+                print "After removing nan/inf values and values below %s, %s datapoints left."%(min_value_to_plot, 
                                                                                                 len(sample_i))
             mplt.subplot(N_samples, N_samples, N_samples*(i)+(j+1))
             if grey_out_min is not None:
@@ -287,17 +287,18 @@ def plot_all_correlations(all_data, plot_scale, figname, print_correlation=False
                 else:                   min_val_for_corr = min_value
                 clean_sample_i, clean_sample_j = remove_nan_inf_from_two_samples(sample_i, sample_j, min_val=min_val_for_corr, 
                                                                                  min_val_allowed=False, remove_only_if_both=True)
-                # corr_coeff_pval is a (correlation coefficient, p-value) pair
-                if print_correlation=='spearman':   corr_coeff_pval = spearmanr(clean_sample_i,clean_sample_j)
-                elif print_correlation=='pearson':  corr_coeff_pval = pearsonr(clean_sample_i,clean_sample_j)
-                # MAYBE-TODO should mutants below min_val_to_plot be excluded too?
-                # the corr_coeff_pval text color is based on value: <.25 black, .25-.50 blue, .50-.75 magenta, .75-1 red;
-                # if the result isn't a number (for instance an empty list/array/whatever), set it to NaN and the color to black.
-                corr_coeff_colors = ['k','b','m','r','r']
-                try:                    color = corr_coeff_colors[int(abs(corr_coeff_pval[0])*16)/ 4]
-                except TypeError:       color, corr_coeff_pval = 'k', (float('nan'), float('nan'))
-                mplt.text(text_pos_x, text_pos_y, 'corr %.2f (p-value %.2g)'%corr_coeff_pval, color=color, 
-                          horizontalalignment='right',verticalalignment='top')
+                # corr_coeff_pval is a (correlation coefficient, p-value) pair (useless for fewer than 3 datapoints)
+                if len(clean_sample_i) > 2:
+                    if print_correlation=='spearman':   corr_coeff_pval = spearmanr(clean_sample_i,clean_sample_j)
+                    elif print_correlation=='pearson':  corr_coeff_pval = pearsonr(clean_sample_i,clean_sample_j)
+                    # MAYBE-TODO should mutants below min_value_to_plot be excluded too?
+                    # the corr_coeff_pval text color is based on value: <.25 black, .25-.50 blue, .50-.75 magenta, .75-1 red;
+                    # if the result isn't a number (for instance an empty list/array/whatever), set it to NaN and the color to black.
+                    corr_coeff_colors = ['k','b','m','r','r']
+                    try:                            color = corr_coeff_colors[int(abs(corr_coeff_pval[0])*16)/ 4]
+                    except (TypeError, ValueError): color, corr_coeff_pval = 'k', (float('nan'), float('nan'))
+                    mplt.text(text_pos_x, text_pos_y, 'corr %.2f (p-value %.2g)'%corr_coeff_pval, color=color, 
+                              horizontalalignment='right',verticalalignment='top')
     # need a label for the last column, below the last plot
     # TODO if there are just two samples (i.e. one plot), change the top_newlines/end_spaces/end_newlines values to 0 in both this xlabel and the ylabel above to make things look better (may want to abstract all this into a subfunction)
     sample_label = _make_sample_label_text(sample_names[-1], sample_j, datatype, 
@@ -526,8 +527,8 @@ def main_functionality(infile, options=None):
         if not options.graph_type=='dist':
             figname = options.outfile_prefix + ('growthrate' if options.growthrate_infiles 
                                                 else 'readcount')
-            fig = plot_all_correlations(all_data, figscale, figname, 
-                                        options.print_correlations, mutants_to_color=mutant_to_color)
+            fig = plot_all_correlations(all_data, figscale, figname, options.print_correlations, 
+                                        min_value_to_plot=options.min_plotted_value, mutants_to_color=mutant_to_color)
             savefig(fig, figname+suffix, options.graph_format)
         if not options.graph_type=='corr':
             figname = options.outfile_prefix + ('growthrate_distributions' if options.growthrate_infiles 
@@ -554,6 +555,8 @@ def define_option_parser():
                       help='Make plot of readcount distribution, correlation, or both (default %default)')
     parser.add_option('-s', '--graph_scale', choices=['lin','log','both'], default='log', metavar='[lin|log|both]',
                       help='Make plots linear, log-scale, or both (default %default)')
+    parser.add_option('-m', '--min_plotted_value', type='float', default=None, metavar='N',
+                      help='Only plot readcounts higher than N (default %default)')
     parser.add_option('-f', '--graph_format', default='png', metavar='FORMAT', 
                       help='Which formats work depends on matplotlib backend - try a few and see. Default %default.')
     parser.add_option('-c', '--print_correlations', choices=['none','pearson','spearman'], default='spearman', 
