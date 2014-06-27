@@ -13,6 +13,7 @@ import collections
 from collections import defaultdict
 import math
 import random
+import itertools
 # other packages
 import numpy
 import scipy
@@ -1098,9 +1099,22 @@ def insertion_density_by_feature(dataset, feature_lengths, relative_to_all=False
     else:
         mplt.ylabel('average mutants per kb\nof%s feature length'%feature_length_info)
 
+def _get_nice_feature_counts_data(dataset):
+    """ Given a dataset, return nicely adjusted feature counts.
+    """
+    # TODO this currently isn't used anywhere!  Could use it in the three things below to avoid code duplication.
+    # TODO add more options!  For what to do with border/multi-gene/etc.
+    features_printable = "all intergenic gene exon intron 5'UTR 3'UTR"
+    features_order = features_printable.replace("5'", "five_prime_").replace("3'", "three_prime_").replace('exon','CDS').split()
+    # calculate probability of a mutant falling into each feature vs full genome, based on bin effective lengths
+    feature_probabilities = {feature: feature_lengths[feature]/feature_lengths['all'] for feature in feature_lengths}
+    # get full feature counts by orientation and for both orientations
+    feature_mutant_counts = _adjust_feature_mutant_counts(collections.Counter(m.gene_feature for m in dataset), 
+                                                           ignore_UTR_introns=2, long_UTR_names=True)
+    return features_order, feature_mutant_counts
 
 def insertion_density_by_feature_pvalues(dataset, feature_lengths, feature_length_type=''):
-    """ Calculate p-values for density of insertions in different features, and sense:antisense ratio.
+    """ Check if density of insertions in each feature is different from overall, and between sense and antisense.
 
     Uses the same statistical methods as insertions_over_gene_length_pvalues - see docstring for that function.
 
@@ -1165,6 +1179,75 @@ def insertion_density_by_feature_pvalues(dataset, feature_lengths, feature_lengt
                                         feature, adj_pval, pval, feature_mutant_counts_sense[feature], 
                                         feature_mutant_counts_antisense[feature], feature_lengths[feature])
 
+def insertion_density_by_feature_pvalues_all_pairs(dataset, feature_lengths, feature_length_type=''):
+    """ Check if density of insertions is different between each pair of features.
+
+    Uses the chi-squared test of independence, and FDR-adjustment.
+
+    See insertion_density_by_feature_pvalues docstring for argument descriptions.
+    """
+    features_printable = "all intergenic gene exon intron 5'UTR 3'UTR"
+    features_order = features_printable.replace("5'", "five_prime_").replace("3'", "three_prime_").replace('exon','CDS').split()
+    # get full feature counts by orientation and for both orientations
+    feature_mutant_counts = _adjust_feature_mutant_counts(collections.Counter(m.gene_feature for m in dataset), 
+                                                          ignore_UTR_introns=2, long_UTR_names=True)
+    features = sorted(feature_mutant_counts.keys())
+    all_feature_pairs = list(itertools.combinations(sorted(set(feature_mutant_counts.keys()) - set(['all'])), 2))
+    all_pvalues_1 = []
+    # for each feature, look at the number of mappable positions that did and did not have an insertion,
+    #  and compare those two numbers between features to see if the proportions are the same.
+    for feature1,feature2 in all_feature_pairs:
+        feature1_ins_count = feature_mutant_counts[feature1]
+        feature2_ins_count = feature_mutant_counts[feature2]
+        feature1_no_ins_count = feature_lengths[feature1] - feature1_ins_count
+        feature2_no_ins_count = feature_lengths[feature2] - feature2_ins_count
+        pvalue_1 = statistics_utilities.chisquare_independence([feature1_ins_count,feature1_no_ins_count], 
+                                                               [feature2_ins_count,feature2_no_ins_count])
+        all_pvalues_1.append(pvalue_1)
+    adj_pvalues_1 = statistics_utilities.FDR_adjust_pvalues(all_pvalues_1)
+    print "P-values for difference between each pair of features in this dataset, based on %s length:"%feature_length_type
+    for (feature1,feature2),p1,ap1 in zip(all_feature_pairs, all_pvalues_1, adj_pvalues_1):
+        mark = '**' if p1<0.0001 else ('*' if p1<0.05 else '-')
+        print " %s pvalue %.3g (FDR-adj %.3g) for difference between %s and %s"%(mark, p1, ap1, feature1, feature2)
+
+def insertion_density_by_feature_pvalues_compare_datasets(dataset1, dataset2, subtract_2_from_1=False):
+    """ Check if density of insertions is different between the two datasets, for each feature.
+
+    Uses the chi-squared test of independence, and FDR-adjustment.
+    If subtract_2_from_1 is True, subtract dataset2 from dataset1 
+      (use in case dataset2 is a subset of 1, to make the data independent).
+
+    See insertion_density_by_feature_pvalues docstring for argument descriptions.
+    """
+    features_printable = "all intergenic gene exon intron 5'UTR 3'UTR"
+    features_order = features_printable.replace("5'", "five_prime_").replace("3'", "three_prime_").replace('exon','CDS').split()
+    # get full feature counts
+    feature_mutant_counts_1 = _adjust_feature_mutant_counts(collections.Counter(m.gene_feature for m in dataset1), 
+                                                            ignore_UTR_introns=2, long_UTR_names=True)
+    feature_mutant_counts_2 = _adjust_feature_mutant_counts(collections.Counter(m.gene_feature for m in dataset2), 
+                                                            ignore_UTR_introns=2, long_UTR_names=True)
+    assert set(feature_mutant_counts_1.keys()) == set(feature_mutant_counts_2.keys())
+    features = sorted(feature_mutant_counts_1.keys())
+    # subtract dataset2 from dataset1 if needed
+    if subtract_2_from_1:
+        feature_mutant_counts_1 = {f: count1 - feature_mutant_counts_2[f] for (f,count2) in feature_mutant_counts_1.items()}
+    # To compare between two datasets, compare insertions in featureX vs in other features for both datasets, 
+    #   rather than comparing insertions vs non-insertions in featureX, to stay independent of different total insertion numbers.
+    all_pvalues_1 = []
+    for feature in features:
+        feature_ins_count_1 = feature_mutant_counts_1[feature]
+        feature_ins_count_2 = feature_mutant_counts_2[feature]
+        other_ins_count_1 = feature_mutant_counts_1['all'] - feature_ins_count_1
+        other_ins_count_2 = feature_mutant_counts_2['all'] - feature_ins_count_2
+        pvalue_1 = statistics_utilities.chisquare_independence([feature_ins_count_1,other_ins_count_1], 
+                                                               [feature_ins_count_2,other_ins_count_2])
+        all_pvalues_1.append(pvalue_1)
+    adj_pvalues_1 = statistics_utilities.FDR_adjust_pvalues(all_pvalues_1)
+    print "P-values for difference between mutant densities in each feature between the two datasets, based on %s length:"%\
+            feature_length_type
+    for feature,p1,ap1 in zip(features, all_pvalues_1, adj_pvalues_1):
+        mark = '**' if p1<0.0001 else ('*' if p1<0.05 else '-')
+        print " %s %s pvalue %.3g (FDR-adj %.3g)"%(mark, feature, p1, ap1)
 
 ### mappability by gene/feature
 
