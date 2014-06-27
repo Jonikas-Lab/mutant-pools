@@ -27,11 +27,10 @@ def define_option_parser():
     ### functionality options
     parser.add_option('-G', '--generations', type='int', default=7, metavar='N', 
                       help="The number of generations between the start and end timepoints (default %default).")
-    parser.add_option('-R', '--pool_growth_rate', type='float', metavar='X', 
-                      help="Overall growth rate of the culture (REQUIRED).")
+    parser.add_option('-R', '--pool_growth_rate', type='float', default=1, metavar='X', 
+                      help="Overall growth rate of the culture - or use 1 to get relative growth rates (default.")
     parser.add_option('-Z', '--minimum_growth_rate_zero', action='store_true', default=False,
                       help="Any growth rates below 0 will be set to 0 (default %default).")
-    # TODO why is -Z and -m messed up weirdly when I run mutant_growth_rates.py -h on the command-line???
 
     parser.add_option('-m', '--readcount_min_T0', type='int', default=100, metavar='N', 
                       help="Minimum T0 readcount to calculate growthrate (default %default).")
