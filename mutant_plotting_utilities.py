@@ -1694,6 +1694,62 @@ def adjacent_readcount_ratio_plot(dataset, distance_cutoffs, distance_linestyles
     mplt.title('Ratios between the readcounts of adjacent mutant pairs,\nby category and distance')
 
 
+################################################# Plotting RISCC data ##################################################
+
+# TODO check that those don't have any missing requirements - I moved them from mutant_Carette.py.
+
+def distance_histogram(distance_datasets, labels=None, colors=None, linestyles=None, N_bins=50, histtype='step', normalized=True, 
+                       outfile=None, filetypes='svg png', x_max=None, sample_info=''):
+    """ Plot histogram of the distances in the given datasets; optionally save to file. 
+    """
+    mplt.figure()
+    max_y = 0
+    for N, distances in enumerate(distance_datasets):
+        if not len(distances):
+            print "Dataset %s contains no data! Skipping."%N
+            continue
+        plot_kwargs = {}
+        if labels:      plot_kwargs['label'] = "%s (%s)"%(labels[N], len(distances))
+        if colors:      plot_kwargs['color'] = colors[N]
+        if linestyles:  plot_kwargs['linestyle'] = linestyles[N]
+        y_values, _, _ = mplt.hist(distances, bins=N_bins, histtype=histtype, normed=str(normalized), **plot_kwargs)
+        max_y = max(max_y, max(y_values))
+    mplt.xlabel('highest distance between cassette-side and genome-side reads')
+    mplt.ylim(-max_y/20, max_y*1.1)
+    if x_max is not None:
+        mplt.xlim(mplt.xlim()[0], x_max)
+    if normalized:  mplt.ylabel('fraction of mutants')
+    else:           mplt.ylabel('number of mutants')
+    if labels:
+        mplt.legend()
+    mplt.title("Carette confirmed distance distribution" + "\n(%s)"%sample_info if sample_info else "")
+    if outfile:
+        plotting_utilities.savefig(outfile, filetypes)
+    mplt.close()
+
+def plot_confirmed_dist_vs_percent(dataset, dataset_name, min_genomic_reads=1, min_conf_reads=0, mutant_filter=None, 
+                                   xmax=None, max_allowed_distance=3000, markersize=4, alpha=0.3, color='black'):
+    """ Make a max-confirmed-distance vs %-confirming-reads scatterplot.
+    """
+    D = max_allowed_distance
+    if mutant_filter:   mutants = [m for m in dataset if mutant_filter(m)]
+    else:               mutants = dataset
+    filtered_data = [(m.Carette_max_confirmed_distance(D), m.Carette_N_confirming_reads(D), m.Carette_N_non_confirming_reads(D)) 
+                     for m in mutants]
+    filtered_data_2 = [x for x in filtered_data if x[1]+x[2] >= min_genomic_reads and x[1] >= min_conf_reads]
+    print "Filtering data: %s total mutants, %s passed general filter, %s passed readcount filter."%(len(dataset), 
+                                                                                     len(filtered_data), len(filtered_data_2))
+    max_conf_len = [x[0] for x in filtered_data_2]
+    percent_wrong_reads = [x[2]/(x[1]+x[2])*100 for x in filtered_data_2]
+    mplt.plot(max_conf_len, percent_wrong_reads, 
+              marker='.', markerfacecolor=color, markersize=markersize, linestyle='None', markeredgecolor='None', alpha=alpha)
+    mplt.xlabel('max distance between cassette-side sequence and matching genome-side read')
+    mplt.ylabel("% reads that don't match the cassette-side sequence")
+    mplt.ylim(-1, 101)
+    if xmax is None:    xmax = mplt.xlim()[1]
+    mplt.xlim(-10, xmax)
+    mplt.title('Data on Carette genome-side reads confirming the cassette-side sequence,\n dataset %s, min %s total and %s confirming reads.'%(dataset_name, min_genomic_reads, min_conf_reads))
+
 ################################################# Testing etc ##################################################
 
 class Testing(unittest.TestCase):
