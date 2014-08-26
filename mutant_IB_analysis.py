@@ -7,9 +7,6 @@ This is a module to be imported and used by other programs.  Running it directly
  -- Weronika Patena, Jonikas Lab, Carnegie Institution, 2011
 """
 
-### TODO TODO TODO rewrite all this for the new IB+Carette pipeline!  Use some of the mutant_Carette code, too.
-### The plan is to completely replace mutant_analysis_classes.py and mutant_Carette.py with this, and mutant_count_alignments.py with mutant_count_aln_IB.py.
-
 from __future__ import division
 # basic libraries
 import sys, re
@@ -18,6 +15,7 @@ from collections import defaultdict
 import itertools
 import copy
 import random
+from math import isnan
 # other libraries
 from numpy import median, round, isnan
 import HTSeq
@@ -25,18 +23,32 @@ from BCBio import GFF
 # my modules
 from general_utilities import split_into_N_sets_by_counts, add_dicts_of_ints, sort_lists_inside_dict, keybased_defaultdict, value_and_percentages, FAKE_OUTFILE, NaN, nan_func, merge_values_to_unique, unpickle
 from basic_seq_utilities import SEQ_ENDS, SEQ_STRANDS, SEQ_DIRECTIONS, SEQ_ORIENTATIONS, position_test_contains, position_test_overlap, chromosome_sort_key, get_seq_count_from_collapsed_header
-from deepseq_utilities import check_mutation_count_try_all_methods
+from seq_basic_utilities import parse_fasta
+from deepseq_utilities import check_mutation_count_try_all_methods, Fake_deepseq_objects
 from parse_annotation_file import parse_gene_annotation_file
 
 
+# MAYBE-TODO it might be good to split this file into multiple files at some point?  At least Insertion_position/etc.
+
+############################ Constants and simple help functions ###########################
+
 ### Constants
+
+RELATIVE_READ_DIRECTIONS = 'inward outward'.split()
+MAX_POSITION_DISTANCE = 1500
 MULTIPLE_GENE_JOIN = ' & '
+
+class SPECIAL_POSITIONS(object):
+    unaligned = "UNALIGNED"
+    multi_aligned = "MULTIPLE"
+    unknown = "UNKNOWN"
+# it seems like I have to set this afterward because I can't access __dict__ from inside the class
+SPECIAL_POSITIONS.all_undefined = [value for (name,value) in SPECIAL_POSITIONS.__dict__.items() if not name.startswith('__')]
 
 class SPECIAL_GENE_CODES(object):
     not_determined = "gene_unknown"
     chromosome_not_in_reference = "unknown_chrom"
     not_found = "no_gene_found"
-# it seems like I have to set SPECIAL_GENE_CODES.all_codes afterward because I can't access __dict__ from inside the class
 SPECIAL_GENE_CODES.all_codes = [value for (name,value) in SPECIAL_GENE_CODES.__dict__.items() if not name.startswith('__')]
 
 GENE_FEATURE_NAMES = { 'five_prime_UTR' : "5'UTR", 
@@ -56,27 +68,42 @@ class MutantError(Exception):
     """ Exceptions in the mutant_analysis_classes module; no special behavior."""
     pass
 
-
 def is_cassette_chromosome(chromosome_name):
     """ Returns True if chromosome_name sounds like one of our insertion cassettes, False otherwise. """
     return ("insertion_cassette" in chromosome_name)
 
 def is_other_chromosome(chromosome_name):
     """ Returns True if chromosome_name is neither cassette nor chromosome/scaffold, False otherwise. """
-    if is_cassette_chromosome(chromosome_name):
-        return False
-    if chromosome_name.startswith('chr') or chromosome_name.startswith('scaffold'):
-        return False
-    return True
+    if is_cassette_chromosome(chromosome_name):                                     return False
+    if chromosome_name.startswith('chr') or chromosome_name.startswith('scaffold'): return False
+    else:                                                                           return True
 
 # MAYBE-TODO may want to put the is_*_chromosome functionality under command-line user control someday?  Provide option to give list of cassette chromosome names and "other" ones (or cassette ones and prefixes for genomic ones?)
 
+def HTSeq_pos_to_tuple(HTSeq_pos):
+    """ Convert an HTSeq.GenomicPosition instance to a (chrom,start_pos,end_pos,strand) tuple. 
+    
+    Start_pos and end_pos are 1-based, inclusive (so in AATTGG, the position of AA is 1-2) - unlike in HTSeq!
+    """
+    try:
+        chrom = HTSeq_pos.chrom
+    except AttributeError:
+        raise MutantError("Invalid position %s! Need an HTSeq iv object. (If empty, maybe read wasn't aligned?)"%(HTSeq_pos,))
+    ### cassette strand is the same as read strand, OR the opposite if reads_are_reverse is True
+    strand = HTSeq_pos.strand
+    if strand not in SEQ_STRANDS:   raise MutantError("Invalid strand %s!"%strand)
+    # HTSeq is 0-based and I want 1-based, thus the +1; end has no +1 because in HTSeq end is the base AFTER the alignment.
+    start_pos = HTSeq_pos.start+1
+    end_pos = HTSeq_pos.end
+    if start_pos < 1:           raise MutantError("Sequence positions must be positive!")
+    if start_pos > end_pos:     raise MutantError("Sequence start can't be after end!")
+    return (chrom, start_pos, end_pos, strand)
 
-# MAYBE-TODO it might be good to split this file into multiple files at some point?  At least Insertion_position/etc.
 
-############################ Functions/classes for dealing with alignment/insertion positions ###########################
+###################################### Insertion position functions/classes #####################################
 
 # has to be a new-style object-based class due to the immutability/hashability thing
+# TODO implement fuzzy positions?
 class Insertion_position(object):
     """ A descriptor of the position of a genomic insertion, with separate before/after sides; optionally immutable.
 
@@ -266,27 +293,7 @@ class Insertion_position(object):
     __delattr__ = exception_if_immutable(object.__delattr__)
 
 
-def HTSeq_pos_to_tuple(HTSeq_pos):
-    """ Convert an HTSeq.GenomicPosition instance to a (chrom,start_pos,end_pos,strand) tuple. 
-    
-    Start_pos and end_pos are 1-based, inclusive (so in AATTGG, the position of AA is 1-2) - unlike in HTSeq!
-    """
-    try:
-        chrom = HTSeq_pos.chrom
-    except AttributeError:
-        raise MutantError("Invalid position %s! Need an HTSeq iv object. (If empty, maybe read wasn't aligned?)"%(HTSeq_pos,))
-    ### cassette strand is the same as read strand, OR the opposite if reads_are_reverse is True
-    strand = HTSeq_pos.strand
-    if strand not in SEQ_STRANDS:   raise MutantError("Invalid strand %s!"%strand)
-    # HTSeq is 0-based and I want 1-based, thus the +1; end has no +1 because in HTSeq end is the base AFTER the alignment.
-    start_pos = HTSeq_pos.start+1
-    end_pos = HTSeq_pos.end
-    if start_pos < 1:           raise MutantError("Sequence positions must be positive!")
-    if start_pos > end_pos:     raise MutantError("Sequence start can't be after end!")
-    return (chrom, start_pos, end_pos, strand)
-
-
-def get_insertion_pos_from_flanking_region_pos(flanking_region_pos, cassette_end, reads_are_reverse=False, immutable_position=True):
+def get_insertion_pos_from_flanking_region_pos(flanking_region_pos, cassette_end, relative_read_direction, immutable_position=True):
     """ Return a Insertion_position instance giving the cassette insertion position based on HTSeq read position. 
 
     Flanking_region_Pos should be a HTSeq.GenomicPosition instance, or a (chrom,start_pos,end_pos,strand) tuple
@@ -294,8 +301,9 @@ def get_insertion_pos_from_flanking_region_pos(flanking_region_pos, cassette_end
      cassette_end gives the side of the insertion that read is on; 
      reads_are_reverse is True if the read is in reverse orientation to the cassette, False otherwise. 
 
-    The cassette chromosome will be the same as read chromosome; the cassette strand will be the same as read strand, 
-     or opposite of the read strand if reads_are_reverse is True.
+    The cassette chromosome will be the same as read chromosome; the cassette strand will be either the same as read strand, 
+     or opposite of the read strand. It's the same in two relative_read_direction+cassette_end combinations: 
+      if the read is inward to the cassette on the 5' end, or outward from the cassette on the 3' end.  Otherwise it's opposite.
 
     The cassette position depends on read position, cassette strand (not read strand) and cassette_end in a complex way:
      Data I have:  which end of the insertion cassette the read is on, and which orientation the cassette is in. 
@@ -310,24 +318,62 @@ def get_insertion_pos_from_flanking_region_pos(flanking_region_pos, cassette_end
 
     If immutable_position is True, the position will be made immutable after creation (this is reversible).
     """
+    if not cassette_end in SEQ_ENDS:
+        raise MutantError("cassette_end argument must be one of %s."%SEQ_ENDS)
+    if not relative_read_direction in RELATIVE_READ_DIRECTIONS:
+        raise MutantError("relative_read_direction argument must be one of %s."%RELATIVE_READ_DIRECTIONS)
     try:                                chrom, start_pos, end_pos, strand = flanking_region_pos
     except (TypeError, ValueError):     chrom, start_pos, end_pos, strand = HTSeq_pos_to_tuple(flanking_region_pos) 
     if strand not in SEQ_STRANDS:   raise MutantError("Invalid strand %s!"%strand)
     if start_pos < 1:               raise MutantError("Flanking region positions must be positive!")
     if start_pos > end_pos:         raise MutantError("Flanking region start can't be after end!")
     ### chromosome is always the same as read, so just leave it as is
-    ### cassette strand is the same as read strand, OR the opposite if reads_are_reverse is True
-    if reads_are_reverse:     strand = '+' if strand=='-' else '-'
-    ### cassette position depends on the read position and cassette_end in a somewhat complex way 
-    #   (see description in docstring, and ../notes.txt for even more detail)
-    if (cassette_end=='5prime' and strand=='+') or (cassette_end=='3prime' and strand=='-'):      
-        pos_before, pos_after = end_pos, None
-    elif (cassette_end=='3prime' and strand=='+') or (cassette_end=='5prime' and strand=='-'):    
-        pos_before, pos_after = None, start_pos
-    else:                           
-        raise ValueError("cassette_end argument must be one of %s."%SEQ_ENDS)
-    return Insertion_position(chrom, strand, position_before=pos_before, position_after=pos_after, 
-                              immutable=immutable_position)
+    ### cassette strand is the same as read strand, OR the opposite if the read is opposite to cassette (happens in two cases)
+    if (cassette_end=='5prime' and relative_read_direction=='inward'):      pass
+    elif: (cassette_end=='3prime' and relative_read_direction=='outard'):   pass
+    else:                                                                   strand = ('+' if strand=='-' else '-')
+    ### cassette position depends on the read position and cassette_end in a somewhat complex way (see docstring)
+    if (cassette_end=='5prime' and strand=='+') or (cassette_end=='3prime' and strand=='-'): pos_before, pos_after = end_pos, None
+    else:                                                                                    pos_before, pos_after = None, start_pos
+    return Insertion_position(chrom, strand, position_before=pos_before, position_after=pos_after, immutable=immutable_position)
+
+# TODO refactor this with the above function!
+def get_RISCC_pos_from_flanking_region_pos(flanking_region_pos, cassette_end, reads_are_reverse=False, immutable_position=True):
+    """ Return a Insertion_position instance giving the position of the far end of RISCC genome-side read.
+
+    The strand should be the same as that for the cassette-side read if the two are consistent.
+
+    Flanking_region_Pos should be a HTSeq.GenomicPosition instance, or a (chrom,start_pos,end_pos,strand) tuple
+      (the tuple should have 1-based end-inclusive positions, so AA is 1-2 in AATT; HTSeq positions are 0-based end-exclusive); 
+     cassette_end gives the side of the insertion that read is on; 
+     reads_are_reverse is True if the read is in reverse orientation to the cassette, False otherwise. 
+
+    See mutant_analysis_classes.get_insertion_pos_from_flanking_region_pos for how this is done for insertion positions.
+    This is somewhat different: we know the genome-side read is in opposite orientation from the cassette-side read
+     (since they're paired-end reads from the same data), so in order for the strand to match between these two ends, 
+     it has to be calculated in the opposite way. 
+    The position we're interested in is always the position of the START of the read 
+     (which according to most encodings is the end if the strand is -).
+
+    If immutable_position is True, the position will be made immutable after creation (this is reversible).
+    """
+    # note: For RISCC cassette-side reads, 5' data has 5prime and reads_are_reverse=True, 3' data has 3prime and reads_are_reverse=False.  NOT DEALING WITH other cases!
+    try:                                chrom, start_pos, end_pos, strand = flanking_region_pos
+    except (TypeError, ValueError):     chrom, start_pos, end_pos, strand = HTSeq_pos_to_tuple(flanking_region_pos) 
+    if strand not in SEQ_STRANDS:       raise MutantError("Invalid strand %s! Must be one of %s"%(strand, SEQ_STRANDS))
+    if cassette_end not in SEQ_ENDS:    raise MutantError("Invalid end %s! Must be one of %s"%(cassette_end, SEQ_ENDS))
+    if start_pos < 1:                   raise MutantError("Flanking region positions must be positive!")
+    if start_pos > end_pos:             raise MutantError("Flanking region start can't be after end!")
+    if not ((cassette_end=='5prime' and reads_are_reverse==True) or (cassette_end=='3prime' and reads_are_reverse==False)):
+        raise MutantError("For a RISCC read, reads have to read OUT of the cassette - check your end/direction!")
+    ### chromosome is always the same as read, so just leave it as is
+    ### we always want min_position to be the position of the start of the read, 
+    #     since that's the "outer" position in a paired-end set.
+    if strand=='+':     pos_before, pos_after = start_pos, None
+    else:               pos_before, pos_after = end_pos, None
+    ### cassette strand is the opposite to how it is with the cassette-side read
+    if cassette_end=='3prime':  strand = '-' if strand=='+' else '+'
+    return Insertion_position(chrom, strand, position_before=pos_before, position_after=pos_after, immutable=immutable_position)
 
 
 def find_gene_by_pos_gff3(insertion_pos, chromosome_GFF_record, detailed_features=False, quiet=False):
@@ -515,7 +561,7 @@ def find_gene_by_pos_simple(insertion_pos, chromosome_gene_pos_dict, allow_multi
         else:                           return SPECIAL_GENE_CODES.not_found
 
 
-############################### Main classes describing the mutants and mutant sets #####################################
+######################################### Mutant and mutant set functions/classes ###############################################
 
 # help functions returning "blank" mutants for defaultdicts (can't use lambdas because pickle doesn't like them)
 def blank_readcount_only_mutant():
@@ -550,13 +596,13 @@ class Insertional_mutant():
     """
     # TODO add a __slots__ to this to optimize memory usage for when there's tens of thousands of mutants!  But that may cause issues with pickling, etc...
 
-    def __init__(self, insertion_position=None):
+    def __init__(self, barcode, insertion_position=SPECIAL_POSITIONS.unknown):
         """ Set self.position based on argument; initialize read/sequence counts to 0 and gene-info to unknown. 
 
         insertion_position argument should be an Insertion_position instance. 
         """
         # "standard" mutants need general attributes and readcount-related attributes
-        self._set_general_attributes(insertion_position)
+        self._set_general_attributes(barcode, insertion_position)
         self._set_readcount_related_data_to_zero()
 
     def read_info(self, dataset_name=None, strict=False):
@@ -565,14 +611,13 @@ class Insertional_mutant():
         Here this just returns self; more complicated version is for multi-dataset mutants.
         Strict is ignored and only present to make the implementation consistent with the multi-dataset version.
         """
-        if dataset_name is not None:
-            raise MutantError("This is not a multi-dataset mutant - cannot provide dataset_name arg!")
-        else:
-            return self
+        if dataset_name is None:    return self
+        else:                       raise MutantError("This is NOT a multi-dataset mutant - cannot provide dataset_name arg!")
 
     # MAYBE-TODO give each mutant some kind of unique ID at some point in the process?  Or is genomic location sufficient?  If we end up using per-mutant barcodes (in addition to the flanking sequences), we could use that, probably, or that plus genomic location.
 
-    def _set_general_attributes(self, insertion_position):
+    def _set_general_attributes(self, barcode, insertion_position=SPECIAL_POSITIONS.unknown):
+        self.barcode = barcode
         self.position = insertion_position
         # MAYBE-TODO should I have a class for the gene data? Especially if I add more of it (annotation info etc)
         self.gene = SPECIAL_GENE_CODES.not_determined
@@ -586,6 +631,8 @@ class Insertional_mutant():
         self.unique_sequence_count = 0
         self.sequences_and_counts  = defaultdict(int)
         self.original_strand_readcounts = {}
+        self.read_IDs = set()
+        self.RISCC_genome_side_reads = []
 
     @staticmethod
     def _ensure_dataset_None(dataset_name):
@@ -615,8 +662,9 @@ class Insertional_mutant():
         if seq not in self.sequences_and_counts:
             self.unique_sequence_count += 1
         self.sequences_and_counts[seq] += read_count
-        # increment total_read_count
+        # increment total_read_count, and add read ID to the ID set
         self.total_read_count += read_count
+        self.read_IDs.add(HTSeq_alignment.read.name)
         # figure out if the read is perfect and increment perfect_read_count if yes; return True if perfect else False.
         treat_unknown_as = 'match' if treat_unknown_as_match else 'mutation'
         mutation_count = check_mutation_count_try_all_methods(HTSeq_alignment, treat_unknown_as=treat_unknown_as)
@@ -641,57 +689,7 @@ class Insertional_mutant():
         if orientation_both:    self.orientation = orientation_both.pop()
         if feature_both:        self.gene_feature = feature_both.pop()
 
-    def merge_mutant(self, other, check_gene_data=True, opposite_strand_tandem=False, other_is_imperfect=False):
-        """ Merge other mutant into this mutant: merge counts, sequences, etc; set other's counts to 0.
-        Does NOT check that the positions match - this should be done by the caller. 
-        Does NOT merge the positions, except for strand in the opposite_strand_tandem==True case.
-
-        If other_is_imperfect, do NOT count the other mutant's reads as perfect (if it's an off-by-one mutant due to indel, or such).
-        If opposite_strand_tandem, expect the two mutants to be +/- strand; set strand and orientation to 'both', 
-         and store original +/- strand readcounts in self.original_strand_readcounts.
-        """
-        if isinstance(other, (Insertional_mutant_multi_dataset, Insertional_mutant_readcount_only)):  
-            raise MutantError("Can't merge single mutant with a multi-dataset or readcount-only one!")
-
-        # make sure the two mutants don't have conflicting gene data, if required  (and update if own gene data is unknown)
-        # (note: NOT checking position) (this needs to be done first, BEFORE we make changes to the mutants!)
-        if check_gene_data:
-            try:
-                # in the opposite_strand_tandem case, we expect orientations to be different, so pass '?' to the check
-                if opposite_strand_tandem:  self.update_gene_info(other.gene, '?', other.gene_feature)
-                else:                       self.update_gene_info(other.gene, other.orientation, other.gene_feature)
-            except MutantError:
-                raise MutantError("Can't merge the two mutants: the gene/orientation/feature data differs!")
-        
-        ### merge positions
-        # in the opposite_strand_tandem case, the new strand should be "both" and the new position should give both ends
-        if opposite_strand_tandem:
-            assert self.position.strand!=other.position.strand
-            # keep track of original by-strand readcounts
-            self.original_strand_readcounts = dict([(m.position.strand, m.total_read_count) for m in (self, other)])
-            self.position.strand = 'both'
-            self.position.position_before = self.position.position_before or other.position.position_before
-            self.position.position_after = self.position.position_after or other.position.position_after
-            # also set the gene-orientation to "both", unless there is no gene
-            if self.gene not in SPECIAL_GENE_CODES.all_codes:
-                self.orientation = 'both'
-        # otherwise, just keep the self position.
-        # MAYBE-TODO implement position merging?  Are we ever going to need it, really?  PROBABLY NOT.
-
-        ### merge read counts
-        self.total_read_count += other.total_read_count
-        # whether the other mutant's reads should be counted as perfect depends on the situation - if we're adding together mutants
-        #  from two datasets, or opposite-tandems, both are equally good, but if we're merging same-strand-adjacent mutants 
-        #  (where one has a position off by one due to indel), the other mutant shouldn't be considered perfect. 
-        if not other_is_imperfect:
-            self.perfect_read_count += other.perfect_read_count
-        # merge sequences
-        for (seq,count) in other.sequences_and_counts.iteritems():
-            self.sequences_and_counts[seq] += count
-        self.unique_sequence_count = len(self.sequences_and_counts)
-        # LATER-TODO may want to keep more data about sequences! Like exact position and strand and number of mutations - may want to store a list of HTSeq.alignment objects instead of just sequences+counts, really.
-        # TODO keep full info about the original mutants, somehow?  I don't know if that should be kept in the mutant, or separately as a list of merged mutants in the dataset.
-        other._set_readcount_related_data_to_zero()
+    # MAYBE-TODO implement mutant-merging for new IB+RISCC data?  If yes, copy merge_mutant method from mutant_analysis_classes.py
 
     def add_counts(self, total_count, perfect_count, sequence_variant_count, assume_new_sequences=False, dataset_name=None):
         """ Increment self.total_read_count, self.perfect_read_count and self.unique_sequence_count based on inputs.
@@ -730,7 +728,7 @@ class Insertional_mutant():
         self.sequences_and_counts[seq] += seq_count
 
     @staticmethod
-    def get_main_sequence_from_data(seqs_to_counts, N=1):
+    def _get_main_sequence_from_data(seqs_to_counts, N=1):
         """ Return the most common sequence in the given data, and its count (or Nth most common sequence if N is provided). """
         sequences_by_count = sorted([(count,seq) for (seq,count) in seqs_to_counts.iteritems()], reverse=True)
         # try returning the Nth sequence and count; return nothing if there are under N sequences.
@@ -745,7 +743,7 @@ class Insertional_mutant():
         Dataset_name should NEVER be set to non-None, and only present for consistency with the multi-dataset subclass.
         """
         self._ensure_dataset_None(dataset_name)
-        return self.get_main_sequence_from_data(self.sequences_and_counts, N)
+        return self._get_main_sequence_from_data(self.sequences_and_counts, N)
 
     def _copy_non_readcount_data(self, source_mutant):
         """ Copy non-readcount-related data from source_mutant to self (making new copies of all objects). """
@@ -771,6 +769,252 @@ class Insertional_mutant():
             self.original_strand_readcounts = {}
 
     # MAYBE-TODO should there be a copy_mutant function to make a deepcopy?
+
+    ### RISCC-related functions
+    # TODO add to docstring!
+    # TODO add these as appropriate into multi-dataset and readcount-only versions
+    # TODO unit-test all this!!
+
+    def add_RISCC_read(self, new_position, HTSeq_alignment=None, seq=None, N_errors=None, read_count=1):
+        """ Must provide either HTSeq_alignment (if aligned) or seq (if not).
+        If providing HTSeq_alignment, seq and N_errors will be ignored. 
+        Must provide new_position (which should be an Insertion_position instance if read is uniquely aligned, 
+         or None/"Multiple" or such if not); if HTSeq_alignment is given, method does NOT check that new_position matches it.
+        """
+        # TODO make sure this makes sense!
+        if not isinstance(new_position, Insertion_position) and new_position not in SPECIAL_POSITIONS.all_undefined:
+            raise MutantError("RISCC read position %s is unacceptable - must be Insertion_position object or one of %s!"%(
+                new_position, ', '.join(SPECIAL_POSITIONS.all_undefined)))
+        mutant = Insertional_mutant(new_position)
+        if HTSeq_alignment is not None and seq is not None:
+            raise MutantError("When running add_RISCC_read, can't give BOTH HTSeq_alignment and seq!")
+        elif HTSeq_alignment is not None:
+            mutant.add_read(HTSeq_alignment, read_count)
+        elif seq is not None:
+            mutant.add_sequence_and_counts(seq, read_count)
+            if N_errors==0:
+                mutant.add_counts(0, read_count, 0)
+        else:
+            raise MutantError("When running add_RISCC_read, must give HTSeq_alignment or seq!")
+        self.RISCC_genome_side_reads.append(mutant)
+        # Note: adding gene/annotation info for those is implemented in the dataset methods.
+
+    def _if_confirming_read(self, position, max_distance):
+        # read needs to match chromosome and strand to be consistent
+        if position.chromosome != self.position.chromosome:                         return False
+        if position.strand != self.position.strand:                                 return False
+        # it also needs to be below max_distance
+        if abs(position.min_position - self.position.min_position) > max_distance:  return False
+        return True
+        # TODO what about WEIRD cases, when it's the right distance but in the wrong direction? Those are rare enough to ignore for now, but should do something about them!
+
+    def _decide_if_replace_read(self, new_position, max_distance):
+        """ Decide whether new position is "better" than old one - just refactored out of improve_best_RISCC_read for convenience.
+        """
+        # if there are no current reads, add new one
+        if not len(self.RISCC_genome_side_reads):                     return True
+        # if new read isn't "confirming", it can't be better
+        if not self._if_confirming_read(new_position, max_distance):    return False
+        # if the new one is "confirming" and the old one isn't, new one has to be better
+        old_position = self.RISCC_genome_side_reads[0].position
+        if not self._if_confirming_read(old_position, max_distance):    return True
+        # if both the old and new position meet the basic conditions, pick the highest-distance one
+        new_dist = abs(new_position.min_position - self.position.min_position)
+        old_dist = abs(old_position.min_position - self.position.min_position)
+        if new_dist > old_dist:                                 return True
+        else:                                                   return False
+
+    def improve_best_RISCC_read(self, new_position, HTSeq_alignment, max_distance=MAX_POSITION_DISTANCE):
+        """ Compare the read to the current best one - replace the best one if this is better.
+
+        "Better" meaning furthest away from the cassette-side read, while still remaining on the same chromosome, strand,
+            and within max_distance of it.
+         If both reads are on a different chromosome or strand than the cassette-side position (both are bad, really), 
+            the first one is kept.
+         If there is no current read, the new one is always used.
+        """
+        # if there are more than one current reads, you're not using improve_best_RISCC_read consistently!
+        if len(self.RISCC_genome_side_reads) > 1:
+            raise MutantError("Don't try using the improve_best_RISCC_read when keeping more than one read!")
+        # if decided to replace, just make self.RISCC_genome_side_reads be the new mutant, discarding old version
+        if self._decide_if_replace_read(new_position, max_distance):
+            new_mutant = Insertional_mutant(new_position)
+            new_mutant.add_read(HTSeq_alignment)
+            self.RISCC_genome_side_reads = [new_mutant]
+
+    def RISCC_N_confirming_reads(self, max_distance=MAX_POSITION_DISTANCE):
+        """ Return the number of aligned genome-side reads that DON'T confirm the cassette-side position.
+
+        ("Confirm" means same chromosome, consistent strand, and at most max_distance away)
+        """
+        N = 0
+        for read_data in self.RISCC_genome_side_reads:
+            # skip non-aligned reads
+            try:                    chrom = read_data.position.chromosome
+            except AttributeError:  continue
+            if self._if_confirming_read(read_data.position, max_distance):  N += 1
+        return N
+
+    def RISCC_N_non_confirming_reads(self, max_distance=MAX_POSITION_DISTANCE):
+        """ Return the number of aligned genome-side reads that DON'T confirm the cassette-side position.
+
+        ("Confirm" means same chromosome, consistent strand, and at most max_distance away)
+        """
+        return self.RISCC_N_genomic_reads + self.RISCC_N_cassette_reads - self.RISCC_N_confirming_reads(max_distance)
+
+    @property
+    def RISCC_N_unaligned_reads(self):
+        return sum(1 for read_data in self.RISCC_genome_side_reads 
+                   if (read_data.position in SPECIAL_POSITIONS.all_undefined))
+        # TODO if I change to treating multiple as aligned, will this need to change?
+
+    @property
+    def RISCC_N_genomic_reads(self):
+        N = 0
+        for read_data in self.RISCC_genome_side_reads:
+            try:                    chrom = read_data.position.chromosome
+            except AttributeError:  continue
+            if not is_cassette_chromosome(chrom):
+                N += 1
+        return N
+
+    @property
+    def RISCC_N_cassette_reads(self):
+        return len(self.RISCC_genome_side_reads) - self.RISCC_N_genomic_reads - self.RISCC_N_unaligned_reads
+
+    @property
+    def RISCC_N_genomic_chromosomes(self):
+        chroms = set()
+        for read_data in self.RISCC_genome_side_reads:
+            # grab chromosome - unless read is unaligned, then ignore and go on to next one
+            try:                    chrom = read_data.position.chromosome
+            except AttributeError:  continue
+            chroms.add(chrom)
+        return sum(1 for chrom in chroms if not is_cassette_chromosome(chrom))
+            
+    def RISCC_N_distinct_positions(self, max_distance=MAX_POSITION_DISTANCE):
+        """ Return number of distinct insertion positions implied by RISCC data (genomic, cassette, and #chromosomes).
+
+        The output is a 3-tuple giving the number of distinct genome and cassette positions, 
+         and the number of distinct non-cassette chromosomes the positions are in.
+        Positions on different chromosomes/strands are always counted as distinct; positions on same chromosome/strand are 
+         counted as distinct if the distance between them is >=max_distance (THIS IS SLIGHTLY ROUGH).
+        
+        Data used to generate positions includes the cassette-side position (single) and all the genome-side RISCC read positions. 
+        Unaligned reads are ignored.
+        """
+        positions_by_chrom_strand = defaultdict(list)
+        # add the cassette-side position (single)
+        positions_by_chrom_strand[(self.position.chromosome, self.position.strand)].append(self.position.min_position)
+        # add all the genome-side read positions; skip unaligned ones.
+        for read_data in self.RISCC_genome_side_reads:
+            pos = read_data.position
+            try:                    positions_by_chrom_strand[(pos.chromosome, pos.strand)].append(pos.min_position)
+            except AttributeError:  continue
+        # count total number of dictinct positions - different chromosomes or strands, or distance > max_distance
+        total_distinct_positions_genome = 0
+        total_distinct_positions_cassette = 0
+        # for each chromosome, go over all positions and only count ones every MAX_POSITION_DISTANCE as distinct
+        for chrom_strand, positions in positions_by_chrom_strand.items():
+            positions.sort()
+            distinct_positions = [positions[0]]
+            for pos in positions[1:]:
+                if (pos-distinct_positions[-1]) > max_distance:
+                    distinct_positions.append(pos)
+            if is_cassette_chromosome(chrom_strand[0]):     total_distinct_positions_cassette += len(distinct_positions)
+            else:                                           total_distinct_positions_genome += len(distinct_positions)
+        return total_distinct_positions_genome, total_distinct_positions_cassette
+
+    def RISCC_confirmation_status(self, side=None, max_distance=MAX_POSITION_DISTANCE, min_weird_distance=20):
+        """ Return status based on comparison of cassette-side and genome-side reads.
+
+        Also checks whether results make sense given which side of the cassette we're looking at, if provided
+        """
+        # TODO better docstring, unit-tests!
+        if not self.total_read_count:
+            return 'NOT_FOUND'
+        elif not self.RISCC_N_genomic_reads + self.RISCC_N_cassette_reads:
+            return 'NO_ALIGNED_READS'
+        # We take "sum(mutant.RISCC_N_distinct_positions(max_allowed_distance)) > 1" to check for EITHER genomic OR cassette positions - TODO rewrite that method to be more obvious?
+        elif sum(self.RISCC_N_distinct_positions(max_distance)) > 1:
+            return 'WRONG_POSITION'
+        else:
+            distances = []
+            for RISCC_read_data in self.RISCC_genome_side_reads:
+                try:                    distances.append(RISCC_read_data.position.min_position - self.position.min_position)
+                except AttributeError:  pass
+            # check to make sure the position of the genomic-side reads MAKES SENSE vs the cassette-side 
+            #  (is at least M earlier for +strand 5' and -strand 3', and M later for the other two cases)
+            # TODO really, min_weird_distance default should probably depend on the read length...?
+            if (((self.position.strand=='+' and side=="5'") or (self.position.strand=='-' and side=="3'")) 
+                and max(distances) > -min_weird_distance):
+                print ("WEIRD case: a genome-side RISCC read starts only %sbp from the insertion site! %s")%(-max(distances), 
+                                                                                                             self.position)
+                return 'WEIRD'
+            elif (((self.position.strand=='-' and side=="5'") or (self.position.strand=='+' and side=="3'")) 
+                  and min(distances) < min_weird_distance):
+                print ("WEIRD case: a genome-side RISCC read starts only %sbp from the insertion site! %s")%(min(distances), 
+                                                                                                             self.position)
+                return 'WEIRD'
+            else:
+                return 'CONFIRMED'
+
+    def RISCC_max_confirmed_distance(self, max_distance=MAX_POSITION_DISTANCE):
+        """ Return the distance between the cassette-side read and the furthest-away same-area genome-side read.
+
+        Return 0 if no same-area genome-side reads, and NaN if there are no uniquely aligned genome-side reads at all.
+        """
+        distances = []
+        if self.RISCC_N_confirming_reads(max_distance) + self.RISCC_N_non_confirming_reads(max_distance) == 0:
+            return float('NaN')
+        for RISCC_read_data in self.RISCC_genome_side_reads:
+            # Only look at the genome-side reads that match the cassette-side read position!
+            # There's a try/except because unaligned reads don't have proper positions.
+            try:                    
+                if (RISCC_read_data.position.chromosome == self.position.chromosome 
+                    and RISCC_read_data.position.strand == self.position.strand):
+                    pos_difference = abs(RISCC_read_data.position.min_position - self.position.min_position)
+                else:
+                    continue
+            except AttributeError:  
+                continue
+            if pos_difference <= max_distance:
+                distances.append(pos_difference)
+        try:
+            return max(distances)
+        except ValueError:
+            return 0
+        # this is basically unit-tested by the tests for add_RISCC_read and improve_best_RISCC_read
+
+    # TODO add new method that infers the approximate real insertion location!
+
+    def RISCC_print_detail(self, OUTPUT=sys.stdout, max_distance=MAX_POSITION_DISTANCE):
+        ### print summary line
+        N_distinct_genome, N_distinct_cassette = self.RISCC_N_distinct_positions(max_distance)
+        OUTPUT.write(" * %s distinct genomic positions (on %s chromosomes; %s genomic reads), "%(N_distinct_genome, 
+                                                                 self.RISCC_N_genomic_chromosomes, self.RISCC_N_genomic_reads)
+                     +"plus %s distinct cassette positions (%s reads) and %s unaligned/multi-aligned reads:\n"%(N_distinct_cassette,
+                                                                 self.RISCC_N_cassette_reads, self.RISCC_N_unaligned_reads))
+        # TODO is that a useful summary?  Is it confusing that the casette-side read isn't included in the read numbers?
+        ### print cassette-side position
+        OUTPUT.write("Cassette-side position:::\n")
+        main_pos_fields = [self.position.chromosome, self.position.strand, self.position.full_position, self.gene, self.orientation, 
+                           self.gene_feature, self.get_main_sequence()[0]]
+        try:                    main_pos_fields += self.gene_annotation
+        except AttributeError:  pass
+        OUTPUT.write('\t'.join([str(x) for x in main_pos_fields]) + '\n')
+        ### print lines for each of the RISCC genome-side reads
+        # sort the RISCC reads by alignment position (chrom,strand,pos; unaligned go last)
+        OUTPUT.write("RISCC protocol genome-side reads:::\n")
+        for read_data in sorted(self.RISCC_genome_side_reads, key = lambda x: x.position):
+            try: 
+                fields = [read_data.position.chromosome, read_data.position.strand, read_data.position.min_position]
+            except AttributeError:
+                fields = [read_data.position, '-', '-']
+            fields += [read_data.gene, read_data.orientation, read_data.gene_feature, read_data.get_main_sequence()[0]] 
+            try:                    fields += read_data.gene_annotation
+            except AttributeError:  pass
+            OUTPUT.write('\t'.join([str(x) for x in fields]) + '\n')
 
 
 class Insertional_mutant_readcount_only(Insertional_mutant):
@@ -883,7 +1127,7 @@ class Insertional_mutant_multi_dataset(Insertional_mutant):
             seqs_to_counts = reduce(add_dicts_of_ints, 
                                     [dataset.sequences_and_counts for dataset in self.by_dataset.itervalues()])
         # MAYBE-TODO print a warning if different dataset mutants have different main sequences?
-        return Insertional_mutant.get_main_sequence_from_data(seqs_to_counts, N)
+        return Insertional_mutant._get_main_sequence_from_data(seqs_to_counts, N)
         # MAYBE-TODO should there be a warning/failure/something if it's a multi-dataset mutant and the user wants
         #  an overall main sequence and only some of the mutants have any sequence data?
 
@@ -1290,8 +1534,9 @@ class Insertional_mutant_pool_dataset():
 
     # MAYBE-TODO should I make multi-datasets a subclass of normal ones instead of having the same class implement both?
 
-    def __init__(self, cassette_end='?', reads_are_reverse='?', multi_dataset=False, infile=None):
-        """ Initializes empty dataset; saves properties as provided; optionally reads data from mutant infile. """
+    def __init__(self, cassette_end='?', reads_are_reverse='?', multi_dataset=False):
+        """ Initializes empty dataset; saves properties as provided. """
+        # TODO TODO TODO change the main data structure to be by barcode instead of position!
         # _mutants_by_position is the main data structure here, but it's also private:
         #      see "METHODS FOR EMULATING A CONTAINER TYPE" section below for proper ways to interact with mutants.
         #   the single mutants should be single-dataset by default, or multi-dataset if the containing dataset is.
@@ -1306,9 +1551,6 @@ class Insertional_mutant_pool_dataset():
         # gene/annotation-related information - LATER-TODO should this even be here, or somewhere else?
         self.gene_annotation_header = []
         self.total_genes_in_genome = 0
-        # optionally read mutant data from infile (TODO maybe should remove this, it's supposedly deprecated...)
-        if infile is not None:
-            self.read_data_from_file(infile)
 
     ######### METHODS FOR EMULATING A CONTAINER TYPE (a dataset is essentially a container of mutants)
     # everything is currently based on the private self._mutants_by_position dictionary, but this may change.
@@ -1468,74 +1710,70 @@ class Insertional_mutant_pool_dataset():
         #  so the specific categories must be 0 too:
         if summ.non_aligned_read_count==0:  summ.unaligned, summ.multiple_aligned = 0, 0
 
-    def read_data_from_file(self, infile, assume_new_sequences=False):
-        """ Read data from a file made by self.print_data, add mutants to dataset. Ignores some things. DEPRECATED. 
+    def add_RISCC_genome_side_alignments_to_data(self, genome_side_infile, best_only=False, multiple_alignment=False, 
+                                                   max_distance_for_best=MAX_POSITION_DISTANCE):
+        # TODO docstring!
+        if self.summary.cassette_end not in SEQ_ENDS:
+            raise MutantError("Can't run add_RISCC_genome_side_alignments_to_data if cassette_end is unknown!")
+        if self.summary.reads_are_reverse not in [True,False]:
+            raise MutantError("Can't run add_RISCC_genome_side_alignments_to_data if reads_are_reverse is unknown!")
+        # We'll be going over a lot of genome-side reads, which are the paired-end-sequencing mates of 
+        #  the cassette-side reads used for mutant positions. 
 
-        Populates most of the dataset total read/mutant count values correctly, but ignores unaligned and discarded reads, 
-         anything involving special regions, mutant-merging information, and possibly other things.
-        Cannot deal with gene annotation fields.
-        Ignores single sequence/count fields; the total number of sequence variants is unreliable if you add to preexisting
-        data (if the data originally listed 1 unique sequence, and new data adds another 2 sequences, is the total 2 or 3 
-         unique sequences?  If assume_new_sequences is True, the total is old+new; if it's False, it's max(old,new)). 
+        ### First make a dictionary with read IDs as keys and mutant positions as values, 
+        # so we can quickly identify which read goes with which mutant 
+        # (some/most reads won't go with any mutants, if their cassette-side reads were unaligned or discarded)
+        read_ID_to_position = {}
+        for mutant in self:
+            for read_ID in mutant.read_IDs:
+                read_ID_to_position[read_ID] = mutant.position
 
-        DEPRECATED: All datasets should now have pickled versions for easy reading into python - use those instead.  
-         This method will be kept around for reading old datasets without pickled versions, but will NOT BE UPDATED.
-        """
-        if self.multi_dataset:  raise MutantError("read_data_from_file not implemented for multi-datasets!")
-        for line in open(infile):
-            # try to extract info from the comment lines that can't be reproduced from the data, ignore the rest
-            # NOTE: won't be adding any missing information - use pickled files instead, THIS IS DEPRECATED.
-            if line.startswith('#'):                                        
-                line = line.strip('#').strip()
-                if line.startswith("Reads discarded in preprocessing"):
-                    data = line.split('\t')[-1].split(' ')[0]
-                    try:                data = int(data)
-                    except ValueError:  pass
-                    self.summary.discarded_read_count = data
-                if line.startswith("Unaligned reads") or line.startswith("Reads without a unique alignment"):
-                    data = line.split('\t')[-1].split(' ')[0]
-                    try:                data = int(data)
-                    except ValueError:  pass
-                    self.summary.non_aligned_read_count = data
-                    # special case for when we don't know the specific unaligned categories, but we know 
-                    #  total non-aligned is 0, so the specific categories must be 0 too:
-                    if self.summary.non_aligned_read_count==0:  self.summary.unaligned, self.summary.multiple_aligned = 0,0
-                if line.startswith("(read location with respect to cassette: which end, which direction)"):
-                    data = line.split('\t')[-1].strip('()').split(', ')
-                    self.summary.cassette_end = data[0]
-                    self.summary.reads_are_reverse = {'reverse':True, 'forward':False, '?':'?'}[data[1]]
-                if line.startswith("(total genes in genome annotation data)"):
-                    data = line.split('\t')[-1].strip('()')
-                    try:                data = int(data)
-                    except ValueError:  pass
-                    self.total_genes_in_genome = data
-                continue
-            # ignore special-comment and header lines, parse other tab-separated lines into values
-            if line.startswith('<REGEX>#') or line.startswith('<IGNORE>'):  continue       
-            if line.startswith('chromosome\tstrand\tmin_position\t'):       continue
-            # parse non-comment tab-separated lines into values
-            fields = line.split('\t')
-            chromosome = fields[0]
-            strand = fields[1]
-            min_pos = int(fields[2])
-            full_pos = fields[3]
-            gene, orientation, gene_feature = fields[4:7]
-            total_reads,perfect_reads,sequence_variants = [int(x) for x in fields[7:10]]
-            # generate new mutant if necessary; add counts and gene info to mutant (USE IMMUTABLE POSITIONS BY DEFAULT)
-            position = Insertion_position(chromosome, strand, full_position=full_pos, immutable=True)
-            curr_mutant = self.get_mutant(position)
-            curr_mutant.add_counts(total_reads,perfect_reads,sequence_variants,assume_new_sequences)
-            curr_mutant.update_gene_info(gene, orientation, gene_feature)
-            # get however many specific sequences/counts are listed (this is variable)
-            sequence_fields = fields[10::2]
-            count_fields = fields[11::2]
-            for seq, count in zip(sequence_fields, count_fields):
-                if int(count)>0:
-                    assert seq!=''
-                    curr_mutant.sequences_and_counts[seq] += int(count)
-            # add to dataset total read/mutant counts
-            summ = self.summary
-    
+        ### Go over all the reads in the HTSeq_alignment_reader, add them to the appropriate mutant
+        if genome_side_infile.endswith('.sam'):
+            read_IDs = set()
+            for aln in HTSeq.SAM_Reader(genome_side_infile):
+                read_ID = aln.read.name
+                # grab the mutant that has the matching read; if no mutant matches the read ID, go on to next read
+                try:                mutant_pos = read_ID_to_position[read_ID]
+                except KeyError:    continue
+                mutant = self.get_mutant(mutant_pos)
+                # for multiple alignments, just give the sequence and ignore the position entirely. 
+                #  (have to keep track of read IDs, since there are likely to be multiple lines per read!)
+                # TODO implement those properly, with giving the alignment positions?  TRICKY to figure out how to print them!
+                if multiple_alignment:
+                    if best_only:
+                        raise MutantError("Multiple alignments make no sense with best_only flag!")
+                    if read_ID in read_IDs:
+                        continue
+                    mutant.add_RISCC_read(new_position=SPECIAL_GENE_CODES.multi_aligned, HTSeq_alignment=None, seq=aln.read.seq)
+                # for normal alignments, use full alignment to add read info
+                else:
+                    if read_ID in read_IDs:
+                        raise MutantError("File %s wasn't supposed to be multiple alignments - why is read %s there twice??"%(
+                            genome_side_infile, read_ID))
+                    # convert the genome-side read HTSeq alignment data to an "insertion" position of the end of it!
+                    genome_side_position = get_RISCC_pos_from_flanking_region_pos(aln.iv, self.summary.cassette_end, 
+                                                                                    self.summary.reads_are_reverse)
+                    if best_only:   mutant.improve_best_RISCC_read(genome_side_position, aln, max_distance_for_best)
+                    else:           mutant.add_RISCC_read(genome_side_position, aln)
+                read_IDs.add(read_ID)
+        # For fasta files, just assume it's unaligned, or multiple if that's set, and use the sequences.
+        elif genome_side_infile.endswith('.fa'):
+            if best_only:
+                raise MutantError("Fasta files (multiple or unaligned) make no sense with best_only flag!")
+            if not multiple_alignment:
+                print "Assuming reads in %s are unaligned."%genome_side_infile
+                position_val = SPECIAL_POSITIONS.unaligned
+            else:
+                position_val = SPECIAL_GENE_CODES.multi_aligned
+            for name,seq in parse_fasta(genome_side_infile):
+                try:                mutant_pos = read_ID_to_position[name]
+                except KeyError:    continue
+                mutant = self.get_mutant(mutant_pos)
+                mutant.add_RISCC_read(new_position=position_val, HTSeq_alignment=None, seq=seq)
+        else:
+            raise MutantError("Don't know how to deal with file %s - not a .fa or .sam file!"%genome_side_infile)
+
 
     ######### SUMMARY INFORMATION
 
@@ -1764,6 +2002,8 @@ class Insertional_mutant_pool_dataset():
     def find_genes_for_mutants(self, genefile, detailed_features=False, N_run_groups=3, verbosity_level=1):
         """ To each mutant in the dataset, add the gene it's in (look up gene positions for each mutant using genefile).
 
+        ALSO add gene data to all the RISCC-genome-side-read mutants inside each mutant!
+
         If detailed_features is True, also look up whether the mutant is in an exon/intron/UTR.
         Read the file in N_run_groups passes to avoid using up too much memory/CPU.
         """ 
@@ -1771,11 +2011,15 @@ class Insertional_mutant_pool_dataset():
         # MAYBE-TODO implement for multi-datasets?  The actual gene-finding would be easy, since it'd just work on 
         #  multi-dataset mutants instead of single-dataset ones; adding stuff to summary would be harder.
 
-        # group all the mutants by chromosome, so that I can go over each chromosome in genefile separately
+        # Group all the mutants by chromosome, so that I can go over each chromosome in genefile separately
         #   instead of reading in all the data at once (which uses a lot of memory)
+        #  Inclue both the main mutants, AND all the RISCC genome-side read sub-mutants!
         mutants_by_chromosome = defaultdict(set)
         for mutant in self:
             mutants_by_chromosome[mutant.position.chromosome].add(mutant)
+            for RISCC_read_data in mutant.RISCC_genome_side_reads:
+                try:                    mutants_by_chromosome[RISCC_read_data.position.chromosome].add(RISCC_read_data)
+                except AttributeError:  continue
         self._find_genes_for_mutant_list(mutants_by_chromosome, genefile, detailed_features, N_run_groups, verbosity_level)
 
     def _find_genes_for_mutant_list(self, mutants_by_chromosome, genefile, detailed_features=False, 
@@ -1866,8 +2110,9 @@ class Insertional_mutant_pool_dataset():
         # add the annotation info to each mutant (or nothing, if gene has no annotation) 
         N_annotated = 0
         for mutant in self:
-            if_annotated = self._add_gene_annotation_to_mutant(mutant, gene_annotation_dict)
-            if if_annotated:    N_annotated += 1
+            for curr_mutant in [mutant] + mutant.RISCC_genome_side_reads:
+                if_annotated = self._add_gene_annotation_to_mutant(mutant, gene_annotation_dict)
+                if if_annotated:    N_annotated += 1
         if print_info:          print "Added %s annotations"%N_annotated
         elif not N_annotated:   print "Warning: No gene annotations found!"
         # LATER-TODO add this to the gene-info run-test case!
@@ -2457,6 +2702,9 @@ class Insertional_mutant_pool_dataset():
         Prints tab-separated table for multi-datasets-1.
         Prints to stdout by default, can also pass an open file object).
         """
+        # TODO need proper extra summary stuff for RISCC data!
+        #   #correct/incorrect positions, #cassette fragments, for correct positions distribution of distance checked, ...
+
         ### define a list of datasets+summaries that we'll be dealing with
         if not self.multi_dataset:  summaries_and_datasets = [(self.summary, None)]
         else:                       summaries_and_datasets = [(self.summary[dataset],dataset) for dataset in self.dataset_order]
@@ -2619,7 +2867,6 @@ class Insertional_mutant_pool_dataset():
                 OUTPUT.write('\t' + line_value_getter(summ))
             OUTPUT.write('\n')
 
-
     def _sort_data(self, sort_data_by=None):
         """ Sort the mutants by position or readcount, or leave unsorted. """
         all_mutants = iter(self)
@@ -2635,29 +2882,30 @@ class Insertional_mutant_pool_dataset():
         return sorted_data
 
     def print_data(self, OUTPUT=sys.stdout, sort_data_by=None, N_sequences=None, header_line=True, header_prefix="# "):
-        """ Print full data, one line per mutant: position data, gene info, read counts, optionally sequences.
+        """ Print full data, one line per mutant: position data, gene info, read counts, RISCC status/info.
         (see the file header line for exactly what all the output fields are).
 
-        For a normal dataset, print position/gene info (7 fields), total_reads, perfect_reads, N_sequence_variants, 
+        For a normal dataset, print position/RISCC/gene info (10 fields), total_reads, perfect_reads, N_sequence_variants, 
          the N_sequences most common sequences and counts (alternating, taking 2*N_sequences fields), 
          and gene annotation if it exists (arbitrary number of tab-separated fields).
 
-        For a multi-dataset, print position/gene info (7 fields), the main sequence (taken over all the datasets),
+        For a multi-dataset, print position/RISCC/gene info (10 fields), the main sequence (taken over all the datasets),
          then reads_in_<x> and perfect_in_<x> for each dataset (total and perfect reads - total 2*N_datasets fields), 
          then gene annotation if it exists.
 
         Data is printed to OUTPUT, which should be an open file object (stdout by default).
          Output is tab-separated, with optional header starting with "# ".  
         """
+        # TODO add barcode!
         if self.multi_dataset and N_sequences is not None and N_sequences!=1:
             raise MutantError("Only one sequence can currently be printed in print_data for multi-datasets!")
         if N_sequences is None and not self.multi_dataset:     N_sequences = 2
 
         ### print the header line (different for normal and multi-datasets)
-        # MAYBE-TODO should printing the gene info be optional?  Maybe... 
-        #   Would save space when there isn't any meaningful gene info to print anyway.
         if header_line:
-            header = ['chromosome','strand','min_position','full_position', 'gene','orientation','feature']
+            header = ['chromosome','strand','min_position','full_position', 
+                      'RISCC-conf-dist', 'RISCC-N-conf-reads', 'RISCC-N-wrong-reads',
+                      'gene','orientation','feature']
             if not self.multi_dataset:
                 header += ['total_reads','perfect_reads', 'N_sequence_variants']
                 for N in range(1,N_sequences+1):    
@@ -2678,8 +2926,11 @@ class Insertional_mutant_pool_dataset():
 
         ### for each mutant, print the mutant data line (different for normal and multi-datasets)
         for mutant in sorted_mutants:
-            mutant_data = [mutant.position.chromosome, mutant.position.strand, mutant.position.min_position, 
-                           mutant.position.full_position, mutant.gene, mutant.orientation, mutant.gene_feature] 
+            mutant_data = [mutant.position.chromosome, mutant.position.strand, 
+                           mutant.position.min_position, mutant.position.full_position]
+            mutant_data += [mutant.RISCC_max_confirmed_distance(), 
+                            mutant.RISCC_N_confirming_reads(), mutant.RISCC_N_non_confirming_reads()]
+            mutant_data += [mutant.gene, mutant.orientation, mutant.gene_feature] 
             if not self.multi_dataset:
                 mutant_data += [mutant.total_read_count, mutant.perfect_read_count, mutant.unique_sequence_count]
                 for N in range(1,N_sequences+1):
@@ -2701,18 +2952,41 @@ class Insertional_mutant_pool_dataset():
             OUTPUT.write('\t'.join([str(x) for x in mutant_data]))
             OUTPUT.write('\n')
 
+    def print_detailed_RISCC_data(self, OUTPUT=sys.stdout, sort_data_by=None, max_distance=MAX_POSITION_DISTANCE):
+        """ Write detailed RISCC data (all reads per mutant) to separate file.
+        """
+        # TODO docstring!
+
+        # TODO should probably add header
+        # TODO add annotation!
+
+        ### sort all mutants by position or readcount (for single datasets only for now), or don't sort at all
+        sorted_mutants = self._sort_data(sort_data_by)
+
+        ### Quick summary
+        N_total = len(self)
+        # using sum because you can't do len on generators
+        N_single_genomic = sum(1 for m in self if m.RISCC_N_distinct_positions(max_distance)[0]==1)
+        N_single_chrom = sum(1 for m in self if m.RISCC_N_genomic_chromosomes==1)
+        N_cassette = sum(1 for m in self if m.RISCC_N_distinct_positions(max_distance)[1]>0)
+        OUTPUT.write("# %s mutants total; %s have one genomic location; "%(N_total, 
+                                                                           value_and_percentages(N_single_genomic, [N_total]))
+                     +"%s have locations on only one genomic chromosome; "%(value_and_percentages(N_single_chrom, [N_total]))
+                     +"%s also have one or more cassette locations.\n"%(value_and_percentages(N_cassette, [N_total])) )
+
+        # TODO add info on how many actually have ANY genomic-side reads!  And out of those, how many are confirmed vs not.
+
+        ### Print data for all mutants
+        for mutant in sorted_mutants:
+            mutant.RISCC_print_detail(OUTPUT, max_distance)
+
 
 def read_mutant_file(infile):
-    """ Read mutant input file, return as new dataset (old .txt format, or new .pickle format). """
-    if infile.endswith('.pickle'):
-        current_dataset = unpickle(infile)
-    else:
-        current_dataset = Insertional_mutant_pool_dataset(infile=infile)
-        current_dataset.count_adjacent_mutants(OUTPUT=None)
-    return current_dataset
+    """ Read mutant input file, return as new dataset (.pickle format only). """
+    return unpickle(infile)
 
 
-############################################### Unit-tests ##############################################################
+################################################### Unit-tests and main ########################################################
 
 class Testing_position_functionality(unittest.TestCase):
     """ Unit-tests for position-related classes and functions. """
@@ -4066,6 +4340,157 @@ class Testing_Insertional_mutant_pool_dataset(unittest.TestCase):
         with open(picklefile) as PICKLE:         data2_new = pickle.load(PICKLE)
         self._check_infile2(data2_new)
         os.unlink(picklefile)
+
+
+class Testing_RISCC(unittest.TestCase):
+    """ Unit-tests for position-related classes and functions. """
+
+    def test__get_RISCC_pos_from_flanking_region_pos(self):
+        pos_tuple = ('C', 3, 7, '+')
+        # note: For RISCC cassette-side reads, 5' data has 5prime and reads_are_reverse=True, 3' data has 3prime and reads_are_reverse=False.  NOT DEALING WITH other cases - they should raise an error!
+        self.assertRaises(MutantError, get_RISCC_pos_from_flanking_region_pos, pos_tuple, '5prime', reads_are_reverse=False)
+        self.assertRaises(MutantError, get_RISCC_pos_from_flanking_region_pos, pos_tuple, '3prime', reads_are_reverse=True)
+        ### case with +strand original read ([|||] is cassette, ---...--- is the paired-end read, * is desired position): 
+        #   +strand cassette if 5' data, or -strand if 3':  *----......-----[|||||]
+        pos_tuple = ('C', 3, 7, '+')
+        pos = get_RISCC_pos_from_flanking_region_pos(pos_tuple, '5prime', reads_are_reverse=True)
+        assert (pos.chromosome == 'C' and pos.strand=='+' and pos.min_position==3)
+        pos = get_RISCC_pos_from_flanking_region_pos(pos_tuple, '3prime', reads_are_reverse=False)
+        assert (pos.chromosome == 'C' and pos.strand=='-' and pos.min_position==3)
+        ### the other case:  [|||||]----......-----*
+        #   -strand cassette if 5' data, or +strand if 3'
+        pos_tuple = ('C', 3, 7, '-')
+        pos = get_RISCC_pos_from_flanking_region_pos(pos_tuple, '5prime', reads_are_reverse=True)
+        assert (pos.chromosome == 'C' and pos.strand=='-' and pos.min_position==7)
+        pos = get_RISCC_pos_from_flanking_region_pos(pos_tuple, '3prime', reads_are_reverse=False)
+        assert (pos.chromosome == 'C' and pos.strand=='+' and pos.min_position==7)
+
+    @staticmethod
+    def _make_pos(pos):
+        """ Convenience function to make the args to Fake_HTSeq_genomic_pos from an Insertion_position """
+        return pos.chromosome, pos.strand, pos.min_position, pos.min_position+20
+
+    def test__add_RISCC_read(self):
+        """ Also tests RISCC_max_confirmed_distance """
+        # make the cassette-side read
+        Fake_HTSeq_alignment = Fake_deepseq_objects.Fake_HTSeq_alignment
+        pos0 = Insertion_position('chr1','+',position_before=100)
+        aln0 = Fake_HTSeq_alignment(seq='AAA', readname='read1', pos=self._make_pos(pos0))
+        mutant = Insertional_mutant(pos0)
+        assert mutant.total_read_count == 0
+        assert isnan(mutant.RISCC_max_confirmed_distance(10))
+        mutant.add_read(aln0)
+        assert mutant.total_read_count == 1
+        assert isnan(mutant.RISCC_max_confirmed_distance(10))
+        # add unaligned or multi-aligned RISCC read - the max confirmed distance should still be NaN
+        mutant.add_RISCC_read(new_position=SPECIAL_POSITIONS.unaligned, HTSeq_alignment=None, seq='AAA')
+        assert isnan(mutant.RISCC_max_confirmed_distance(10))
+        mutant.add_RISCC_read(new_position=SPECIAL_GENE_CODES.multi_aligned, HTSeq_alignment=None, seq='AAA')
+        assert isnan(mutant.RISCC_max_confirmed_distance(10))
+        # add RISCC reads - a confirming one, a non-confirming one, and a weird one.
+        pos1 = Insertion_position('chr1','+',position_before=0)
+        aln1 = Fake_HTSeq_alignment(seq='AAA', readname='read1', pos=self._make_pos(pos1))
+        mutant.add_RISCC_read(pos1, HTSeq_alignment=aln1)
+        pos2 = Insertion_position('chr2','+',position_before=0)
+        aln2 = Fake_HTSeq_alignment(seq='AGA', readname='read1', pos=self._make_pos(pos2))
+        mutant.add_RISCC_read(pos2, HTSeq_alignment=aln2)
+        pos3 = Insertion_position('chr1','-',position_before=0)
+        aln3 = Fake_HTSeq_alignment(seq='ACA', readname='read1', pos=self._make_pos(pos3))
+        mutant.add_RISCC_read(pos3, HTSeq_alignment=aln3)
+        assert len(mutant.RISCC_genome_side_reads) == 5
+        aligned_mutants = [m for m in mutant.RISCC_genome_side_reads if m.position not in SPECIAL_POSITIONS.all_undefined]
+        assert [m.position.chromosome for m in aligned_mutants] == 'chr1 chr2 chr1'.split()
+        assert [m.position.strand for m in aligned_mutants] == '+ + -'.split()
+        assert mutant.RISCC_max_confirmed_distance(1000) == 100
+        assert mutant.RISCC_max_confirmed_distance(100) == 100
+        assert mutant.RISCC_max_confirmed_distance(10) == 0
+
+    def test__improve_best_RISCC_read(self):
+        """ Also tests RISCC_max_confirmed_distance """
+        Fake_HTSeq_alignment = Fake_deepseq_objects.Fake_HTSeq_alignment
+        # make the cassette-side read
+        pos0 = Insertion_position('chr1','+',position_before=100)
+        aln0 = Fake_HTSeq_alignment(seq='AAA', readname='read1', pos=self._make_pos(pos0))
+        mutant = Insertional_mutant(pos0)
+        assert mutant.position.min_position == 100
+        assert mutant.total_read_count == 0
+        assert isnan(mutant.RISCC_max_confirmed_distance(1000))
+        mutant.add_read(aln0)
+        assert mutant.total_read_count == 1
+        assert isnan(mutant.RISCC_max_confirmed_distance(1000))
+        # add bad read first, then better ones, make sure they're replaced (or not, if both are equally bad)
+        #  (max confirmed distance should change from NaN to 0 once there are some non-confirming reads, 
+        #   then to a positive value once there are some confirming reads)
+        pos1 = Insertion_position('chr2','+',position_before=10)
+        aln1 = Fake_HTSeq_alignment(seq='AGA', readname='read1', pos=self._make_pos(pos1))
+        mutant.improve_best_RISCC_read(pos1, HTSeq_alignment=aln1, max_distance=50)
+        assert len(mutant.RISCC_genome_side_reads) == 1
+        assert mutant.RISCC_genome_side_reads[0].position.min_position == 10
+        assert mutant.RISCC_max_confirmed_distance(1000) == 0
+        pos2 = Insertion_position('chr1','-',position_before=11)
+        aln2 = Fake_HTSeq_alignment(seq='ACA', readname='read1', pos=self._make_pos(pos2))
+        mutant.improve_best_RISCC_read(pos2, HTSeq_alignment=aln2, max_distance=50)
+        assert len(mutant.RISCC_genome_side_reads) == 1
+        assert mutant.RISCC_genome_side_reads[0].position.min_position == 10
+        assert mutant.RISCC_max_confirmed_distance(1000) == 0
+        pos3 = Insertion_position('chr1','+',position_before=12)
+        aln3 = Fake_HTSeq_alignment(seq='AAA', readname='read1', pos=self._make_pos(pos3))
+        mutant.improve_best_RISCC_read(pos3, HTSeq_alignment=aln3, max_distance=50)
+        assert len(mutant.RISCC_genome_side_reads) == 1
+        assert mutant.RISCC_genome_side_reads[0].position.min_position == 10
+        assert mutant.RISCC_max_confirmed_distance(1000) == 0
+        pos4 = Insertion_position('chr1','+',position_before=80)
+        aln4 = Fake_HTSeq_alignment(seq='AAA', readname='read1', pos=self._make_pos(pos4))
+        mutant.improve_best_RISCC_read(pos4, HTSeq_alignment=aln4, max_distance=50)
+        assert len(mutant.RISCC_genome_side_reads) == 1
+        assert mutant.RISCC_genome_side_reads[0].position.min_position == 80
+        assert mutant.RISCC_max_confirmed_distance(1000) == 20
+        pos5 = Insertion_position('chr1','+',position_before=70)
+        aln5 = Fake_HTSeq_alignment(seq='AAA', readname='read1', pos=self._make_pos(pos5))
+        mutant.improve_best_RISCC_read(pos5, HTSeq_alignment=aln5, max_distance=50)
+        assert len(mutant.RISCC_genome_side_reads) == 1
+        assert mutant.RISCC_genome_side_reads[0].position.min_position == 70
+        assert mutant.RISCC_max_confirmed_distance(1000) == 30
+        # add good read first, then worse ones, make sure it's NOT replaced (remember to start with new mutant!)
+        mutant = Insertional_mutant(pos0)
+        mutant.add_read(aln0)
+        mutant.improve_best_RISCC_read(pos5, HTSeq_alignment=aln5, max_distance=50)
+        assert len(mutant.RISCC_genome_side_reads) == 1
+        assert mutant.RISCC_genome_side_reads[0].position.min_position == 70
+        assert mutant.RISCC_max_confirmed_distance(1000) == 30
+        mutant.improve_best_RISCC_read(pos1, HTSeq_alignment=aln1, max_distance=50)
+        assert len(mutant.RISCC_genome_side_reads) == 1
+        assert mutant.RISCC_genome_side_reads[0].position.min_position == 70
+        assert mutant.RISCC_max_confirmed_distance(1000) == 30
+        mutant.improve_best_RISCC_read(pos2, HTSeq_alignment=aln2, max_distance=50)
+        assert len(mutant.RISCC_genome_side_reads) == 1
+        assert mutant.RISCC_genome_side_reads[0].position.min_position == 70
+        assert mutant.RISCC_max_confirmed_distance(1000) == 30
+        mutant.improve_best_RISCC_read(pos3, HTSeq_alignment=aln3, max_distance=50)
+        assert len(mutant.RISCC_genome_side_reads) == 1
+        assert mutant.RISCC_genome_side_reads[0].position.min_position == 70
+        assert mutant.RISCC_max_confirmed_distance(1000) == 30
+        mutant.improve_best_RISCC_read(pos4, HTSeq_alignment=aln4, max_distance=50)
+        assert len(mutant.RISCC_genome_side_reads) == 1
+        assert mutant.RISCC_genome_side_reads[0].position.min_position == 70
+        assert mutant.RISCC_max_confirmed_distance(1000) == 30
+        # make sure wrong-strand closer-distance new read won't replace old right-strand one! (this was a bug once)
+        pos0 = Insertion_position('chr1','+',position_before=100)
+        aln0 = Fake_HTSeq_alignment(seq='AAA', readname='read1', pos=self._make_pos(pos0))
+        mutant = Insertional_mutant(pos0)
+        mutant.add_read(aln0)
+        pos5 = Insertion_position('chr1','+',position_before=70)
+        aln5 = Fake_HTSeq_alignment(seq='AAA', readname='read1', pos=self._make_pos(pos5))
+        mutant.improve_best_RISCC_read(pos5, HTSeq_alignment=aln5, max_distance=1000)
+        assert len(mutant.RISCC_genome_side_reads) == 1
+        assert mutant.RISCC_genome_side_reads[0].position.min_position == 70
+        assert mutant.RISCC_max_confirmed_distance(1000) == 30
+        pos6 = Insertion_position('chr1','-',position_before=11)
+        aln6 = Fake_HTSeq_alignment(seq='ACA', readname='read1', pos=self._make_pos(pos6))
+        mutant.improve_best_RISCC_read(pos6, HTSeq_alignment=aln6, max_distance=1000)
+        assert len(mutant.RISCC_genome_side_reads) == 1
+        assert mutant.RISCC_genome_side_reads[0].position.min_position == 70
+        assert mutant.RISCC_max_confirmed_distance(1000) == 30
 
 
 if __name__ == "__main__":
