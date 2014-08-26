@@ -103,7 +103,7 @@ def HTSeq_pos_to_tuple(HTSeq_pos):
 ###################################### Insertion position functions/classes #####################################
 
 # has to be a new-style object-based class due to the immutability/hashability thing
-# TODO implement fuzzy positions?
+# MAYBE-TODO implement fuzzy positions?
 class Insertion_position(object):
     """ A descriptor of the position of a genomic insertion, with separate before/after sides; optionally immutable.
 
@@ -298,8 +298,7 @@ def get_insertion_pos_from_flanking_region_pos(flanking_region_pos, cassette_end
 
     Flanking_region_Pos should be a HTSeq.GenomicPosition instance, or a (chrom,start_pos,end_pos,strand) tuple
       (the tuple should have 1-based end-inclusive positions, so AA is 1-2 in AATT; HTSeq positions are 0-based end-exclusive); 
-     cassette_end gives the side of the insertion that read is on; 
-     reads_are_reverse is True if the read is in reverse orientation to the cassette, False otherwise. 
+     cassette_end gives the side of the insertion the read is on; relative_read_direction should be inward/outward from the cassette.
 
     The cassette chromosome will be the same as read chromosome; the cassette strand will be either the same as read strand, 
      or opposite of the read strand. It's the same in two relative_read_direction+cassette_end combinations: 
@@ -318,9 +317,9 @@ def get_insertion_pos_from_flanking_region_pos(flanking_region_pos, cassette_end
 
     If immutable_position is True, the position will be made immutable after creation (this is reversible).
     """
-    if not cassette_end in SEQ_ENDS:
+    if cassette_end not in SEQ_ENDS:
         raise MutantError("cassette_end argument must be one of %s."%SEQ_ENDS)
-    if not relative_read_direction in RELATIVE_READ_DIRECTIONS:
+    if relative_read_direction not in RELATIVE_READ_DIRECTIONS:
         raise MutantError("relative_read_direction argument must be one of %s."%RELATIVE_READ_DIRECTIONS)
     try:                                chrom, start_pos, end_pos, strand = flanking_region_pos
     except (TypeError, ValueError):     chrom, start_pos, end_pos, strand = HTSeq_pos_to_tuple(flanking_region_pos) 
@@ -330,52 +329,34 @@ def get_insertion_pos_from_flanking_region_pos(flanking_region_pos, cassette_end
     ### chromosome is always the same as read, so just leave it as is
     ### cassette strand is the same as read strand, OR the opposite if the read is opposite to cassette (happens in two cases)
     if (cassette_end=='5prime' and relative_read_direction=='inward'):      pass
-    elif: (cassette_end=='3prime' and relative_read_direction=='outard'):   pass
+    elif (cassette_end=='3prime' and relative_read_direction=='outard'):    pass
     else:                                                                   strand = ('+' if strand=='-' else '-')
     ### cassette position depends on the read position and cassette_end in a somewhat complex way (see docstring)
     if (cassette_end=='5prime' and strand=='+') or (cassette_end=='3prime' and strand=='-'): pos_before, pos_after = end_pos, None
     else:                                                                                    pos_before, pos_after = None, start_pos
     return Insertion_position(chrom, strand, position_before=pos_before, position_after=pos_after, immutable=immutable_position)
 
-# TODO refactor this with the above function!
-def get_RISCC_pos_from_flanking_region_pos(flanking_region_pos, cassette_end, reads_are_reverse=False, immutable_position=True):
-    """ Return a Insertion_position instance giving the position of the far end of RISCC genome-side read.
 
-    The strand should be the same as that for the cassette-side read if the two are consistent.
+def get_RISCC_pos_from_read_pos(read_pos, cassette_end, relative_read_direction='inward', immutable_position=True):
+    """ Return an Insertion_position instance giving the position of the far end of RISCC genome-side read.
 
-    Flanking_region_Pos should be a HTSeq.GenomicPosition instance, or a (chrom,start_pos,end_pos,strand) tuple
-      (the tuple should have 1-based end-inclusive positions, so AA is 1-2 in AATT; HTSeq positions are 0-based end-exclusive); 
-     cassette_end gives the side of the insertion that read is on; 
-     reads_are_reverse is True if the read is in reverse orientation to the cassette, False otherwise. 
+    The strand should be the same as that of the cassette, given relative_read_direction inward/outward from the cassette.
 
-    See mutant_analysis_classes.get_insertion_pos_from_flanking_region_pos for how this is done for insertion positions.
-    This is somewhat different: we know the genome-side read is in opposite orientation from the cassette-side read
-     (since they're paired-end reads from the same data), so in order for the strand to match between these two ends, 
-     it has to be calculated in the opposite way. 
-    The position we're interested in is always the position of the START of the read 
-     (which according to most encodings is the end if the strand is -).
+    See get_insertion_pos_from_flanking_region_pos for how the inputs work, and how this is done for insertion positions.  
+    This is essentially calculating an "insertion position" from the OTHER SIDE of this read (so if the read goes inward
+     toward the cassette, it calculates the position as if it went away from the cassette, and vice versa), 
+     and then reversing the strand to make it match the strand of the real cassette.
 
     If immutable_position is True, the position will be made immutable after creation (this is reversible).
     """
-    # note: For RISCC cassette-side reads, 5' data has 5prime and reads_are_reverse=True, 3' data has 3prime and reads_are_reverse=False.  NOT DEALING WITH other cases!
-    try:                                chrom, start_pos, end_pos, strand = flanking_region_pos
-    except (TypeError, ValueError):     chrom, start_pos, end_pos, strand = HTSeq_pos_to_tuple(flanking_region_pos) 
-    if strand not in SEQ_STRANDS:       raise MutantError("Invalid strand %s! Must be one of %s"%(strand, SEQ_STRANDS))
-    if cassette_end not in SEQ_ENDS:    raise MutantError("Invalid end %s! Must be one of %s"%(cassette_end, SEQ_ENDS))
-    if start_pos < 1:                   raise MutantError("Flanking region positions must be positive!")
-    if start_pos > end_pos:             raise MutantError("Flanking region start can't be after end!")
-    if not ((cassette_end=='5prime' and reads_are_reverse==True) or (cassette_end=='3prime' and reads_are_reverse==False)):
-        raise MutantError("For a RISCC read, reads have to read OUT of the cassette - check your end/direction!")
-    ### chromosome is always the same as read, so just leave it as is
-    ### we always want min_position to be the position of the start of the read, 
-    #     since that's the "outer" position in a paired-end set.
-    if strand=='+':     pos_before, pos_after = start_pos, None
-    else:               pos_before, pos_after = end_pos, None
-    ### cassette strand is the opposite to how it is with the cassette-side read
-    if cassette_end=='3prime':  strand = '-' if strand=='+' else '+'
-    return Insertion_position(chrom, strand, position_before=pos_before, position_after=pos_after, immutable=immutable_position)
+    imaginary_relative_direction= ('outward' if relative_read_direction=='inward' else 'inward')
+    imaginary_cassette_position = get_insertion_pos_from_flanking_region_pos(read_pos, cassette_end, imaginary_relative_direction)
+    real_strand = ('-' if imaginary_cassette_position.strand=='+' else '+')
+    return Insertion_position(imaginary_cassette_position.chromosome, real_strand, 
+                              full_position=imaginary_cassette_position.full_position, immutable=immutable_position)
 
 
+# TODO add gene name as well as ID?
 def find_gene_by_pos_gff3(insertion_pos, chromosome_GFF_record, detailed_features=False, quiet=False):
     """ Look up insertion_pos in chromosome_GFF_record; return (gene_ID,orientation,subfeature) of insertion in gene.
 
@@ -1752,8 +1733,8 @@ class Insertional_mutant_pool_dataset():
                         raise MutantError("File %s wasn't supposed to be multiple alignments - why is read %s there twice??"%(
                             genome_side_infile, read_ID))
                     # convert the genome-side read HTSeq alignment data to an "insertion" position of the end of it!
-                    genome_side_position = get_RISCC_pos_from_flanking_region_pos(aln.iv, self.summary.cassette_end, 
-                                                                                    self.summary.reads_are_reverse)
+                    genome_side_position = get_RISCC_pos_from_read_pos(aln.iv, self.summary.cassette_end, 
+                                                                       self.summary.reads_are_reverse)
                     if best_only:   mutant.improve_best_RISCC_read(genome_side_position, aln, max_distance_for_best)
                     else:           mutant.add_RISCC_read(genome_side_position, aln)
                 read_IDs.add(read_ID)
@@ -4345,24 +4326,24 @@ class Testing_Insertional_mutant_pool_dataset(unittest.TestCase):
 class Testing_RISCC(unittest.TestCase):
     """ Unit-tests for position-related classes and functions. """
 
-    def test__get_RISCC_pos_from_flanking_region_pos(self):
+    def test__get_RISCC_pos_from_read_pos(self):
         pos_tuple = ('C', 3, 7, '+')
         # note: For RISCC cassette-side reads, 5' data has 5prime and reads_are_reverse=True, 3' data has 3prime and reads_are_reverse=False.  NOT DEALING WITH other cases - they should raise an error!
-        self.assertRaises(MutantError, get_RISCC_pos_from_flanking_region_pos, pos_tuple, '5prime', reads_are_reverse=False)
-        self.assertRaises(MutantError, get_RISCC_pos_from_flanking_region_pos, pos_tuple, '3prime', reads_are_reverse=True)
+        self.assertRaises(MutantError, get_RISCC_pos_from_read_pos, pos_tuple, '5prime', reads_are_reverse=False)
+        self.assertRaises(MutantError, get_RISCC_pos_from_read_pos, pos_tuple, '3prime', reads_are_reverse=True)
         ### case with +strand original read ([|||] is cassette, ---...--- is the paired-end read, * is desired position): 
         #   +strand cassette if 5' data, or -strand if 3':  *----......-----[|||||]
         pos_tuple = ('C', 3, 7, '+')
-        pos = get_RISCC_pos_from_flanking_region_pos(pos_tuple, '5prime', reads_are_reverse=True)
+        pos = get_RISCC_pos_from_read_pos(pos_tuple, '5prime', reads_are_reverse=True)
         assert (pos.chromosome == 'C' and pos.strand=='+' and pos.min_position==3)
-        pos = get_RISCC_pos_from_flanking_region_pos(pos_tuple, '3prime', reads_are_reverse=False)
+        pos = get_RISCC_pos_from_read_pos(pos_tuple, '3prime', reads_are_reverse=False)
         assert (pos.chromosome == 'C' and pos.strand=='-' and pos.min_position==3)
         ### the other case:  [|||||]----......-----*
         #   -strand cassette if 5' data, or +strand if 3'
         pos_tuple = ('C', 3, 7, '-')
-        pos = get_RISCC_pos_from_flanking_region_pos(pos_tuple, '5prime', reads_are_reverse=True)
+        pos = get_RISCC_pos_from_read_pos(pos_tuple, '5prime', reads_are_reverse=True)
         assert (pos.chromosome == 'C' and pos.strand=='-' and pos.min_position==7)
-        pos = get_RISCC_pos_from_flanking_region_pos(pos_tuple, '3prime', reads_are_reverse=False)
+        pos = get_RISCC_pos_from_read_pos(pos_tuple, '3prime', reads_are_reverse=False)
         assert (pos.chromosome == 'C' and pos.strand=='+' and pos.min_position==7)
 
     @staticmethod
