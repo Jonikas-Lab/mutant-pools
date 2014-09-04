@@ -163,6 +163,18 @@ class Insertional_mutant_Carette(Insertional_mutant):
         # if there are more than one current reads, you're not using improve_best_Carette_read consistently!
         if len(self.Carette_genome_side_reads) > 1:
             raise MutantError("Don't try using the improve_best_Carette_read when keeping more than one read!")
+        # the first time this is done, set the two important N-read-type properties to be straight counts instead
+        if len(self.Carette_genome_side_reads) == 0:
+            self.Carette_N_unaligned_reads = 0
+            self._Carette_N_confirming_reads = 0
+            self._Carette_N_non_confirming_reads = 0
+        # each time, increment the count of the right read type
+        if new_position in BAD_POSITIONS:
+            self.Carette_N_unaligned_reads += 1
+        elif self._if_confirming_read(new_position, max_distance):
+            self._Carette_N_confirming_reads += 1
+        else:
+            self._Carette_N_non_confirming_reads += 1
         # if decided to replace, just make self.Carette_genome_side_reads be the new mutant, discarding old version
         if self._decide_if_replace_read(new_position, max_distance):
             new_mutant = Insertional_mutant(new_position)
@@ -174,20 +186,26 @@ class Insertional_mutant_Carette(Insertional_mutant):
 
         ("Confirm" means same chromosome, consistent strand, and at most max_distance away)
         """
-        N = 0
-        for read_data in self.Carette_genome_side_reads:
-            # skip non-aligned reads
-            try:                    chrom = read_data.position.chromosome
-            except AttributeError:  continue
-            if self._if_confirming_read(read_data.position, max_distance):  N += 1
-        return N
+        try:
+            return self._Carette_N_confirming_reads
+        except AttributeError:
+            N = 0
+            for read_data in self.Carette_genome_side_reads:
+                # skip non-aligned reads
+                try:                    chrom = read_data.position.chromosome
+                except AttributeError:  continue
+                if self._if_confirming_read(read_data.position, max_distance):  N += 1
+            return N
 
     def Carette_N_non_confirming_reads(self, max_distance=MAX_POSITION_DISTANCE):
         """ Return the number of aligned genome-side reads that DON'T confirm the cassette-side position.
 
         ("Confirm" means same chromosome, consistent strand, and at most max_distance away)
         """
-        return self.Carette_N_genomic_reads + self.Carette_N_cassette_reads - self.Carette_N_confirming_reads(max_distance)
+        try:
+            return self._Carette_N_non_confirming_reads
+        except AttributeError:
+            return self.Carette_N_genomic_reads + self.Carette_N_cassette_reads - self.Carette_N_confirming_reads(max_distance)
 
     @property
     def Carette_N_unaligned_reads(self):
