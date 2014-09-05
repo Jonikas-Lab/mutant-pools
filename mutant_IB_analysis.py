@@ -566,7 +566,6 @@ class Insertional_mutant():
      2) Readcount-related attributes (multi-dataset mutants don't have those on the top-level):
        - total_read_count, perfect_read_count - number of all and perfectly aligned deepseq reads
        - unique_sequence_count, sequences_and_counts - number of unique read sequences, and a seq:count dictionary
-       - read_IDs - set of read IDs (used to match the two ends of paired-end reads to the same mutant)
        - RISCC_genome_side_reads - contains "genome-side" reads (not immediately next to the cassette)
                                     that help determine the real insertion position (vs. junk fragments inserted with cassette).
                                  It's a dictionary - seq:(position, read_count, N_errors, gene, orientation, feature, annotation...)
@@ -609,7 +608,6 @@ class Insertional_mutant():
         self.perfect_read_count    = 0
         self.unique_sequence_count = 0
         self.sequences_and_counts  = defaultdict(int)
-        self.read_IDs = set()
         self.RISCC_genome_side_reads = {}
         # MAYBE-TODO remove this?  It's for mutant-merging, which we don't currently do, 
         #  and when we do end up doing it, we'll care about counts from both ENDS, no matter if they're different strands or same.
@@ -655,7 +653,6 @@ class Insertional_mutant():
         self.sequences_and_counts[seq] += read_count
         # increment total_read_count, and add read ID to the ID set
         self.total_read_count += read_count
-        self.read_IDs.add(HTSeq_alignment.read.name)
         # figure out if the read is perfect and increment perfect_read_count if yes; return True if perfect else False.
         mutation_count = check_mutation_count_try_all_methods(HTSeq_alignment, 
                                                               treat_unknown_as=('match' if treat_unknown_as_match else 'mutation'))
