@@ -114,6 +114,7 @@ def parse_flanking_region_aln_or_pos(flanking_region_aln_or_pos):
             if XM_val > 1:      return SPECIAL_POSITIONS.multi_aligned
             else:               return SPECIAL_POSITIONS.unaligned
     return chrom, start_pos, end_pos, strand
+# TODO unit-test!
 
 ###################################### Insertion position functions/classes #####################################
 
@@ -823,7 +824,7 @@ class Insertional_mutant():
         # TODO what about WEIRD cases, when it's the right distance but in the wrong direction? Those are rare enough to ignore for now, but should do something about them!
 
     def _decide_if_replace_read(self, new_position, max_distance):
-        """ Decide whether new position is "better" than old one - just refactored out of improve_best_RISCC_read for convenience.
+        """ Decide whether new position is "better" than old one.
         """
         # if there are no current reads, add new one
         if not len(self.RISCC_genome_side_reads):                       return True
@@ -855,6 +856,7 @@ class Insertional_mutant():
         if self._decide_if_replace_read(new_position, max_distance):
             self.RISCC_genome_side_reads = {}
             self.add_RISCC_read(self, seq, new_position, N_errors, read_count)
+        # TODO make this count unaligned/confirming/non-confirming reads, too, instead of keeping all these counts as functions that read the actual mutant data, which will be missing in this case?  I did something like that in mutant_Carette.py.
 
     def RISCC_N_confirming_reads(self, max_distance=MAX_POSITION_DISTANCE):
         """ Return the number of aligned genome-side reads that DON'T confirm the cassette-side position.
@@ -1236,7 +1238,7 @@ class Dataset_summary_data():
         self.ignored_region_read_counts = defaultdict(int)
         # mutant merging information
         self.blank_adjacent_mutant_info()
-        # MAYBE-TODO should cassette_end and relative_read_direction be specified for the whole dataset, or just for each set of data added, in add_alignment_files_to_data? The only real issue with this would be that then I wouldn't be able to print this information in the summary - or I'd have to keep track of what the value was for each alignment reader added and print that in the summary if it's a single value, or 'varied' if it's different values. Might also want to keep track of how many alignment readers were involved, and print THAT in the summary!  Or even print each (infile_name, cassette_end, relative_read_direction) tuple as a separate line in the header.
+        # MAYBE-TODO should cassette_end and relative_read_direction be specified for the whole dataset, or just for each set of data added, in add_RISCC_alignment_files_to_data? The only real issue with this would be that then I wouldn't be able to print this information in the summary - or I'd have to keep track of what the value was for each alignment reader added and print that in the summary if it's a single value, or 'varied' if it's different values. Might also want to keep track of how many alignment readers were involved, and print THAT in the summary!  Or even print each (infile_name, cassette_end, relative_read_direction) tuple as a separate line in the header.
         self.cassette_end = cassette_end
         self.relative_read_direction = relative_read_direction
 
@@ -1663,9 +1665,11 @@ class Insertional_mutant_pool_dataset():
                                                                          file2_fasta, if_finished_2, file3_fastq, if_finished_3))
         # TODO unit-tests! There are some in experiments/arrayed_library/internal_barcode_processing/code/clustering_tools.py for a similar function - test__parse_3seq_parallel
 
-    def add_alignment_files_to_data(self, IB_cluster_file, IB_fastq_file, cassette_side_flank_aligned_file, 
-                                    genome_side_aligned_file, best_genome_side_only=False):
-        """ _________
+    # TODO TODO TODO need function to deal with IB-only deepseq reads!  How do we want to handle those?  As multi-dataset mutants?  Or add some new functionality?  How should it interact with the RISCC data?  Does it matter which of the datasets is read in first?
+
+    def add_RISCC_alignment_files_to_data(self, IB_cluster_file, IB_fastq_file, cassette_side_flank_aligned_file, 
+                                          genome_side_aligned_file, best_genome_side_only=False):
+        """ Add paired-end RISCC reads to dataset mutants, based on IB clustering.
 
         Input files:
             - IB_cluster_file must be a python pickle file containing a centroid_seq:set_of_IB_seqs dictionary;
@@ -1677,12 +1681,17 @@ class Insertional_mutant_pool_dataset():
             The fastq file and the two aligned files should have matching read IDs in the same order; the IB and 
                 cassette-side files can be missing some read IDs, since some reads may not have contained the expected 
                 cassette sequence, leading to their removal while trying to extract the IB and cassette-side sequence.
+
+        Function goes over the fastq and two aligned files in parallel. 
         """
         # TODO finish docstring
+        # MAYBE-TODO at some point, maybe add full parsing of multiple alignments, to compare their positions to those of 
+        #  unique-aligned cases, rather than just marking them as multiple but treating them as unaligned?
+        #  Might not be worth the effort, since if we have unique-aligned cases anyway, we can use those.
         # MAYBE-TODO add ignore_cassette, cassette_only options?
         # MAYBE-TODO add collapsed_readcounts option?  That doesn't make much sense for paired-end reads.
 
-        if self.multi_dataset:  raise MutantError("add_alignment_files_to_data not implemented for multi-datasets!")
+        if self.multi_dataset:  raise MutantError("add_RISCC_alignment_files_to_data not implemented for multi-datasets!")
         if self.summary.cassette_end not in SEQ_ENDS:
             raise MutantError("Cannot add data from an alignment reader if cassette_end isn't specified! Please set the "
                   +"summary.cassette_end attribute of this Insertional_mutant_pool_dataset instance to one of %s first."%SEQ_ENDS)
@@ -3539,7 +3548,7 @@ class Testing_Insertional_mutant_pool_dataset(unittest.TestCase):
 
     # LATER-TODO add unit-test for add_discarded_reads, find_genes_for_mutants, most_common_mutants, 
 
-    def test__add_alignment_files_to_data(self):
+    def test__add_RISCC_alignment_files_to_data(self):
         pass
         # MAYBE-TODO implement using a mock-up of HTSeq_alignment?  (see Testing_single_functions for how I did that)
         #   make sure it fails if self.cassette_end isn't defined...
