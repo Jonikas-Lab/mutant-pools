@@ -87,12 +87,6 @@ def define_option_parser():
     parser.add_option('-D', '--adjacent_max_distance', type='int', default=1, metavar='N',
                       help="Count/merge adjacent mutants only if they're at most N bases distant; (default %default)")
 
-    # extremely minor functionality options, do we even care??  TODO do we ever see undefined alignment regions?
-    parser.add_option('--treat_unknown_as_match', action="store_true", default=False, 
-                      help="When counting perfect reads, treat undefined alignment regions as matches (default %default)")
-    parser.add_option('--dont_treat_unknown_as_match', action="store_false", dest='treat_unknown_as_match',
-                      help="Turn -u off.")
-
     ### output format options
     parser.add_option('-o', '--sort_data_key', choices=['position','read_count','none'], default='position', 
                       metavar='position|read_count|none', help="Sort the output data: by alignment position, read count, "
@@ -187,13 +181,11 @@ def main(outfile, options):
             # fill the new alignment set object with data from the infile parser
             all_alignment_data.add_alignment_reader_to_data(infile_reader, 
                                         uncollapse_read_counts = options.input_collapsed_to_unique, 
-                                        ignore_cassette = options.ignore_cassette, cassette_only = False, 
-                                        treat_unknown_as_match = options.treat_unknown_as_match)
+                                        ignore_cassette = options.ignore_cassette, cassette_only = False)
             if options.separate_cassette:
                 cassette_alignment_data.add_alignment_reader_to_data(infile_reader, 
                                         uncollapse_read_counts = options.input_collapsed_to_unique, 
-                                        ignore_cassette = False, cassette_only = True, 
-                                        treat_unknown_as_match = options.treat_unknown_as_match)
+                                        ignore_cassette = False, cassette_only = True)
 
     ### optionally merge some mutant categories?
     # It makes no sense to merge adjacent mutants when the mutants are based on IB clustering rather than position.
@@ -262,7 +254,6 @@ def do_test_run():
                  ('cassette-end-5prime', "-e 5prime -r forward -n3 -L", [aln_infile1]),
                  ('cassette-end-3prime', "-e 3prime -r forward -n3 -L", [aln_infile1]),
                  ('read-direction-reverse', "-r reverse -e 5prime -n3 -L", [aln_infile1]),
-                 ('unknown-as-match', "--treat_unknown_as_match -e 5prime -r forward -n3 -L", [aln_infile1]),
                  ('dont-count-cassette', "-l -e 5prime -r forward -n3 -L", [aln_infile1]),
                  ('ignore-cassette', "-c -e 5prime -r forward -n3 -L", [aln_infile1]),
                  ('separate-cassette', "-C -e 5prime -r forward -n3 -L", [aln_infile1]),
@@ -283,6 +274,7 @@ def do_test_run():
                  ('remove-not-other-perfect', "-X %s -P -Z4 -n0"%dataset_to_remove, [aln_infile2]),
                  ('old-infile-format', "-e 5prime -r forward -n3 -L", [aln_infile0]),
                 ]
+    # TODO remove the mutation-detection lines from aln_infile1 and from all the outfiles, since that's been simplified?
     # TODO add run-test for removing data from multiple files?
     # MAYBE-TODO add run-test for a metadata file with 5' and 3' read counts?
     # MAYBE-TODO add run-tests for other mutant-merging options?  But they all have pretty good unit-tests.

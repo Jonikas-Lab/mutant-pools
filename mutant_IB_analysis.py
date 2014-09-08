@@ -23,7 +23,7 @@ from BCBio import GFF
 # my modules
 from general_utilities import split_into_N_sets_by_counts, add_dicts_of_ints, sort_lists_inside_dict, keybased_defaultdict, value_and_percentages, FAKE_OUTFILE, NaN, nan_func, merge_values_to_unique, unpickle
 from basic_seq_utilities import SEQ_ENDS, SEQ_STRANDS, SEQ_DIRECTIONS, SEQ_ORIENTATIONS, parse_fasta, parse_fastq, position_test_contains, position_test_overlap, chromosome_sort_key, get_seq_count_from_collapsed_header
-from deepseq_utilities import check_mutation_count_try_all_methods, Fake_deepseq_objects
+from deepseq_utilities import check_mutation_count_by_optional_NM_field, Fake_deepseq_objects
 from parse_annotation_file import parse_gene_annotation_file
 
 
@@ -635,7 +635,7 @@ class Insertional_mutant():
             raise MutantError("Don't try to provide a dataset_name on a single mutant (rather than the multi-dataset subclass)!")
         # MAYBE-TODO this could be accomplished with a decorator instead, right?
 
-    def add_read(self, HTSeq_alignment, read_count=1, treat_unknown_as_match=False, dataset_name=None):
+    def add_read(self, HTSeq_alignment, read_count=1, dataset_name=None):
         """ Add a read to the data (or multiple identical reads, if read_count>1); return True if perfect match.
 
         Specifically: increment total_read_count, increment perfect_read_count if read is a perfect 
@@ -654,8 +654,7 @@ class Insertional_mutant():
         # increment total_read_count, and add read ID to the ID set
         self.total_read_count += read_count
         # figure out if the read is perfect and increment perfect_read_count if yes; return True if perfect else False.
-        mutation_count = check_mutation_count_try_all_methods(HTSeq_alignment, 
-                                                              treat_unknown_as=('match' if treat_unknown_as_match else 'mutation'))
+        mutation_count = check_mutation_count_by_optional_NM_field(HTSeq_alignment, negative_if_absent=False)
         if mutation_count==0:  
             self.perfect_read_count += read_count
             return True
@@ -1082,10 +1081,10 @@ class Insertional_mutant_multi_dataset(Insertional_mutant):
             except KeyError:    return blank_readcount_only_mutant()
         # TODO unit-tests?
 
-    def add_read(self, HTSeq_alignment, read_count=1, treat_unknown_as_match=False, dataset_name=None):
+    def add_read(self, HTSeq_alignment, read_count=1, dataset_name=None):
         """ Add read to given dataset (see docstring for Insertional_mutant version) - dataset_name is required. """
         readcount_data_container = self._check_dataset_name_return_data(dataset_name)
-        Insertional_mutant.add_read(readcount_data_container, HTSeq_alignment, read_count, treat_unknown_as_match)
+        Insertional_mutant.add_read(readcount_data_container, HTSeq_alignment, read_count)
     
     def merge_mutant(self, *args, **kwargs):
         raise MutantError("merge_mutant NOT IMPLEMENTED on multi-dataset mutant object!")
@@ -1645,7 +1644,7 @@ class Insertional_mutant_pool_dataset():
                 cassette sequence, leading to their removal while trying to extract the IB and cassette-side sequence.
         """
         # TODO finish docstring
-        # MAYBE-TODO add ignore_cassette, cassette_only, treat_unknown_as_match options?
+        # MAYBE-TODO add ignore_cassette, cassette_only options?
         # MAYBE-TODO add collapsed_readcounts option?  That doesn't make much sense for paired-end reads.
 
         if self.multi_dataset:  raise MutantError("add_alignment_reader_to_data not implemented for multi-datasets!")
@@ -1670,13 +1669,13 @@ class Insertional_mutant_pool_dataset():
             # TODO need to and add the position to the mutant, too!  And make sure it's consistent with the previous position if the mutant already has it.  Or add that functionality to mutant.add_read?  TODO is it better to determine the position for each read (slower), or save them all (either in the mutant or in a separate dict) and collapse to unique aln positions, and check for consistency at the end?
             cassette_side_position = get_insertion_pos_from_flanking_region_pos(aln.iv, summ.cassette_end, summ.reads_are_reverse, 
                                                                   immutable_position=True)
-            mutant.add_read(cassette_side_aln, read_count=1, treat_unknown_as_match=False, dataset_name=None))
+            mutant.add_read(cassette_side_aln, read_count=1, dataset_name=None))
             # Parse the genome-side alignment result to figure out position; add that to the mutant
             genome_side_seq = genome_side_aln.read.seq
             # TODO position may need to be set to special unaligned or multi-aligned value!
             genome_side_position = get_RISCC_pos_from_read_pos(genome_side_aln.iv, 
                                                                self.summary.cassette_end, self.summary.reads_are_reverse)
-            N_errors = check_mutation_count_try_all_methods(genome_side_aln, treat_unknown_as='mutation')
+            N_errors = check_mutation_count_by_optional_NM_field(genome_side_aln, negative_if_absent=False)
             if genome_side_best_only:
                 mutant.improve_best_RISCC_read(genome_side_seq, genome_side_position, N_errors, read_count=1, 
                                                max_distance=MAX_POSITION_DISTANCE)
