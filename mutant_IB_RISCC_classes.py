@@ -23,7 +23,7 @@ from BCBio import GFF
 # my modules
 from general_utilities import split_into_N_sets_by_counts, add_dicts_of_ints, sort_lists_inside_dict, keybased_defaultdict, value_and_percentages, FAKE_OUTFILE, NaN, nan_func, merge_values_to_unique, unpickle
 from basic_seq_utilities import SEQ_ENDS, SEQ_STRANDS, SEQ_DIRECTIONS, SEQ_ORIENTATIONS, parse_fasta, parse_fastq, position_test_contains, position_test_overlap, chromosome_sort_key, get_seq_count_from_collapsed_header
-from deepseq_utilities import check_mutation_count_by_optional_NM_field, Fake_deepseq_objects
+from deepseq_utilities import check_mutation_count_by_optional_NM_field, get_HTSeq_optional_field, Fake_deepseq_objects
 from parse_annotation_file import parse_gene_annotation_file
 
 
@@ -98,6 +98,23 @@ def HTSeq_pos_to_tuple(HTSeq_pos):
     if start_pos > end_pos:     raise MutantError("Sequence start can't be after end!")
     return (chrom, start_pos, end_pos, strand)
 
+def parse_flanking_region_aln_or_pos(flanking_region_aln_or_pos):
+    """ Return (chrom, start_pos, end_pos, strand) tuple. 
+
+    Input can be same tuple, then just pass through; 
+     or an HTSeq alignment object, then if aligned, figure out the tuple and return it, 
+      or if unaligned, return SPECIAL_POSITIONS.unaligned or SPECIAL_POSITIONS.multi_aligned depending on optional XM field value.
+    """
+    try:                                chrom, start_pos, end_pos, strand = flanking_region_pos
+    except (TypeError, ValueError):     
+        if flanking_region_pos.iv:      chrom, start_pos, end_pos, strand = HTSeq_pos_to_tuple(flanking_region_pos.iv) 
+        # if unaligned, figure out if unaligned or multi-aligned, and just return the appropriate special position code
+        else:   
+            try:                XM_val = get_HTSeq_optional_field(HTSeq_alignment, 'XM')
+            except KeyError:    return SPECIAL_POSITIONS.unaligned
+            if XM_val > 1:      return SPECIAL_POSITIONS.multi_aligned
+            else:               return SPECIAL_POSITIONS.unaligned
+    return chrom, start_pos, end_pos, strand
 
 ###################################### Insertion position functions/classes #####################################
 
@@ -292,10 +309,11 @@ class Insertion_position(object):
     __delattr__ = exception_if_immutable(object.__delattr__)
 
 
-def get_insertion_pos_from_flanking_region_pos(flanking_region_pos, cassette_end, relative_read_direction, immutable_position=True):
+def get_insertion_pos_from_flanking_region_pos(flanking_region_aln_or_pos, cassette_end, relative_read_direction, 
+                                               immutable_position=True):
     """ Return a Insertion_position instance giving the cassette insertion position based on HTSeq read position. 
 
-    Flanking_region_Pos should be a HTSeq.GenomicPosition instance, or a (chrom,start_pos,end_pos,strand) tuple
+    Flanking_region_aln_or_pos should be a HTSeq.Alignment instance or a (chrom,start_pos,end_pos,strand) tuple
       (the tuple should have 1-based end-inclusive positions, so AA is 1-2 in AATT; HTSeq positions are 0-based end-exclusive); 
      cassette_end gives the side of the insertion the read is on; relative_read_direction should be inward/outward from the cassette.
 
@@ -316,12 +334,16 @@ def get_insertion_pos_from_flanking_region_pos(flanking_region_pos, cassette_end
 
     If immutable_position is True, the position will be made immutable after creation (this is reversible).
     """
+    # check that basic values aren't weird
     if cassette_end not in SEQ_ENDS:
         raise MutantError("cassette_end argument must be one of %s."%SEQ_ENDS)
     if relative_read_direction not in RELATIVE_READ_DIRECTIONS:
         raise MutantError("relative_read_direction argument must be one of %s."%RELATIVE_READ_DIRECTIONS)
-    try:                                chrom, start_pos, end_pos, strand = flanking_region_pos
-    except (TypeError, ValueError):     chrom, start_pos, end_pos, strand = HTSeq_pos_to_tuple(flanking_region_pos) 
+    # parse flanking_region_aln_or_pos arg - it'll either return a tuple with the basics, or a special position code
+    parsed_position = parse_flanking_region_aln_or_pos(flanking_region_aln_or_pos)
+    try:                                chrom, start_pos, end_pos, strand = parsed_position
+    except (TypeError, ValueError):     return parsed_position
+    # check for position sanity
     if strand not in SEQ_STRANDS:   raise MutantError("Invalid strand %s!"%strand)
     if start_pos < 1:               raise MutantError("Flanking region positions must be positive!")
     if start_pos > end_pos:         raise MutantError("Flanking region start can't be after end!")
@@ -335,21 +357,21 @@ def get_insertion_pos_from_flanking_region_pos(flanking_region_pos, cassette_end
     else:                                                                                    pos_before, pos_after = None, start_pos
     return Insertion_position(chrom, strand, position_before=pos_before, position_after=pos_after, immutable=immutable_position)
 
-
-def get_RISCC_pos_from_read_pos(read_pos, cassette_end, relative_read_direction='inward', immutable_position=True):
+def get_RISCC_pos_from_read_pos(read_aln_or_pos, cassette_end, relative_read_direction='inward', immutable_position=True):
     """ Return an Insertion_position instance giving the position of the far end of RISCC genome-side read.
 
-    The strand should be the same as that of the cassette, given relative_read_direction inward/outward from the cassette.
+    The output strand should be the same as that of the cassette, given relative_read_direction inward/outward from the cassette.
 
     See get_insertion_pos_from_flanking_region_pos for how the inputs work, and how this is done for insertion positions.  
     This is essentially calculating an "insertion position" from the OTHER SIDE of this read (so if the read goes inward
      toward the cassette, it calculates the position as if it went away from the cassette, and vice versa), 
      and then reversing the strand to make it match the strand of the real cassette.
-
-    If immutable_position is True, the position will be made immutable after creation (this is reversible).
     """
     imaginary_relative_direction= ('outward' if relative_read_direction=='inward' else 'inward')
-    imaginary_cassette_position = get_insertion_pos_from_flanking_region_pos(read_pos, cassette_end, imaginary_relative_direction)
+    imaginary_cassette_position = get_insertion_pos_from_flanking_region_pos(read_aln_or_pos, cassette_end, 
+                                                                             imaginary_relative_direction)
+    if imaginary_cassette_position in SPECIAL_POSITIONS.all_undefined:
+        return imaginary_cassette_position
     real_strand = ('-' if imaginary_cassette_position.strand=='+' else '+')
     return Insertion_position(imaginary_cassette_position.chromosome, real_strand, 
                               full_position=imaginary_cassette_position.full_position, immutable=immutable_position)
@@ -635,19 +657,31 @@ class Insertional_mutant():
             raise MutantError("Don't try to provide a dataset_name on a single mutant (rather than the multi-dataset subclass)!")
         # MAYBE-TODO this could be accomplished with a decorator instead, right?
 
-    def add_read(self, HTSeq_alignment, read_count=1, dataset_name=None):
-        """ Add a read to the data (or multiple identical reads, if read_count>1); return True if perfect match.
+    def add_read(self, HTSeq_alignment, position=SPECIAL_GENE_CODES.unknown, read_count=1, dataset_name=None):
+        """ Add a read to the data (or multiple identical reads, if read_count>1); return True if perfect alignment.
 
         Specifically: increment total_read_count, increment perfect_read_count if read is a perfect 
          alignment, increment the appropriate field of sequences_and_counts based on read sequence.
-        Note: this does NOT check the read position to make sure it matches that of the object.
+
+        If position is given, check that it's the same as previous self.position, or that self.position was unspecified; 
+         otherwise raise exception. Note: this does NOT check that 
+        Note: this does NOT check that position is consistent with the HTSeq_alignment.iv position.
 
         Dataset_name should NEVER be set to non-None, and only present for consistency with the multi-dataset subclass.
         """
+        # TODO instead of taking HTSeq_alignment, this could just take the seq and N_errors, like add_RISCC_read does?
         self._ensure_dataset_None(dataset_name)
-        # MAYBE-TODO check HTSeq_alignment chromosome/strand to make sure it matches data in self?  Don't check position, that's more complicated (it can be either start or end) - could maybe check that position is within, idk, 10bp of either alignment start or alignment end?  Or not - I may want to cluster things in a non-position-based way anyway!  Hmmm...
-        seq = HTSeq_alignment.read.seq
+        # check/add position
+        # LATER-TODO add handling to allow minor position errors to pass, especially +/-1bp due to PCR/seq indels.
+        if self.position in SPECIAL_POSITIONS.all_undefined:    
+            self.position = position
+        elif self.position == position or positon in SPECIAL_POSITIONS.all_undefined:
+            pass
+        else:
+            raise MutantError("Different positions in same mutant! %s and %s, main seq %s"%(self.position, position, 
+                                                                                            self.get_main_sequence())
         # if it's a new sequence, increment unique_sequence_count; add a count to the sequences_and_counts dictionary.
+        seq = HTSeq_alignment.read.seq
         if seq not in self.sequences_and_counts:
             self.unique_sequence_count += 1
         self.sequences_and_counts[seq] += read_count
@@ -1201,7 +1235,7 @@ class Dataset_summary_data():
         self.ignored_region_read_counts = defaultdict(int)
         # mutant merging information
         self.blank_adjacent_mutant_info()
-        # MAYBE-TODO should cassette_end and reads_are_reverse be specified for the whole dataset, or just for each set of data added, in add_alignment_reader_to_data? The only real issue with this would be that then I wouldn't be able to print this information in the summary - or I'd have to keep track of what the value was for each alignment reader added and print that in the summary if it's a single value, or 'varied' if it's different values. Might also want to keep track of how many alignment readers were involved, and print THAT in the summary!  Or even print each (infile_name, cassette_end, reads_are_reverse) tuple as a separate line in the header.
+        # MAYBE-TODO should cassette_end and reads_are_reverse be specified for the whole dataset, or just for each set of data added, in add_alignment_files_to_data? The only real issue with this would be that then I wouldn't be able to print this information in the summary - or I'd have to keep track of what the value was for each alignment reader added and print that in the summary if it's a single value, or 'varied' if it's different values. Might also want to keep track of how many alignment readers were involved, and print THAT in the summary!  Or even print each (infile_name, cassette_end, reads_are_reverse) tuple as a separate line in the header.
         self.cassette_end = cassette_end
         self.reads_are_reverse = reads_are_reverse
 
@@ -1647,8 +1681,7 @@ class Insertional_mutant_pool_dataset():
         # MAYBE-TODO add ignore_cassette, cassette_only options?
         # MAYBE-TODO add collapsed_readcounts option?  That doesn't make much sense for paired-end reads.
 
-        if self.multi_dataset:  raise MutantError("add_alignment_reader_to_data not implemented for multi-datasets!")
-        summ = self.summary
+        if self.multi_dataset:  raise MutantError("add_alignment_files_to_data not implemented for multi-datasets!")
         if self.summary.cassette_end not in SEQ_ENDS:
             raise MutantError("Cannot add data from an alignment reader if cassette_end isn't specified! Please set the "
           +"summary.cassette_end attribute of this Insertional_mutant_pool_dataset instance to one of %s first."%SEQ_ENDS)
@@ -1666,21 +1699,21 @@ class Insertional_mutant_pool_dataset():
             except KeyError:    raise MutantError("IB seq %s not found in cluster dict!"%IB_seq)
             mutant = self.get_mutant[IB_seq]
             # get the cassette insertion position (as an Insertion_position object)
-            # TODO need to and add the position to the mutant, too!  And make sure it's consistent with the previous position if the mutant already has it.  Or add that functionality to mutant.add_read?  TODO is it better to determine the position for each read (slower), or save them all (either in the mutant or in a separate dict) and collapse to unique aln positions, and check for consistency at the end?
-            cassette_side_position = get_insertion_pos_from_flanking_region_pos(aln.iv, summ.cassette_end, summ.reads_are_reverse, 
-                                                                  immutable_position=True)
-            mutant.add_read(cassette_side_aln, read_count=1, dataset_name=None))
+            # MAYBE-TODO instead of generating cassette_side_position all the time, even with multiple identical reads, 
+            #  check if seq is already present in mutant, or something?  To save time.
+            # TODO all the reads_are_reverse stuff should be relative_read_direction now!
+            cassette_side_position = get_insertion_pos_from_flanking_region_pos(aln.iv, self.summary.cassette_end, 
+                                                                    self.summary.reads_are_reverse, immutable_position=True)
+            mutant.add_read(cassette_side_aln, cassette_side_position, read_count=1, dataset_name=None))
             # Parse the genome-side alignment result to figure out position; add that to the mutant
-            genome_side_seq = genome_side_aln.read.seq
-            # TODO position may need to be set to special unaligned or multi-aligned value!
             genome_side_position = get_RISCC_pos_from_read_pos(genome_side_aln.iv, 
                                                                self.summary.cassette_end, self.summary.reads_are_reverse)
             N_errors = check_mutation_count_by_optional_NM_field(genome_side_aln, negative_if_absent=False)
             if genome_side_best_only:
-                mutant.improve_best_RISCC_read(genome_side_seq, genome_side_position, N_errors, read_count=1, 
+                mutant.improve_best_RISCC_read(genome_side_aln.read.seq, genome_side_position, N_errors, read_count=1, 
                                                max_distance=MAX_POSITION_DISTANCE)
             else:
-                mutant.add_RISCC_read(genome_side_seq, genome_side_position, N_errors, read_count=1)
+                mutant.add_RISCC_read(genome_side_aln.read.seq, genome_side_position, N_errors, read_count=1)
 
         # TODO do we want to add different read category counts to the summary, or make that stuff properties?
         # MAYBE-TODO it might be good to just generate two separate mutant-sets, normal and cassette, with an option called separate_cassette or something, and print them to separate files - but that's more complicated, and right now I don't have the setup for a single dataset having multiple mutant-sets (although I guess I will have to eventually, for removed mutants etc). Right now I do it in mutant_count_alignments.py, which works but there's a lot of code repetition...
@@ -3504,7 +3537,7 @@ class Testing_Insertional_mutant_pool_dataset(unittest.TestCase):
 
     # LATER-TODO add unit-test for add_discarded_reads, find_genes_for_mutants, most_common_mutants, 
 
-    def test__add_alignment_reader_to_data(self):
+    def test__add_alignment_files_to_data(self):
         pass
         # MAYBE-TODO implement using a mock-up of HTSeq_alignment?  (see Testing_single_functions for how I did that)
         #   make sure it fails if self.cassette_end isn't defined...
