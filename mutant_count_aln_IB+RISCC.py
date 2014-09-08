@@ -23,7 +23,7 @@ import HTSeq
 # my modules
 from general_utilities import write_header_data
 from testing_utilities import run_functional_tests
-import mutant_IB_analysis
+import mutant_IB_RISCC_classes
 
 ######################################################### Main function code ####################################################
 
@@ -47,11 +47,11 @@ def define_option_parser():
                           +"Should have same read IDs as matching cassette-side reads, and be from the same side. Optional.")
     # MAYBE-TODO make the IB file optional and allow the cluster file to be based on cassette-side seqs? Is that a good idea?
     # MAYBE-TODO make the IB+cluster files optional, and use the old clustering-by-alignment method in that case?
-    parser.add_option('-e', '--read_cassette_end', choices=mutant_IB_analysis.SEQ_ENDS, default='5prime', 
-                      metavar='|'.join(mutant_IB_analysis.SEQ_ENDS), 
+    parser.add_option('-e', '--read_cassette_end', choices=mutant_IB_RISCC_classes.SEQ_ENDS, default='5prime', 
+                      metavar='|'.join(mutant_IB_RISCC_classes.SEQ_ENDS), 
                       help="Which end of the cassette are the sequenced reads from? (default %default).")
-    parser.add_option('-d','--relative_read_direction', choices=mutant_IB_analysis.RELATIVE_READ_DIRECTIONS, default='outward',
-                      metavar='|'.join(mutant_IB_analysis.RELATIVE_READ_DIRECTIONS), 
+    parser.add_option('-d','--relative_read_direction', choices=mutant_IB_RISCC_classes.RELATIVE_READ_DIRECTIONS, default='outward',
+                      metavar='|'.join(mutant_IB_RISCC_classes.RELATIVE_READ_DIRECTIONS), 
                       help="Are the cassette-side reads oriented inward or outward to the cassette? (default %default).")
 
     ### Functionality options
@@ -147,11 +147,11 @@ def main(outfile, options):
     cassette_outfile = outfile_basename + '_cassette.txt'
 
     ### generate empty alignment set object with basic read position/orientation properties defined by options
-    all_alignment_data = mutant_IB_analysis.Insertional_mutant_pool_dataset(options.read_cassette_end, 
-                                                                            options.relative_read_direction)
+    all_alignment_data = mutant_IB_RISCC_classes.Insertional_mutant_pool_dataset(options.read_cassette_end, 
+                                                                                 options.relative_read_direction)
     if options.separate_cassette:
-        cassette_alignment_data = mutant_IB_analysis.Insertional_mutant_pool_dataset(options.read_cassette_end, 
-                                                                                     options.relative_read_direction)
+        cassette_alignment_data = mutant_IB_RISCC_classes.Insertional_mutant_pool_dataset(options.read_cassette_end, 
+                                                                                          options.relative_read_direction)
 
     ### MAYBE-TODO some kind of metadata parsing?  If so, copy relevant options and code from mutant_count_alignments.py.
     # TODO do we want to deal with metadata in the new IB+Carette pipeline? How?
@@ -307,10 +307,10 @@ if __name__ == "__main__":
     # if run with -t or -T option, do the relevant tests and quit
     if options.test_functionality:
         print("*** You used the -t option - ignoring all other options/arguments, running the built-in test suite. ***")
-        print("\n * unit-tests for the mutant_IB_analysis.py module")
+        print("\n * unit-tests for the mutant_IB_RISCC_classes.py module")
         # to run tests for another file, have to use TextTestRunner, not unittest.main -  make a test suite with 
         #   autodetection of all tests (see http://docs.python.org/library/unittest.html#unittest.TestLoader)
-        test_suite_1 = unittest.defaultTestLoader.loadTestsFromModule(mutant_IB_analysis)
+        test_suite_1 = unittest.defaultTestLoader.loadTestsFromModule(mutant_IB_RISCC_classes)
         unittest.TextTestRunner(verbosity=1).run(test_suite_1)
         # to run tests for current module, just run unittest.main, passing it only the filename 
         #   (by default it takes all of sys.argv and complains about options/arguments it can't recognize)
