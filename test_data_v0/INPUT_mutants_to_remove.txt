@@ -1,0 +1,29 @@
+### SUMMARY:
+## Total reads processed: 25+unknown
+#  Reads discarded in preprocessing (% of total): unknown (unknown)
+#  Unaligned reads (% of total, % of post-preprocessing): 0 (0%, 0%)
+#  Aligned reads (% of total, % of post-preprocessing): 25 (100%, 100%)
+#  Perfectly aligned reads, no mismatches (% of aligned): 25 (100%)
+#  Reads with cassette direction matching chromosome + strand (% of aligned): 22 (88%)
+#  Reads with cassette direction matching chromosome - strand (% of aligned): 3 (12%)
+## Distinct mutants (read groups) by cassette insertion position: 12
+#  (read is at 5prime end of cassette, in forward direction to cassette)
+#  (average and median reads per mutant: 2, 1)
+#  merged 3 pairs of adjacent mutants (max distance 2, min count ratio 3) 
+#    (kept 1 pairs on same strand and 2 on opposite strands)
+#    (there were also 1 pairs in exact same position on different strands non-cassette (and 0 cassette))
+#  Most common mutant: position [chromosome_A + 100-?], 7 reads (28% of aligned)
+### HEADER AND DATA:
+# chromosome	strand	min_position	full_position	gene	orientation	feature	total_reads	perfect_reads	N_sequence_variants
+chromosome_A	+	100	100-?	gene_unknown	?	?	7	5	1
+chromosome_A	+	200	200-?	gene_unknown	?	?	4	3	1
+chromosome_A	+	300	300-?	gene_unknown	?	?	1	1	1
+chromosome_A	+	301	301-?	gene_unknown	?	?	1	1	1
+chromosome_A	+	400	400-?	gene_unknown	?	?	1	1	1
+chromosome_A	+	405	405-?	gene_unknown	?	?	1	1	1
+chromosome_A	+	500	500-?	gene_unknown	?	?	1	1	1
+chromosome_A	-	500	?-501	gene_unknown	?	?	1	1	1
+chromosome_A	+	600	600-?	gene_unknown	?	?	5	5	1
+chromosome_A	-	601	?-602	gene_unknown	?	?	1	1	1
+chromosome_A	+	700	700-?	gene_unknown	?	?	1	1	1
+chromosome_A	-	702	?-703	gene_unknown	?	?	1	1	1

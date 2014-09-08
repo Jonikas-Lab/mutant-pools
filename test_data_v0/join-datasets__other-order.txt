@@ -1,0 +1,52 @@
+<IGNORE> This file is basically the same as join-datasets__basic.txt, except that in the data header line the dataset names are "dataset1" and "dataset2" instead of the original filename-based "INPUT_mutants*" ones.
+<REGEX># Command line this file was generated with: .*
+<REGEX># Path: .*
+<REGEX># Date: .*
+<REGEX># Full options: {.*}
+### DATASET SUMMARIES:
+## DATASETS	dataset2	dataset1
+## Total reads in sample:	14+unknown	12+unknown
+## Reads discarded in preprocessing (% of total):	unknown (unknown)	unknown (unknown)
+#  discarded due to wrong start (% of total):	None (unknown)	None (unknown)
+#  discarded due to no cassette (% of total):	None (unknown)	None (unknown)
+## Reads without a unique alignment (% of total, % of post-preprocessing):	0 (0%, 0%)	0 (0%, 0%)
+#  unaligned reads (% of total, % of post-preprocessing):	0 (0%, 0%)	0 (0%, 0%)
+#  multiply aligned reads (% of total, % of post-preprocessing):	0 (0%, 0%)	0 (0%, 0%)
+## Uniquely aligned reads (% of total, % of post-preprocessing):	14 (100%, 100%)	12 (100%, 100%)
+#  Perfectly aligned reads, no mismatches (% of aligned):	11 (79%)	9 (75%)
+#  Reads with cassette direction matching chromosome + strand (% of aligned):	11 (79%)	8 (67%)
+#  Reads with cassette direction matching chromosome - strand (% of aligned):	3 (21%)	4 (33%)
+## Mutant merging/counts (deciding when different-position reads should be one mutant)		
+#   (adjacent-merging/counting max distance):	(1)	(1)
+#   (if we're including mutants in cassette and in non-nuclear chromosomes):	(False, False)	(False, False)
+#  merged same-strand adjacent mutant pairs and opposite-strand tandem pairs:	0, 0	0, 0
+#  remaining same-position opposite-strand pairs (if not merged as tandems):	0	0
+#  remaining adjacent opposite-strand "toward-facing" pairs (those are definitely real):	0	0
+#  remaining adjacent opposite-strand "away-facing" pairs (% of toward-facing):	0 (N/A)	0 (N/A)
+#  remaining adjacent same-strand unmerged pairs (% of 2*toward-facing):	0 (N/A)	0 (N/A)
+## Distinct mutants (read groups) by cassette insertion position:	3	3
+#  (mutants with 2+, 10+, 100+, 1000+ reads):	(3, 0, 0, 0)	(2, 0, 0, 0)
+#  (read location with respect to cassette: which end, which direction):	(?, ?)	(?, ?)
+#  (average and median reads per mutant):	(5, 3)	(4, 4)
+#  Most common mutant(s): reads (% of aligned) (position or count):	9 (64%) (chromosome_A + 100-?)	7 (58%) (chromosome_A + 100-?)
+#  Mutant cassettes on chromosomes with no gene data (cassette, some scaffolds, maybe chloroplast/mito) (% of total):	0 (0%)	1 (33%)
+#  Mutant cassettes in intergenic spaces (% of total, % of known):	0 (0%, 0%)	0 (0%, 0%)
+## Mutant cassettes inside genes (% of total, % of known):	3 (100%, 100%)	2 (67%, 100%)
+#  Mutant cassettes in sense orientation to gene (% of ones in genes):	2 (67%)	2 (100%)
+#  Mutant cassettes in antisense orientation to gene (% of ones in genes):	1 (33%)	0 (0%)
+#  Mutant cassettes in gene feature CDS (% of ones in genes):	1 (33%)	0 (0%)
+#  Mutant cassettes in gene feature five_prime_UTR (% of ones in genes):	1 (33%)	1 (50%)
+#  Mutant cassettes in gene feature boundary (% of ones in genes):	1 (33%)	1 (50%)
+## Genes containing a mutant (% of all genes):	3 (N/A)	2 (N/A)
+#  Genes containing at least two mutants (% of all genes):	0 (N/A)	0 (N/A)
+#    (total genes in genome annotation data):	(0)	(0)
+#  Genes with 0 mutants (% of all genes):	0 (N/A)	1 (N/A)
+#    (some gene names):	()	(gene3)
+#  Genes with 1 mutants (% of all genes):	3 (N/A)	2 (N/A)
+#    (some gene names):	(gene1, gene2, gene3)	(gene1, gene2)
+### HEADER AND DATA:
+# chromosome	strand	min_position	full_position	gene	orientation	feature	main_sequence	reads_in_dataset2	perfect_in_dataset2	reads_in_dataset1	perfect_in_dataset1
+chromosome_A	+	100	100-?	gene1	sense	CDS/intron	AAAA	9	7	7	5
+chromosome_A	-	200	200-?	gene2	sense	five_prime_UTR	CCCC	3	3	4	3
+chromosome_B	+	300	300-?	gene_unknown	?	?	GGGG	0	0	1	1
+chromosome_B	+	400	400-?	gene3	antisense	CDS	TTTT	2	1	0	0

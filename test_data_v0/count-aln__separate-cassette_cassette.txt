@@ -1,0 +1,34 @@
+<REGEX># Command line this file was generated with: .*
+<REGEX># Path: .*
+<REGEX># Date: .*
+<REGEX># Full options: {.*}
+### SUMMARY:
+## Total reads in sample:	45
+## Reads discarded in preprocessing (% of total):	5 (11%)
+#  discarded due to wrong start (% of total):	1 (2.2%)
+#  discarded due to no cassette (% of total):	4 (8.9%)
+## Reads without a unique alignment (% of total, % of post-preprocessing):	10 (22%, 25%)
+#  unaligned reads (% of total, % of post-preprocessing):	6 (13%, 15%)
+#  multiply aligned reads (% of total, % of post-preprocessing):	4 (8.9%, 10%)
+## Uniquely aligned reads (% of total, % of post-preprocessing):	30 (67%, 75%)
+#  Removed reads aligned to NON-CASSETTE (% of total, % of post-preprocessing):	29 (64%, 72%)
+## Remaining aligned reads (% of total, % of post-preprocessing):	1 (2.2%, 2.5%)
+#  Perfectly aligned reads, no mismatches (% of aligned):	1 (100%)
+#  Reads with cassette direction matching chromosome + strand (% of aligned):	1 (100%)
+#  Reads with cassette direction matching chromosome - strand (% of aligned):	0 (0%)
+## Mutant merging/counts (deciding when different-position reads should be one mutant)	
+#   (adjacent-merging/counting max distance):	(1)
+#   (if we're including mutants in cassette and in non-nuclear chromosomes):	(True, False)
+#  merged same-strand adjacent mutant pairs and opposite-strand tandem pairs:	0, 0
+#  remaining same-position opposite-strand pairs (if not merged as tandems):	0
+#  remaining adjacent opposite-strand "toward-facing" pairs (those are definitely real):	0
+#  remaining adjacent opposite-strand "away-facing" pairs (% of toward-facing):	0 (N/A)
+#  remaining adjacent same-strand unmerged pairs (% of 2*toward-facing):	0 (N/A)
+## Distinct mutants (read groups) by cassette insertion position:	1
+#  (mutants with 2+, 10+, 100+, 1000+ reads):	(0, 0, 0, 0)
+#  (read location with respect to cassette: which end, which direction):	(5prime, forward)
+#  (average and median reads per mutant):	(1, 1)
+#  Most common mutant(s): reads (% of aligned) (position or count):	1 (100%) (insertion_cassette_X + 104-?)
+### HEADER AND DATA:
+# chromosome	strand	min_position	full_position	gene	orientation	feature	total_reads	perfect_reads	N_sequence_variants	read_sequence_1	seq_1_count	read_sequence_2	seq_2_count	read_sequence_3	seq_3_count
+insertion_cassette_X	+	104	104-?	gene_unknown	?	?	1	1	1	AAAA	1		0		0

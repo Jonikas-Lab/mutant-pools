@@ -1,0 +1,120 @@
+<REGEX># Command line this file was generated with: .*
+<REGEX># Path: .*
+<REGEX># Date: .*
+<REGEX># Full options: {.*}
+### SUMMARY:
+## Total reads in sample:	40+unknown
+## Reads discarded in preprocessing (% of total):	0 (0%)
+#  discarded due to wrong start (% of total):	0 (0%)
+#  discarded due to no cassette (% of total):	0 (0%)
+## Reads without a unique alignment (% of total, % of post-preprocessing):	unknown (unknown)
+#  unaligned reads (% of total, % of post-preprocessing):	unknown (unknown)
+#  multiply aligned reads (% of total, % of post-preprocessing):	unknown (unknown)
+## Uniquely aligned reads (% of total, % of post-preprocessing):	40 (100%, 100%)
+#  Perfectly aligned reads, no mismatches (% of aligned):	40 (100%)
+#  Reads with cassette direction matching chromosome + strand (% of aligned):	38 (95%)
+#  Reads with cassette direction matching chromosome - strand (% of aligned):	2 (5%)
+## Mutant merging/counts (deciding when different-position reads should be one mutant)	
+#   (adjacent-merging/counting max distance):	(1)
+#   (if we're including mutants in cassette and in non-nuclear chromosomes):	(False, False)
+#  merged same-strand adjacent mutant pairs and opposite-strand tandem pairs:	0, 0
+#  remaining same-position opposite-strand pairs (if not merged as tandems):	2
+#  remaining adjacent opposite-strand "toward-facing" pairs (those are definitely real):	0
+#  remaining adjacent opposite-strand "away-facing" pairs (% of toward-facing):	0 (N/A)
+#  remaining adjacent same-strand unmerged pairs (% of 2*toward-facing):	0 (N/A)
+## Distinct mutants (read groups) by cassette insertion position:	40
+#  (mutants with 2+, 10+, 100+, 1000+ reads):	(0, 0, 0, 0)
+#  (read location with respect to cassette: which end, which direction):	(5prime, forward)
+#  (average and median reads per mutant):	(1, 1)
+#  Most common mutant(s): reads (% of aligned) (position or count):	1 (2.5%) (40 mutants)
+#  Mutant cassettes on chromosomes with no gene data (cassette, some scaffolds, maybe chloroplast/mito) (% of total):	0 (0%)
+#  Mutant cassettes in intergenic spaces (% of total, % of known):	1 (2.5%, 2.5%)
+## Mutant cassettes inside genes (% of total, % of known):	39 (98%, 98%)
+#  Mutant cassettes in sense orientation to gene (% of ones in genes):	37 (95%)
+#  Mutant cassettes in antisense orientation to gene (% of ones in genes):	2 (5.1%)
+#  Mutant cassettes in gene feature CDS (% of ones in genes):	6 (15%)
+#  Mutant cassettes in gene feature intron (% of ones in genes):	1 (2.6%)
+#  Mutant cassettes in gene feature 5'UTR (% of ones in genes):	1 (2.6%)
+#  Mutant cassettes in gene feature 3'UTR (% of ones in genes):	1 (2.6%)
+#  Mutant cassettes in gene feature 3'UTR_intron (% of ones in genes):	1 (2.6%)
+#  Mutant cassettes in gene feature 3'UTR/3'UTR_intron (% of ones in genes):	1 (2.6%)
+#  Mutant cassettes in gene feature 3'UTR/intron (% of ones in genes):	1 (2.6%)
+#  Mutant cassettes in gene feature 3'UTR/mRNA_after_exons (% of ones in genes):	1 (2.6%)
+#  Mutant cassettes in gene feature 5'UTR/5'UTR_intron (% of ones in genes):	1 (2.6%)
+#  Mutant cassettes in gene feature 5'UTR/CDS (% of ones in genes):	1 (2.6%)
+#  Mutant cassettes in gene feature 5'UTR/CDS?? (% of ones in genes):	2 (5.1%)
+#  Mutant cassettes in gene feature 5'UTR/intron (% of ones in genes):	1 (2.6%)
+#  Mutant cassettes in gene feature 5'UTR/mRNA_before_exons (% of ones in genes):	1 (2.6%)
+#  Mutant cassettes in gene feature ?? (% of ones in genes):	1 (2.6%)
+#  Mutant cassettes in gene feature CDS/3'UTR (% of ones in genes):	1 (2.6%)
+#  Mutant cassettes in gene feature CDS/5'UTR?? (% of ones in genes):	1 (2.6%)
+#  Mutant cassettes in gene feature CDS/CDS (% of ones in genes):	1 (2.6%)
+#  Mutant cassettes in gene feature CDS/CDS?? (% of ones in genes):	2 (5.1%)
+#  Mutant cassettes in gene feature CDS/intron (% of ones in genes):	2 (5.1%)
+#  Mutant cassettes in gene feature MULTIPLE_SPLICE_VARIANTS (% of ones in genes):	1 (2.6%)
+#  Mutant cassettes in gene feature gene_edge/mRNA_edge (% of ones in genes):	1 (2.6%)
+#  Mutant cassettes in gene feature gene_edge/mRNA_edge/3'UTR (% of ones in genes):	1 (2.6%)
+#  Mutant cassettes in gene feature gene_edge/mRNA_edge/5'UTR (% of ones in genes):	1 (2.6%)
+#  Mutant cassettes in gene feature gene_edge/no_mRNA (% of ones in genes):	1 (2.6%)
+#  Mutant cassettes in gene feature gene_edge/outside_mRNA (% of ones in genes):	1 (2.6%)
+#  Mutant cassettes in gene feature mRNA_after_exons (% of ones in genes):	1 (2.6%)
+#  Mutant cassettes in gene feature mRNA_before_exons (% of ones in genes):	1 (2.6%)
+#  Mutant cassettes in gene feature mRNA_edge (% of ones in genes):	1 (2.6%)
+#  Mutant cassettes in gene feature mRNA_no_exons (% of ones in genes):	1 (2.6%)
+#  Mutant cassettes in gene feature no_mRNA (% of ones in genes):	1 (2.6%)
+#  Mutant cassettes in gene feature outside_mRNA (% of ones in genes):	1 (2.6%)
+## Genes containing a mutant (% of all genes):	16 (57%)
+#  Genes containing at least two mutants (% of all genes):	9 (32%)
+#    (total genes in genome annotation data):	(28)
+#  Genes with 1 mutants (% of all genes):	7 (25%)
+#    (some gene names):	(test.geneB1_only_mRNA, test.geneC0_exon_outside_UTR, test.geneC1_exon_outside_UTR, test.geneC3_two_3prime_UTRs, test.geneD2_bad_touching_exons, ...)
+#  Genes with 2 mutants (% of all genes):	6 (21%)
+#    (some gene names):	(test.geneA1_proper_minus, test.geneB0_no_mRNA, test.geneC4_UTRs_separated_from_exons, test.geneC5_gap_in_mRNA_before_UTR_start, test.geneC6_gap_in_mRNA_after_UTR_end, ...)
+#  Genes with 3 mutants (% of all genes):	1 (3.6%)
+#    (some gene names):	(test.geneD4_bad_overlapping_exon_UTR)
+#  Genes with 4 mutants (% of all genes):	1 (3.6%)
+#    (some gene names):	(test.geneB2_only_mRNA_smaller_than_gene)
+#  Genes with 13 mutants (% of all genes):	1 (3.6%)
+#    (some gene names):	(test.geneA0_proper_plus)
+### HEADER AND DATA:
+# chromosome	strand	min_position	full_position	gene	orientation	feature	total_reads	perfect_reads	N_sequence_variants
+chromosome_A	+	20	20-?	no_gene_found	-	-	1	1	1
+chromosome_A	+	100	100-?	test.geneA0_proper_plus	sense	gene_edge/mRNA_edge/5'UTR	1	1	1
+chromosome_A	+	150	150-?	test.geneA0_proper_plus	sense	5'UTR	1	1	1
+chromosome_A	+	200	200-?	test.geneA0_proper_plus	sense	5'UTR/CDS	1	1	1
+chromosome_A	+	210	210-?	test.geneA0_proper_plus	sense	CDS	1	1	1
+chromosome_A	-	210	?-211	test.geneA0_proper_plus	antisense	CDS	1	1	1
+chromosome_A	+	250	250-?	test.geneA0_proper_plus	sense	CDS	1	1	1
+chromosome_A	+	300	300-?	test.geneA0_proper_plus	sense	CDS/intron	1	1	1
+chromosome_A	+	350	350-?	test.geneA0_proper_plus	sense	intron	1	1	1
+chromosome_A	+	400	400-?	test.geneA0_proper_plus	sense	CDS/intron	1	1	1
+chromosome_A	+	450	450-?	test.geneA0_proper_plus	sense	CDS	1	1	1
+chromosome_A	+	700	700-?	test.geneA0_proper_plus	sense	CDS/3'UTR	1	1	1
+chromosome_A	+	750	750-?	test.geneA0_proper_plus	sense	3'UTR	1	1	1
+chromosome_A	+	800	800-?	test.geneA0_proper_plus	sense	gene_edge/mRNA_edge/3'UTR	1	1	1
+chromosome_A	+	1210	1210-?	test.geneA1_proper_minus	antisense	CDS	1	1	1
+chromosome_A	-	1210	?-1211	test.geneA1_proper_minus	sense	CDS	1	1	1
+chromosome_B	+	100	100-?	test.geneB0_no_mRNA	sense	gene_edge/no_mRNA	1	1	1
+chromosome_B	+	400	400-?	test.geneB0_no_mRNA	sense	no_mRNA	1	1	1
+chromosome_B	+	1100	1100-?	test.geneB1_only_mRNA	sense	gene_edge/mRNA_edge	1	1	1
+chromosome_B	+	2100	2100-?	test.geneB2_only_mRNA_smaller_than_gene	sense	gene_edge/outside_mRNA	1	1	1
+chromosome_B	+	2150	2150-?	test.geneB2_only_mRNA_smaller_than_gene	sense	outside_mRNA	1	1	1
+chromosome_B	+	2200	2200-?	test.geneB2_only_mRNA_smaller_than_gene	sense	mRNA_edge	1	1	1
+chromosome_B	+	2300	2300-?	test.geneB2_only_mRNA_smaller_than_gene	sense	mRNA_no_exons	1	1	1
+chromosome_C	+	300	300-?	test.geneC0_exon_outside_UTR	sense	5'UTR/intron	1	1	1
+chromosome_C	+	1600	1600-?	test.geneC1_exon_outside_UTR	sense	3'UTR/intron	1	1	1
+chromosome_C	+	3650	3650-?	test.geneC3_two_3prime_UTRs	sense	3'UTR_intron	1	1	1
+chromosome_C	+	4200	4200-?	test.geneC4_UTRs_separated_from_exons	sense	5'UTR/5'UTR_intron	1	1	1
+chromosome_C	+	4700	4700-?	test.geneC4_UTRs_separated_from_exons	sense	3'UTR/3'UTR_intron	1	1	1
+chromosome_C	+	5200	5200-?	test.geneC5_gap_in_mRNA_before_UTR_start	sense	mRNA_before_exons	1	1	1
+chromosome_C	+	5300	5300-?	test.geneC5_gap_in_mRNA_before_UTR_start	sense	5'UTR/mRNA_before_exons	1	1	1
+chromosome_C	+	6600	6600-?	test.geneC6_gap_in_mRNA_after_UTR_end	sense	3'UTR/mRNA_after_exons	1	1	1
+chromosome_C	+	6700	6700-?	test.geneC6_gap_in_mRNA_after_UTR_end	sense	mRNA_after_exons	1	1	1
+chromosome_D	+	2300	2300-?	test.geneD2_bad_touching_exons	sense	CDS/CDS	1	1	1
+chromosome_D	+	3300	3300-?	test.geneD3_bad_overlapping_exons	sense	CDS/CDS??	1	1	1
+chromosome_D	+	3350	3350-?	test.geneD3_bad_overlapping_exons	sense	CDS/CDS??	1	1	1
+chromosome_D	+	4200	4200-?	test.geneD4_bad_overlapping_exon_UTR	sense	5'UTR/CDS??	1	1	1
+chromosome_D	+	4250	4250-?	test.geneD4_bad_overlapping_exon_UTR	sense	5'UTR/CDS??	1	1	1
+chromosome_D	+	4300	4300-?	test.geneD4_bad_overlapping_exon_UTR	sense	CDS/5'UTR??	1	1	1
+chromosome_D	+	6450	6450-?	test.geneD6_bad_two_mRNAs_overlapping	sense	MULTIPLE_SPLICE_VARIANTS	1	1	1
+chromosome_D	+	7400	7400-?	test.geneD7_bad_non_mRNA_feature	sense	??	1	1	1

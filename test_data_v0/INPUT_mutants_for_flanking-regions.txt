@@ -1,0 +1,11 @@
+<REGEX># Command line this file was generated with: .*
+<REGEX># Path: .*
+<REGEX># Date: .*
+<REGEX># Full options: {.*}
+### HEADER AND DATA:
+# chromosome	strand	min_position	full_position	gene	orientation	feature	total_reads	perfect_reads	N_sequence_variants	
+chr1	+	3	3-?	gene_unknown	?	?	10	10	1
+chr1	-	3	?-4	gene_unknown	?	?	10	10	1
+chr1	+	4	4-?	gene_unknown	?	?	1	1	1
+chr1	both	7	7-8	gene_unknown	?	?	10	10	1
+chr2	+	2	2-?	gene_unknown	?	?	10	10	1

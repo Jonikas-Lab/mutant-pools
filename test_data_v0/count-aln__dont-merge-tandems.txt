@@ -1,0 +1,51 @@
+<REGEX># Command line this file was generated with: .*
+<REGEX># Path: .*
+<REGEX># Date: .*
+<REGEX># Full options: {.*}
+### SUMMARY:
+## Total reads in sample:	25+unknown
+## Reads discarded in preprocessing (% of total):	unknown (unknown)
+#  discarded due to wrong start (% of total):	unknown (unknown)
+#  discarded due to no cassette (% of total):	unknown (unknown)
+## Reads without a unique alignment (% of total, % of post-preprocessing):	unknown (unknown)
+#  unaligned reads (% of total, % of post-preprocessing):	unknown (unknown)
+#  multiply aligned reads (% of total, % of post-preprocessing):	unknown (unknown)
+## Uniquely aligned reads (% of total, % of post-preprocessing):	25 (100%, 100%)
+#  Perfectly aligned reads, no mismatches (% of aligned):	25 (100%)
+#  Reads with cassette direction matching chromosome + strand (% of aligned):	22 (88%)
+#  Reads with cassette direction matching chromosome - strand (% of aligned):	3 (12%)
+## Mutant merging/counts (deciding when different-position reads should be one mutant)	
+#   (adjacent-merging/counting max distance):	(1)
+#   (if we're including mutants in cassette and in non-nuclear chromosomes):	(False, False)
+#  merged same-strand adjacent mutant pairs and opposite-strand tandem pairs:	0, 0
+#  remaining same-position opposite-strand pairs (if not merged as tandems):	1
+#  remaining adjacent opposite-strand "toward-facing" pairs (those are definitely real):	0
+#  remaining adjacent opposite-strand "away-facing" pairs (% of toward-facing):	1 (N/A)
+#  remaining adjacent same-strand unmerged pairs (% of 2*toward-facing):	3 (N/A)
+## Distinct mutants (read groups) by cassette insertion position:	15
+#  (mutants with 2+, 10+, 100+, 1000+ reads):	(3, 0, 0, 0)
+#  (read location with respect to cassette: which end, which direction):	(5prime, forward)
+#  (average and median reads per mutant):	(2, 1)
+#  Most common mutant(s): reads (% of aligned) (position or count):	5 (20%) (2 mutants)
+### HEADER AND DATA:
+# chromosome	strand	min_position	full_position	gene	orientation	feature	total_reads	perfect_reads	N_sequence_variants
+<IGNORE> the 99-100-101 group should NOT be merged (distance 1, ratio 5) (this constitutes two pairs)
+chromosome_A	+	99	99-?	gene_unknown	?	?	1	1	1
+chromosome_A	+	100	100-?	gene_unknown	?	?	5	5	1
+chromosome_A	+	101	101-?	gene_unknown	?	?	1	1	1
+<IGNORE> the 200-202 group should NOT be merged (distance 2, ratio 3)
+chromosome_A	+	200	200-?	gene_unknown	?	?	3	3	1
+chromosome_A	+	202	202-?	gene_unknown	?	?	1	1	1
+<IGNORE> the 201-301 group should NOT be merged (distance 1, ratio 1)
+chromosome_A	+	300	300-?	gene_unknown	?	?	1	1	1
+chromosome_A	+	301	301-?	gene_unknown	?	?	1	1	1
+<IGNORE> the 400-405 group should NOT be merged (distance 5, ratio 1)
+chromosome_A	+	400	400-?	gene_unknown	?	?	1	1	1
+chromosome_A	+	405	405-?	gene_unknown	?	?	1	1	1
+<IGNORE> the remaining groups are on opposite strands (distance 0, 1, 2) and should never be merged.
+chromosome_A	+	500	500-?	gene_unknown	?	?	1	1	1
+chromosome_A	-	500	?-501	gene_unknown	?	?	1	1	1
+chromosome_A	+	600	600-?	gene_unknown	?	?	5	5	1
+chromosome_A	-	601	?-602	gene_unknown	?	?	1	1	1
+chromosome_A	+	700	700-?	gene_unknown	?	?	1	1	1
+chromosome_A	-	702	?-703	gene_unknown	?	?	1	1	1

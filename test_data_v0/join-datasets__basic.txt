@@ -1,0 +1,53 @@
+<REGEX># Command line this file was generated with: .*
+<REGEX># Path: .*
+<REGEX># Date: .*
+<REGEX># Full options: {.*}
+### DATASET SUMMARIES:
+## DATASETS	INPUT_mutants1_no-genes	INPUT_mutants2_with-genes
+## Total reads in sample:	12+unknown	14+unknown
+## Reads discarded in preprocessing (% of total):	unknown (unknown)	unknown (unknown)
+<IGNORE> These two lines should probably have "unknown" instead of "None", but I'm switching it temporarily to focus on other things
+#  discarded due to wrong start (% of total):	None (unknown)	None (unknown)
+#  discarded due to no cassette (% of total):	None (unknown)	None (unknown)
+## Reads without a unique alignment (% of total, % of post-preprocessing):	0 (0%, 0%)	0 (0%, 0%)
+#  unaligned reads (% of total, % of post-preprocessing):	0 (0%, 0%)	0 (0%, 0%)
+#  multiply aligned reads (% of total, % of post-preprocessing):	0 (0%, 0%)	0 (0%, 0%)
+## Uniquely aligned reads (% of total, % of post-preprocessing):	12 (100%, 100%)	14 (100%, 100%)
+#  Perfectly aligned reads, no mismatches (% of aligned):	9 (75%)	11 (79%)
+#  Reads with cassette direction matching chromosome + strand (% of aligned):	8 (67%)	11 (79%)
+#  Reads with cassette direction matching chromosome - strand (% of aligned):	4 (33%)	3 (21%)
+## Mutant merging/counts (deciding when different-position reads should be one mutant)		
+#   (adjacent-merging/counting max distance):	(1)	(1)
+#   (if we're including mutants in cassette and in non-nuclear chromosomes):	(False, False)	(False, False)
+#  merged same-strand adjacent mutant pairs and opposite-strand tandem pairs:	0, 0	0, 0
+#  remaining same-position opposite-strand pairs (if not merged as tandems):	0	0
+#  remaining adjacent opposite-strand "toward-facing" pairs (those are definitely real):	0	0
+#  remaining adjacent opposite-strand "away-facing" pairs (% of toward-facing):	0 (N/A)	0 (N/A)
+#  remaining adjacent same-strand unmerged pairs (% of 2*toward-facing):	0 (N/A)	0 (N/A)
+## Distinct mutants (read groups) by cassette insertion position:	3	3
+#  (mutants with 2+, 10+, 100+, 1000+ reads):	(2, 0, 0, 0)	(3, 0, 0, 0)
+#  (read location with respect to cassette: which end, which direction):	(?, ?)	(?, ?)
+#  (average and median reads per mutant):	(4, 4)	(5, 3)
+#  Most common mutant(s): reads (% of aligned) (position or count):	7 (58%) (chromosome_A + 100-?)	9 (64%) (chromosome_A + 100-?)
+<IGNORE> this is 33% because 2/3 mutants got their gene info from the with-genes one - see mutant data below, it makes sense.
+#  Mutant cassettes on chromosomes with no gene data (cassette, some scaffolds, maybe chloroplast/mito) (% of total):	1 (33%)	0 (0%)
+#  Mutant cassettes in intergenic spaces (% of total, % of known):	0 (0%, 0%)	0 (0%, 0%)
+## Mutant cassettes inside genes (% of total, % of known):	2 (67%, 100%)	3 (100%, 100%)
+#  Mutant cassettes in sense orientation to gene (% of ones in genes):	2 (100%)	2 (67%)
+#  Mutant cassettes in antisense orientation to gene (% of ones in genes):	0 (0%)	1 (33%)
+#  Mutant cassettes in gene feature CDS (% of ones in genes):	0 (0%)	1 (33%)
+#  Mutant cassettes in gene feature five_prime_UTR (% of ones in genes):	1 (50%)	1 (33%)
+#  Mutant cassettes in gene feature boundary (% of ones in genes):	1 (50%)	1 (33%)
+## Genes containing a mutant (% of all genes):	2 (N/A)	3 (N/A)
+#  Genes containing at least two mutants (% of all genes):	0 (N/A)	0 (N/A)
+#    (total genes in genome annotation data):	(0)	(0)
+#  Genes with 0 mutants (% of all genes):	1 (N/A)	0 (N/A)
+#    (some gene names):	(gene3)	()
+#  Genes with 1 mutants (% of all genes):	2 (N/A)	3 (N/A)
+#    (some gene names):	(gene1, gene2)	(gene1, gene2, gene3)
+### HEADER AND DATA:
+# chromosome	strand	min_position	full_position	gene	orientation	feature	main_sequence	reads_in_INPUT_mutants1_no-genes	perfect_in_INPUT_mutants1_no-genes	reads_in_INPUT_mutants2_with-genes	perfect_in_INPUT_mutants2_with-genes
+chromosome_A	+	100	100-?	gene1	sense	CDS/intron	AAAA	7	5	9	7
+chromosome_A	-	200	200-?	gene2	sense	five_prime_UTR	CCCC	4	3	3	3
+chromosome_B	+	300	300-?	gene_unknown	?	?	GGGG	1	1	0	0
+chromosome_B	+	400	400-?	gene3	antisense	CDS	TTTT	0	0	2	1

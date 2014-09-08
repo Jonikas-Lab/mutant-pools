@@ -1,0 +1,150 @@
+##gff-version 3
+
+chromosome_A	test	gene	101	800	.	+	.	ID=test.geneA0_proper_plus;Name=test.geneA0_proper_plus;
+chromosome_A	test	mRNA	101	800	.	+	.	ID=PAC:geneA0_mRNA;Name=test.geneA0.t1.2;pacid=geneA0_mRNA;Parent=test.geneA0_proper_plus;
+chromosome_A	test	five_prime_UTR	101	200	.	+	.	ID=PAC:geneA0_mRNA.five_prime_UTR.1;Parent=PAC:geneA0_mRNA;pacid=geneA0_mRNA;
+chromosome_A	test	CDS	201	300	.	+	0	ID=PAC:geneA0_mRNA.CDS.1;Parent=PAC:geneA0_mRNA;pacid=geneA0_mRNA;
+chromosome_A	test	CDS	401	500	.	+	1	ID=PAC:geneA0_mRNA.CDS.2;Parent=PAC:geneA0_mRNA;pacid=geneA0_mRNA;
+chromosome_A	test	CDS	601	700	.	+	1	ID=PAC:geneA0_mRNA.CDS.3;Parent=PAC:geneA0_mRNA;pacid=geneA0_mRNA;
+chromosome_A	test	three_prime_UTR	701	800	.	+	.	ID=PAC:geneA0_mRNA.three_prime_UTR.1;Parent=PAC:geneA0_mRNA;pacid=geneA0_mRNA;
+
+chromosome_A	test	gene	1101	1800	.	-	.	ID=test.geneA1_proper_minus;Name=test.geneA1_proper_minus;
+chromosome_A	test	mRNA	1101	1800	.	-	.	ID=PAC:geneA1_mRNA;Name=test.geneA1.t1.2;pacid=geneA1_mRNA;Parent=test.geneA1_proper_minus;
+chromosome_A	test	five_prime_UTR	1701	1800	.	-	.	ID=PAC:geneA1_mRNA.five_prime_UTR.1;Parent=PAC:geneA1_mRNA;pacid=geneA1_mRNA;
+chromosome_A	test	CDS	1601	1700	.	-	0	ID=PAC:geneA1_mRNA.CDS.1;Parent=PAC:geneA1_mRNA;pacid=geneA1_mRNA;
+chromosome_A	test	CDS	1401	1500	.	-	1	ID=PAC:geneA1_mRNA.CDS.2;Parent=PAC:geneA1_mRNA;pacid=geneA1_mRNA;
+chromosome_A	test	CDS	1201	1300	.	-	1	ID=PAC:geneA1_mRNA.CDS.3;Parent=PAC:geneA1_mRNA;pacid=geneA1_mRNA;
+chromosome_A	test	three_prime_UTR	1101	1200	.	-	.	ID=PAC:geneA1_mRNA.three_prime_UTR.1;Parent=PAC:geneA1_mRNA;pacid=geneA1_mRNA;
+
+
+
+chromosome_B	test	gene	101	800	.	+	.	ID=test.geneB0_no_mRNA;Name=test.geneB0_no_features;
+
+chromosome_B	test	gene	1101	1800	.	+	.	ID=test.geneB1_only_mRNA;Name=test.geneB1_only_mRNA;
+chromosome_B	test	mRNA	1101	1800	.	+	.	ID=PAC:geneB1_mRNA;Name=test.geneB1.t1.2;pacid=geneB1_mRNA;Parent=test.geneB1_only_mRNA;
+
+chromosome_B	test	gene	2101	2800	.	+	.	ID=test.geneB2_only_mRNA_smaller_than_gene;Name=test.geneB2_only_mRNA_smaller_than_gene;
+chromosome_B	test	mRNA	2201	2700	.	+	.	ID=PAC:geneB2_mRNA;Name=test.geneB2.t1.2;pacid=geneB2_mRNA;Parent=test.geneB2_only_mRNA_smaller_than_gene;
+
+chromosome_B	test	gene	3101	3200	.	+	.	ID=test.geneB3_only_5UTR;Name=test.geneB3_only_5UTR;
+chromosome_B	test	mRNA	3101	3200	.	+	.	ID=PAC:geneB3_mRNA;Name=test.geneB3.t1.2;pacid=geneB3_mRNA;Parent=test.geneB3_only_5UTR;
+chromosome_B	test	five_prime_UTR	3101	3200	.	+	.	ID=PAC:geneB3_mRNA.five_prime_UTR.1;Parent=PAC:geneB3_mRNA;pacid=geneB3_mRNA;
+
+chromosome_B	test	gene	4701	4800	.	+	.	ID=test.geneB4_only_3UTR;Name=test.geneB4_only_3UTR;
+chromosome_B	test	mRNA	4701	4800	.	+	.	ID=PAC:geneB4_mRNA;Name=test.geneB4.t1.2;pacid=geneB4_mRNA;Parent=test.geneB4_only_3UTR;
+chromosome_B	test	three_prime_UTR	4701	4800	.	+	.	ID=PAC:geneB4_mRNA.five_prime_UTR.1;Parent=PAC:geneB4_mRNA;pacid=geneB4_mRNA;
+
+chromosome_B	test	gene	5401	5500	.	+	.	ID=test.geneB5_only_exon;Name=test.geneB5_only_exon;
+chromosome_B	test	mRNA	5401	5500	.	+	.	ID=PAC:geneB5_mRNA;Name=test.geneB5.t1.2;pacid=geneB5_mRNA;Parent=test.geneB5_only_exon;
+chromosome_B	test	CDS	5401	5500	.	+	.	ID=PAC:geneB5_mRNA.CDS.1;Parent=PAC:geneB5_mRNA;pacid=geneB5_mRNA;
+
+chromosome_B	test	gene	6101	6300	.	+	.	ID=test.geneB6_no_3UTR;Name=test.geneB6_no_3UTR;
+chromosome_B	test	mRNA	6101	6300	.	+	.	ID=PAC:geneB6_mRNA;Name=test.geneB6.t1.2;pacid=geneB6_mRNA;Parent=test.geneB6_no_3UTR;
+chromosome_B	test	five_prime_UTR	6101	6200	.	+	.	ID=PAC:geneB6_mRNA.five_prime_UTR.1;Parent=PAC:geneB6_mRNA;pacid=geneB6_mRNA;
+chromosome_B	test	CDS	6201	6300	.	+	.	ID=PAC:geneB6_mRNA.CDS.1;Parent=PAC:geneB6_mRNA;pacid=geneB6_mRNA;
+
+chromosome_B	test	gene	7601	7800	.	+	.	ID=test.geneB7_no_5UTR;Name=test.geneB7_no_5UTR;
+chromosome_B	test	mRNA	7601	7800	.	+	.	ID=PAC:geneB7_mRNA;Name=test.geneB7.t1.2;pacid=geneB7_mRNA;Parent=test.geneB7_no_5UTR;
+chromosome_B	test	CDS	7601	7700	.	+	.	ID=PAC:geneB7_mRNA.CDS.1;Parent=PAC:geneB7_mRNA;pacid=geneB7_mRNA;
+chromosome_B	test	three_prime_UTR	7701	7800	.	+	.	ID=PAC:geneB7_mRNA.three_prime_UTR.1;Parent=PAC:geneB7_mRNA;pacid=geneB7_mRNA;
+
+chromosome_B	test	gene	8101	8800	.	+	.	ID=test.geneB8_no_exon;Name=test.geneB8_no_exon;
+chromosome_B	test	mRNA	8101	8800	.	+	.	ID=PAC:geneB8_mRNA;Name=test.geneB8.t1.2;pacid=geneB8_mRNA;Parent=test.geneB8_no_exon;
+chromosome_B	test	five_prime_UTR	8101	8200	.	+	.	ID=PAC:geneB8_mRNA.five_prime_UTR.1;Parent=PAC:geneB8_mRNA;pacid=geneB8_mRNA;
+chromosome_B	test	three_prime_UTR	8701	8800	.	+	.	ID=PAC:geneB8_mRNA.three_prime_UTR.1;Parent=PAC:geneB8_mRNA;pacid=geneB8_mRNA;
+
+
+
+chromosome_C	test	gene	101	800	.	+	.	ID=test.geneC0_exon_outside_UTR;Name=test.geneC0_exon_outside_UTR;
+chromosome_C	test	mRNA	101	800	.	+	.	ID=PAC:geneC0_mRNA;Name=test.geneC0.t1.2;pacid=geneC0_mRNA;Parent=test.geneC0_exon_outside_UTR;
+chromosome_C	test	CDS	101	200	.	+	.	ID=PAC:geneC0_mRNA.CDS.1;Parent=PAC:geneC0_mRNA;pacid=geneC0_mRNA;
+chromosome_C	test	five_prime_UTR	301	400	.	+	0	ID=PAC:geneC0_mRNA.five_prime_UTR.1;Parent=PAC:geneC0_mRNA;pacid=geneC0_mRNA;
+chromosome_C	test	CDS	401	500	.	+	1	ID=PAC:geneC0_mRNA.CDS.2;Parent=PAC:geneC0_mRNA;pacid=geneC0_mRNA;
+chromosome_C	test	CDS	601	700	.	+	1	ID=PAC:geneC0_mRNA.CDS.3;Parent=PAC:geneC0_mRNA;pacid=geneC0_mRNA;
+chromosome_C	test	three_prime_UTR	701	800	.	+	.	ID=PAC:geneC0_mRNA.three_prime_UTR.1;Parent=PAC:geneC0_mRNA;pacid=geneC0_mRNA;
+
+chromosome_C	test	gene	1101	1800	.	+	.	ID=test.geneC1_exon_outside_UTR;Name=test.geneC1_exon_outside_UTR;
+chromosome_C	test	mRNA	1101	1800	.	+	.	ID=PAC:geneC1_mRNA;Name=test.geneC1.t1.2;pacid=geneC1_mRNA;Parent=test.geneC1_exon_outside_UTR;
+chromosome_C	test	five_prime_UTR	1101	1200	.	+	.	ID=PAC:geneC1_mRNA.five_prime_UTR.1;Parent=PAC:geneC1_mRNA;pacid=geneC1_mRNA;
+chromosome_C	test	CDS	1201	1300	.	+	0	ID=PAC:geneC1_mRNA.CDS.1;Parent=PAC:geneC1_mRNA;pacid=geneC1_mRNA;
+chromosome_C	test	CDS	1401	1500	.	+	1	ID=PAC:geneC1_mRNA.CDS.2;Parent=PAC:geneC1_mRNA;pacid=geneC1_mRNA;
+chromosome_C	test	three_prime_UTR	1501	1600	.	+	1	ID=PAC:geneC1_mRNA.three_prime_UTR.1;Parent=PAC:geneC1_mRNA;pacid=geneC1_mRNA;
+chromosome_C	test	CDS	1701	1800	.	+	.	ID=PAC:geneC1_mRNA.CDS.3;Parent=PAC:geneC1_mRNA;pacid=geneC1_mRNA;
+
+chromosome_C	test	gene	2101	2800	.	+	.	ID=test.geneC2_two_5prime_UTRs;Name=test.geneC2_two_5prime_UTRs;
+chromosome_C	test	mRNA	2101	2800	.	+	.	ID=PAC:geneC2_mRNA;Name=test.geneC2.t1.2;pacid=geneC2_mRNA;Parent=test.geneC2_two_5prime_UTRs;
+chromosome_C	test	five_prime_UTR	2101	2200	.	+	.	ID=PAC:geneC2_mRNA.five_prime_UTR.1;Parent=PAC:geneC2_mRNA;pacid=geneC2_mRNA;
+chromosome_C	test	five_prime_UTR	2301	2400	.	+	0	ID=PAC:geneC2_mRNA.five_prime_UTR.2;Parent=PAC:geneC2_mRNA;pacid=geneC2_mRNA;
+chromosome_C	test	CDS	2401	2500	.	+	1	ID=PAC:geneC2_mRNA.CDS.1;Parent=PAC:geneC2_mRNA;pacid=geneC2_mRNA;
+chromosome_C	test	CDS	2601	2700	.	+	1	ID=PAC:geneC2_mRNA.CDS.2;Parent=PAC:geneC2_mRNA;pacid=geneC2_mRNA;
+chromosome_C	test	three_prime_UTR	2701	2800	.	+	.	ID=PAC:geneC2_mRNA.three_prime_UTR.1;Parent=PAC:geneC2_mRNA;pacid=geneC2_mRNA;
+
+chromosome_C	test	gene	3101	3800	.	+	.	ID=test.geneC3_two_3prime_UTRs;Name=test.geneC3_two_3prime_UTRs;
+chromosome_C	test	mRNA	3101	3800	.	+	.	ID=PAC:geneC3_mRNA;Name=test.geneC3.t1.2;pacid=geneC3_mRNA;Parent=test.geneC3_two_3prime_UTRs;
+chromosome_C	test	five_prime_UTR	3101	3200	.	+	.	ID=PAC:geneC3_mRNA.five_prime_UTR.1;Parent=PAC:geneC3_mRNA;pacid=geneC3_mRNA;
+chromosome_C	test	CDS	3301	3400	.	+	0	ID=PAC:geneC3_mRNA.CDS.1;Parent=PAC:geneC3_mRNA;pacid=geneC3_mRNA;
+chromosome_C	test	CDS	3401	3500	.	+	1	ID=PAC:geneC3_mRNA.CDS.2;Parent=PAC:geneC3_mRNA;pacid=geneC3_mRNA;
+chromosome_C	test	three_prime_UTR	3501	3600	.	+	1	ID=PAC:geneC3_mRNA.three_prime_UTR.1;Parent=PAC:geneC3_mRNA;pacid=geneC3_mRNA;
+chromosome_C	test	three_prime_UTR	3701	3800	.	+	.	ID=PAC:geneC3_mRNA.three_prime_UTR.2;Parent=PAC:geneC3_mRNA;pacid=geneC3_mRNA;
+
+chromosome_C	test	gene	4101	4800	.	+	.	ID=test.geneC4_UTRs_separated_from_exons;Name=test.geneC4_UTRs_separated_from_exons;
+chromosome_C	test	mRNA	4101	4800	.	+	.	ID=PAC:geneC4_mRNA;Name=test.geneC4.t1.2;pacid=geneC4_mRNA;Parent=test.geneC4_UTRs_separated_from_exons;
+chromosome_C	test	five_prime_UTR	4101	4200	.	+	.	ID=PAC:geneC4_mRNA.five_prime_UTR.1;Parent=PAC:geneC4_mRNA;pacid=geneC4_mRNA;
+chromosome_C	test	CDS	4251	4300	.	+	0	ID=PAC:geneC4_mRNA.CDS.1;Parent=PAC:geneC4_mRNA;pacid=geneC4_mRNA;
+chromosome_C	test	CDS	4401	4500	.	+	1	ID=PAC:geneC4_mRNA.CDS.2;Parent=PAC:geneC4_mRNA;pacid=geneC4_mRNA;
+chromosome_C	test	CDS	4601	4650	.	+	1	ID=PAC:geneC4_mRNA.CDS.3;Parent=PAC:geneC4_mRNA;pacid=geneC4_mRNA;
+chromosome_C	test	three_prime_UTR	4701	4800	.	+	.	ID=PAC:geneC4_mRNA.three_prime_UTR.1;Parent=PAC:geneC4_mRNA;pacid=geneC4_mRNA;
+
+chromosome_C	test	gene	5101	5800	.	+	.	ID=test.geneC5_gap_in_mRNA_before_UTR_start;Name=test.geneC5_gap_in_mRNA_before_UTR_start;
+chromosome_C	test	mRNA	5101	5800	.	+	.	ID=PAC:geneC5_mRNA;Name=test.geneC5.t1.2;pacid=geneC5_mRNA;Parent=test.geneC5_gap_in_mRNA_before_UTR_start;
+chromosome_C	test	five_prime_UTR	5301	5400	.	+	.	ID=PAC:geneC5_mRNA.five_prime_UTR.1;Parent=PAC:geneC5_mRNA;pacid=geneC5_mRNA;
+chromosome_C	test	CDS	5401	5500	.	+	1	ID=PAC:geneC5_mRNA.CDS.2;Parent=PAC:geneC5_mRNA;pacid=geneC5_mRNA;
+chromosome_C	test	CDS	5601	5700	.	+	1	ID=PAC:geneC5_mRNA.CDS.3;Parent=PAC:geneC5_mRNA;pacid=geneC5_mRNA;
+chromosome_C	test	three_prime_UTR	5701	5800	.	+	.	ID=PAC:geneC5_mRNA.three_prime_UTR.1;Parent=PAC:geneC5_mRNA;pacid=geneC5_mRNA;
+
+chromosome_C	test	gene	6101	6800	.	+	.	ID=test.geneC6_gap_in_mRNA_after_UTR_end;Name=test.geneC6_gap_in_mRNA_after_UTR_end;
+chromosome_C	test	mRNA	6101	6800	.	+	.	ID=PAC:geneC6_mRNA;Name=test.geneC6.t1.2;pacid=geneC6_mRNA;Parent=test.geneC6_gap_in_mRNA_after_UTR_end;
+chromosome_C	test	five_prime_UTR	6101	6200	.	+	.	ID=PAC:geneC6_mRNA.five_prime_UTR.1;Parent=PAC:geneC6_mRNA;pacid=geneC6_mRNA;
+chromosome_C	test	CDS	6201	6300	.	+	1	ID=PAC:geneC6_mRNA.CDS.2;Parent=PAC:geneC6_mRNA;pacid=geneC6_mRNA;
+chromosome_C	test	CDS	6401	6500	.	+	1	ID=PAC:geneC6_mRNA.CDS.3;Parent=PAC:geneC6_mRNA;pacid=geneC6_mRNA;
+chromosome_C	test	three_prime_UTR	6501	6600	.	+	.	ID=PAC:geneC6_mRNA.three_prime_UTR.1;Parent=PAC:geneC6_mRNA;pacid=geneC6_mRNA;
+
+
+chromosome_D	test	gene	201	700	.	+	.	ID=test.geneD0_bad_mRNA_bigger_than_gene;Name=test.geneD0_bad_mRNA_bigger_than_gene;
+chromosome_D	test	mRNA	101	800	.	+	.	ID=PAC:geneD0_mRNA;Name=test.geneD0.t1.2;pacid=geneD0_mRNA;Parent=test.geneD0_bad_mRNA_bigger_than_gene;
+
+chromosome_D	test	gene	1201	1500	.	+	.	ID=test.geneD1_bad_feature_outside_mRNA;Name=test.geneD1_bad_feature_outside_mRNA;
+chromosome_D	test	mRNA	1201	1500	.	+	.	ID=PAC:geneD1_mRNA;Name=test.geneD1.t1.2;pacid=geneD1_mRNA;Parent=test.geneD1_bad_feature_outside_mRNA;
+chromosome_D	test	CDS	1101	1300	.	+	0	ID=PAC:geneD1_mRNA.CDS.1;Parent=PAC:geneD1_mRNA;pacid=geneD1_mRNA;
+chromosome_D	test	CDS	1401	1500	.	+	1	ID=PAC:geneD1_mRNA.CDS.2;Parent=PAC:geneD1_mRNA;pacid=geneD1_mRNA;
+
+chromosome_D	test	gene	2201	2500	.	+	.	ID=test.geneD2_bad_touching_exons;Name=test.geneD2_bad_touching_exons;
+chromosome_D	test	mRNA	2201	2500	.	+	.	ID=PAC:geneD2_mRNA;Name=test.geneD2.t1.2;pacid=geneD2_mRNA;Parent=test.geneD2_bad_touching_exons;
+chromosome_D	test	CDS	2201	2300	.	+	0	ID=PAC:geneD2_mRNA.CDS.1;Parent=PAC:geneD2_mRNA;pacid=geneD2_mRNA;
+chromosome_D	test	CDS	2301	2500	.	+	1	ID=PAC:geneD2_mRNA.CDS.2;Parent=PAC:geneD2_mRNA;pacid=geneD2_mRNA;
+
+chromosome_D	test	gene	3201	3500	.	+	.	ID=test.geneD3_bad_overlapping_exons;Name=test.geneD3_bad_overlapping_exons;
+chromosome_D	test	mRNA	3201	3500	.	+	.	ID=PAC:geneD3_mRNA;Name=test.geneD3.t1.2;pacid=geneD3_mRNA;Parent=test.geneD3_bad_overlapping_exons;
+chromosome_D	test	CDS	3201	3400	.	+	0	ID=PAC:geneD3_mRNA.CDS.1;Parent=PAC:geneD3_mRNA;pacid=geneD3_mRNA;
+chromosome_D	test	CDS	3301	3500	.	+	1	ID=PAC:geneD3_mRNA.CDS.2;Parent=PAC:geneD3_mRNA;pacid=geneD3_mRNA;
+
+chromosome_D	test	gene	4101	4600	.	+	.	ID=test.geneD4_bad_overlapping_exon_UTR;Name=test.geneD4_bad_overlapping_exon_UTR;
+chromosome_D	test	mRNA	4101	4600	.	+	.	ID=PAC:geneD4_mRNA;Name=test.geneD4.t1.2;pacid=geneD4_mRNA;Parent=test.geneD4_bad_overlapping_exon_UTR;
+chromosome_D	test	five_prime_UTR	4101	4300	.	+	1	ID=PAC:geneD4_mRNA.five_prime_UTR.1;Parent=PAC:geneD4_mRNA;pacid=geneD4_mRNA;
+chromosome_D	test	CDS	4201	4500	.	+	0	ID=PAC:geneD4_mRNA.CDS.1;Parent=PAC:geneD4_mRNA;pacid=geneD4_mRNA;
+chromosome_D	test	three_prime_UTR	4401	4600	.	+	1	ID=PAC:geneD4_mRNA.three_prime_UTR.1;Parent=PAC:geneD4_mRNA;pacid=geneD4_mRNA;
+
+chromosome_D	test	gene	5101	5800	.	+	.	ID=test.geneD5_bad_two_mRNAs;Name=test.geneD5_bad_two_mRNAs;
+chromosome_D	test	mRNA	5101	5400	.	+	.	ID=PAC:geneD5_mRNA;Name=test.geneD5.t1.2;pacid=geneD5_mRNA;Parent=test.geneD5_bad_two_mRNAs;
+chromosome_D	test	mRNA	5501	5800	.	+	.	ID=PAC:geneD5_mRNA;Name=test.geneD5.t2.2;pacid=geneD5_mRNA;Parent=test.geneD5_bad_two_mRNAs;
+
+chromosome_D	test	gene	6101	6800	.	+	.	ID=test.geneD6_bad_two_mRNAs_overlapping;Name=test.geneD6_bad_two_mRNAs_overlapping;
+chromosome_D	test	mRNA	6101	6500	.	+	.	ID=PAC:geneD6_mRNA;Name=test.geneD6.t1.2;pacid=geneD6_mRNA;Parent=test.geneD6_bad_two_mRNAs_overlapping;
+chromosome_D	test	mRNA	6401	6800	.	+	.	ID=PAC:geneD6_mRNA;Name=test.geneD6.t2.2;pacid=geneD6_mRNA;Parent=test.geneD6_bad_two_mRNAs_overlapping;
+
+chromosome_D	test	gene	7101	7800	.	+	.	ID=test.geneD7_bad_non_mRNA_feature;Name=test.geneD7_bad_non_mRNA_feature;
+chromosome_D	test	non_mRNA	7101	7800	.	+	.	ID=PAC:geneD7_mRNA;Name=test.geneD7.t1.2;pacid=geneD7_mRNA;Parent=test.geneD7_bad_non_mRNA_feature;
+
+chromosome_D	test	gene	8101	8500	.	+	.	ID=test.geneD8a_bad_overlapping_genes;Name=test.geneD8a_bad_overlapping_genes;
+chromosome_D	test	gene	8401	8800	.	+	.	ID=test.geneD8b_bad_overlapping_genes;Name=test.geneD8b_bad_overlapping_genes;
+

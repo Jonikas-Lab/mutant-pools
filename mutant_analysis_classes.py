@@ -3945,7 +3945,7 @@ class Testing_Insertional_mutant_pool_dataset(unittest.TestCase):
 
 
     def _check_infile1(self, data):
-        """ Check that data is as expected in test_data/count-aln__cassette-end-5prime.txt. """
+        """ Check that data is as expected in test_data_v0/count-aln__cassette-end-5prime.txt. """
         # summary
         assert data.summary.processed_read_count == 40
         assert data.summary.aligned_read_count == 30
@@ -3983,7 +3983,7 @@ class Testing_Insertional_mutant_pool_dataset(unittest.TestCase):
         assert mutant.unique_sequence_count == 1
 
     def _check_infile2(self, data2):
-        """ Check that data is as expected in test_data/count-aln__with-gene-info_merged.txt. """
+        """ Check that data is as expected in test_data_v0/count-aln__with-gene-info_merged.txt. """
         # summary
         assert data2.summary.processed_read_count == data2.summary.aligned_read_count\
                 == data2.summary.perfect_read_count == 40
@@ -4021,12 +4021,12 @@ class Testing_Insertional_mutant_pool_dataset(unittest.TestCase):
     def test__read_data_from_file(self):
         """ uses _check_infile1 and _check_infile2 functions for detail. """
         ## 1. input file with no gene information but more variation in other features
-        input_file = 'test_data/count-aln__cassette-end-5prime.txt'
+        input_file = 'test_data_v0/count-aln__cassette-end-5prime.txt'
         data = Insertional_mutant_pool_dataset()
         data.read_data_from_file(input_file)
         self._check_infile1(data)
         ## 2. input file with gene information
-        input_file2 = 'test_data/count-aln__with-gene-info_merged.txt'
+        input_file2 = 'test_data_v0/count-aln__with-gene-info_merged.txt'
         data2 = Insertional_mutant_pool_dataset()
         data2.read_data_from_file(input_file2)
         self._check_infile2(data2)
@@ -4047,7 +4047,7 @@ class Testing_Insertional_mutant_pool_dataset(unittest.TestCase):
         import pickle, os
         picklefile = 'test.pickle'
         ## 1. input file with no gene information but more variation in other features
-        input_file = 'test_data/count-aln__cassette-end-5prime.txt'
+        input_file = 'test_data_v0/count-aln__cassette-end-5prime.txt'
         data = Insertional_mutant_pool_dataset(infile=input_file)
         self._check_infile1(data)
         # MAYBE-TODO the pickling/unpickling should probably use the general_utilities convenience functions
@@ -4056,7 +4056,7 @@ class Testing_Insertional_mutant_pool_dataset(unittest.TestCase):
         self._check_infile1(data_new)
         os.unlink(picklefile)
         ## 2. input file with gene information
-        input_file2 = 'test_data/count-aln__with-gene-info_merged.txt'
+        input_file2 = 'test_data_v0/count-aln__with-gene-info_merged.txt'
         data2 = Insertional_mutant_pool_dataset(infile=input_file2)
         self._check_infile2(data2)
         with open(picklefile, 'w') as PICKLE:    pickle.dump(data2, PICKLE)

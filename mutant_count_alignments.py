@@ -28,13 +28,13 @@ import mutant_Carette   # TODO this should be optional...
 
 def do_test_run():
     """ Test run: run script on test infile, compare output to reference file."""
-    test_folder = "test_data"
-    aln_infile0 = "test_data/INPUT_alignment0_old-format.sam"
-    aln_infile1 = "test_data/INPUT_alignment1_genomic-unique.sam"
-    aln_infile2 = "test_data/INPUT_alignment2_for-genes.sam"
-    aln_infile3 = "test_data/INPUT_alignment3_for-merging.sam"
-    gff_genefile = "test_data/INPUT_gene-data-1_all-cases.gff3"
-    dataset_to_remove = "test_data/INPUT_mutants_to_remove.txt"
+    test_folder = "test_data_v0"
+    aln_infile0 = "%s/INPUT_alignment0_old-format.sam"%test_folder
+    aln_infile1 = "%s/INPUT_alignment1_genomic-unique.sam"%test_folder
+    aln_infile2 = "%s/INPUT_alignment2_for-genes.sam"%test_folder
+    aln_infile3 = "%s/INPUT_alignment3_for-merging.sam"%test_folder
+    gff_genefile = "%s/INPUT_gene-data-1_all-cases.gff3"%test_folder
+    dataset_to_remove = "%s/INPUT_mutants_to_remove.txt"%test_folder
 
     test_runs = [
                  ('cassette-end-5prime', "-e 5prime -r forward -n3 -L", [aln_infile1]),

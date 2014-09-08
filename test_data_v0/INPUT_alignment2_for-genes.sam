@@ -1,0 +1,94 @@
+@@@ This should be run with gene annotation data from test_reference.gff3
+@@@ need to test that the gene_ID, orientation (sense/antisense vs gene), and feature returned are correct.
+@
+@@@ Position for standard gene (All these should be sense)
+@ this one should be in no gene
+TEST:2:1:8790:931#0/1	0	chromosome_A	20	255	1M	*	0	0	A	_	XA:i:0	MD:Z:1	NM:i:0
+@ gene edge (also 5'UTR and mRNA edge)
+TEST:2:1:8790:931#0/1	0	chromosome_A	100	255	1M	*	0	0	A	_	XA:i:0	MD:Z:1	NM:i:0
+@ in 5'UTR
+TEST:2:1:8790:931#0/1	0	chromosome_A	150	255	1M	*	0	0	A	_	XA:i:0	MD:Z:1	NM:i:0
+@ 5'UTR / exon edge
+TEST:2:1:8790:931#0/1	0	chromosome_A	200	255	1M	*	0	0	A	_	XA:i:0	MD:Z:1	NM:i:0
+@ exon
+TEST:2:1:8790:931#0/1	0	chromosome_A	250	255	1M	*	0	0	A	_	XA:i:0	MD:Z:1	NM:i:0
+@ exon/intron edge
+TEST:2:1:8790:931#0/1	0	chromosome_A	300	255	1M	*	0	0	A	_	XA:i:0	MD:Z:1	NM:i:0
+@ intron
+TEST:2:1:8790:931#0/1	0	chromosome_A	350	255	1M	*	0	0	A	_	XA:i:0	MD:Z:1	NM:i:0
+@ intron/exon edge
+TEST:2:1:8790:931#0/1	0	chromosome_A	400	255	1M	*	0	0	A	_	XA:i:0	MD:Z:1	NM:i:0
+@ exon 
+TEST:2:1:8790:931#0/1	0	chromosome_A	450	255	1M	*	0	0	A	_	XA:i:0	MD:Z:1	NM:i:0
+@ exon/3'UTR edge
+TEST:2:1:8790:931#0/1	0	chromosome_A	700	255	1M	*	0	0	A	_	XA:i:0	MD:Z:1	NM:i:0
+@ 3'UTR
+TEST:2:1:8790:931#0/1	0	chromosome_A	750	255	1M	*	0	0	A	_	XA:i:0	MD:Z:1	NM:i:0
+@ 3'UTR edge (also gene and mRNA edge)
+TEST:2:1:8790:931#0/1	0	chromosome_A	800	255	1M	*	0	0	A	_	XA:i:0	MD:Z:1	NM:i:0
+@
+@@@ Checking orientation (all in exons)
+@ Sense: + read / + gene combination
+TEST:2:1:8790:931#0/1	0	chromosome_A	210	255	1M	*	0	0	A	_	XA:i:0	MD:Z:1	NM:i:0
+@ Antisense: - read / + gene combination
+TEST:2:1:8790:931#0/1	16	chromosome_A	211	255	1M	*	0	0	A	_	XA:i:0	MD:Z:1	NM:i:0
+@ Antisense: + read / - gene combination
+TEST:2:1:8790:931#0/1	0	chromosome_A	1210	255	1M	*	0	0	A	_	XA:i:0	MD:Z:1	NM:i:0
+@ Sense: - read / - gene combination
+TEST:2:1:8790:931#0/1	16	chromosome_A	1211	255	1M	*	0	0	A	_	XA:i:0	MD:Z:1	NM:i:0
+@
+@@@ Unusual cases - missing features
+@ edge of a gene with no mRNA
+TEST:2:1:8790:931#0/1	0	chromosome_B	100	255	1M	*	0	0	A	_	XA:i:0	MD:Z:1	NM:i:0
+@ inside a gene with no mRNA
+TEST:2:1:8790:931#0/1	0	chromosome_B	400	255	1M	*	0	0	A	_	XA:i:0	MD:Z:1	NM:i:0
+@ edge of a gene with an mRNA (same size as gene) but no subfeatures
+TEST:2:1:8790:931#0/1	0	chromosome_B	1100	255	1M	*	0	0	A	_	XA:i:0	MD:Z:1	NM:i:0
+@ edge of a gene with an mRNA smaller than the gene (so outside the mRNA)
+TEST:2:1:8790:931#0/1	0	chromosome_B	2100	255	1M	*	0	0	A	_	XA:i:0	MD:Z:1	NM:i:0
+@ inside a gene but outside the mRNA (mRNA smaller than the gene)
+TEST:2:1:8790:931#0/1	0	chromosome_B	2150	255	1M	*	0	0	A	_	XA:i:0	MD:Z:1	NM:i:0
+@ inside a gene, edge of the mRNA (mRNA smaller than the gene), no subfeatures
+TEST:2:1:8790:931#0/1	0	chromosome_B	2200	255	1M	*	0	0	A	_	XA:i:0	MD:Z:1	NM:i:0
+@ inside of the mRNA, with no subfeatures 
+TEST:2:1:8790:931#0/1	0	chromosome_B	2300	255	1M	*	0	0	A	_	XA:i:0	MD:Z:1	NM:i:0
+@
+@@@ Unusual cases - weird feature arrangements
+@ 5'UTR outer edge, with an exon+intron before it (instead of being the mRNA edge as normal)
+TEST:2:1:8790:931#0/1	0	chromosome_C	300	255	1M	*	0	0	A	_	XA:i:0	MD:Z:1	NM:i:0
+@ 3'UTR outer edge, with an intron+exon after it (instead of being the mRNA edge as normal)
+TEST:2:1:8790:931#0/1	0	chromosome_C	1600	255	1M	*	0	0	A	_	XA:i:0	MD:Z:1	NM:i:0
+@ "intron" between two UTRs
+TEST:2:1:8790:931#0/1	0	chromosome_C	3650	255	1M	*	0	0	A	_	XA:i:0	MD:Z:1	NM:i:0
+@ 5'UTR inner edge with an intron after
+TEST:2:1:8790:931#0/1	0	chromosome_C	4200	255	1M	*	0	0	A	_	XA:i:0	MD:Z:1	NM:i:0
+@ 3'UTR inner edge with an intron before
+TEST:2:1:8790:931#0/1	0	chromosome_C	4700	255	1M	*	0	0	A	_	XA:i:0	MD:Z:1	NM:i:0
+@ mRNA before any exons (but exons do exist)
+TEST:2:1:8790:931#0/1	0	chromosome_C	5200	255	1M	*	0	0	A	_	XA:i:0	MD:Z:1	NM:i:0
+@ outer edge of 5'UTR, which is NOT the mRNA edge but the edge of the mRNA_before_exons area 
+TEST:2:1:8790:931#0/1	0	chromosome_C	5300	255	1M	*	0	0	A	_	XA:i:0	MD:Z:1	NM:i:0
+@ inner edge of 3'UTR, which is NOT the mRNA edge but the edge of the mRNA_after_exons area 
+TEST:2:1:8790:931#0/1	0	chromosome_C	6600	255	1M	*	0	0	A	_	XA:i:0	MD:Z:1	NM:i:0
+@ mRNA after any exons (but exons do exist)
+TEST:2:1:8790:931#0/1	0	chromosome_C	6700	255	1M	*	0	0	A	_	XA:i:0	MD:Z:1	NM:i:0
+@
+@@@ Definitely bad cases
+@ exon/exon edge - shouldn't happen, there should always be an intron between exons
+TEST:2:1:8790:931#0/1	0	chromosome_D	2300	255	1M	*	0	0	A	_	XA:i:0	MD:Z:1	NM:i:0
+@ edge of one exon and inside another - overlaps between features shouldn't happen
+TEST:2:1:8790:931#0/1	0	chromosome_D	3300	255	1M	*	0	0	A	_	XA:i:0	MD:Z:1	NM:i:0
+@ exon/exon overlap - overlaps between features shouldn't happen
+TEST:2:1:8790:931#0/1	0	chromosome_D	3350	255	1M	*	0	0	A	_	XA:i:0	MD:Z:1	NM:i:0
+@ edge of exon and inside UTR - overlaps between features shouldn't happen
+TEST:2:1:8790:931#0/1	0	chromosome_D	4200	255	1M	*	0	0	A	_	XA:i:0	MD:Z:1	NM:i:0
+@ UTR/exon overlap - overlaps between features shouldn't happen
+TEST:2:1:8790:931#0/1	0	chromosome_D	4250	255	1M	*	0	0	A	_	XA:i:0	MD:Z:1	NM:i:0
+@ edge of UTR and inside exon - overlaps between features shouldn't happen
+TEST:2:1:8790:931#0/1	0	chromosome_D	4300	255	1M	*	0	0	A	_	XA:i:0	MD:Z:1	NM:i:0
+@ two overlapping mRNAs - that REALLY SHOULDN'T HAPPEN
+TEST:2:1:8790:931#0/1	0	chromosome_D	6450	255	1M	*	0	0	A	_	XA:i:0	MD:Z:1	NM:i:0
+@ non-mRNA feature - that REALLY SHOULDN'T HAPPEN
+TEST:2:1:8790:931#0/1	0	chromosome_D	7400	255	1M	*	0	0	A	_	XA:i:0	MD:Z:1	NM:i:0
+@ in two overlapping genes - that REALLY SHOULDN'T HAPPEN (does the program even check for it?? NO, so commenting it out)
+@TEST:2:1:8790:931#0/1	0	chromosome_D	8550	255	1M	*	0	0	A	_	XA:i:0	MD:Z:1	NM:i:0

@@ -1,0 +1,16 @@
+### SUMMARY:
+#  Reads discarded in preprocessing:	unknown
+## Total reads processed:	12
+#  Unaligned reads:	0
+#  Aligned reads (non-discarded):	12
+#  Perfectly aligned reads (no mismatches):	9
+#  Reads with insertion direction matching chromosome + strand:	8
+#  Reads with insertion direction matching chromosome - strand:	4
+## Distinct mutants (read groups) by cassette insertion position:	3
+#  (read is at 5prime end of cassette, in forward direction to cassette)
+#  Most common mutant:	position [chromosome_A + 100-?], 7 reads (58% of aligned)
+### HEADER AND DATA:
+# chromosome	strand	min_position	full_position	gene	orientation	feature	total_reads	perfect_reads	N_sequence_variants	read_sequence_1	seq_1_count	read_sequence_2	seq_2_count
+chromosome_A	+	100	100-?	gene_unknown	?	?	7	5	3	AAAA	5	AATA	1
+chromosome_A	-	200	200-?	gene_unknown	?	?	4	3	2	CCCC	3	CCGC	1
+chromosome_B	+	300	300-?	gene_unknown	?	?	1	1	1	GGGG	1		0
