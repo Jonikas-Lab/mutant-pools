@@ -88,7 +88,6 @@ def HTSeq_pos_to_tuple(HTSeq_pos):
         chrom = HTSeq_pos.chrom
     except AttributeError:
         raise MutantError("Invalid position %s! Need an HTSeq iv object. (If empty, maybe read wasn't aligned?)"%(HTSeq_pos,))
-    ### cassette strand is the same as read strand, OR the opposite if reads_are_reverse is True
     strand = HTSeq_pos.strand
     if strand not in SEQ_STRANDS:   raise MutantError("Invalid strand %s!"%strand)
     # HTSeq is 0-based and I want 1-based, thus the +1; end has no +1 because in HTSeq end is the base AFTER the alignment.
@@ -563,7 +562,7 @@ def find_gene_by_pos_simple(insertion_pos, chromosome_gene_pos_dict, allow_multi
         else:                           return SPECIAL_GENE_CODES.not_found
 
 
-######################################### Mutant and mutant set functions/classes ###############################################
+######################################### Single mutant functions/classes ###############################################
 
 # help functions returning "blank" mutants for defaultdicts (can't use lambdas because pickle doesn't like them)
 def blank_readcount_only_mutant():
@@ -1211,18 +1210,20 @@ class Insertional_mutant_multi_dataset(Insertional_mutant):
         return mutant_dictionary
 
 
+######################################### Mutant set functions/classes ###############################################
+
 class Dataset_summary_data():
     """ Summary data for a Insertional_mutant_pool_dataset object.  Lots of obvious attributes; no non-default methods.
     """
     # LATER-TODO update docstring
 
-    def __init__(self, dataset, cassette_end, reads_are_reverse, dataset_name=None):
+    def __init__(self, dataset, cassette_end, relative_read_direction, dataset_name=None):
         """ Initialize everything to 0/empty/unknown. """
          # make sure the arguments are valid values
         if not cassette_end in SEQ_ENDS+['?']: 
             raise ValueError("The cassette_end variable must be one of %s or '?'!"%SEQ_ENDS)
-        if not reads_are_reverse in [True,False,'?']: 
-            raise ValueError("The reads_are_reverse variable must be True, False, or '?'!")
+        if relative_read_direction not in RELATIVE_READ_DIRECTIONS+['?']: 
+            raise ValueError("The relative_read_direction variable must be %s, or '?'!"%(', '.join(RELATIVE_READ_DIRECTIONS))
         # reference to the containing dataset (for read-counting purposes etc), 
         #  and the dataset name (None if it's a single dataset, string for multi-datasets)
         self.dataset_name = dataset_name
@@ -1235,9 +1236,9 @@ class Dataset_summary_data():
         self.ignored_region_read_counts = defaultdict(int)
         # mutant merging information
         self.blank_adjacent_mutant_info()
-        # MAYBE-TODO should cassette_end and reads_are_reverse be specified for the whole dataset, or just for each set of data added, in add_alignment_files_to_data? The only real issue with this would be that then I wouldn't be able to print this information in the summary - or I'd have to keep track of what the value was for each alignment reader added and print that in the summary if it's a single value, or 'varied' if it's different values. Might also want to keep track of how many alignment readers were involved, and print THAT in the summary!  Or even print each (infile_name, cassette_end, reads_are_reverse) tuple as a separate line in the header.
+        # MAYBE-TODO should cassette_end and relative_read_direction be specified for the whole dataset, or just for each set of data added, in add_alignment_files_to_data? The only real issue with this would be that then I wouldn't be able to print this information in the summary - or I'd have to keep track of what the value was for each alignment reader added and print that in the summary if it's a single value, or 'varied' if it's different values. Might also want to keep track of how many alignment readers were involved, and print THAT in the summary!  Or even print each (infile_name, cassette_end, relative_read_direction) tuple as a separate line in the header.
         self.cassette_end = cassette_end
-        self.reads_are_reverse = reads_are_reverse
+        self.relative_read_direction = relative_read_direction
 
     # TODO unit-test all the methods below!
 
@@ -1531,8 +1532,8 @@ class Insertional_mutant_pool_dataset():
     WILL ADD MORE INFORMATION HERE ONCE I STOP CHANGING THIS SO OFTEN.
     
     Attributes - THIS MAY BE OUT OF DATE
-     - cassette_end - specifies which end of the insertion cassette the reads are on, and 
-     - reads_are_reverse - True if the reads are in reverse orientation to the cassette, False otherwise
+     - cassette_end - specifies which end of the insertion cassette the reads are on
+     - relative_read_direction - specifies wiether the reads are directed inward or outward compared to the cassette
      - discarded_read_count - number of reads discarded in preprocessing before alignment (not counted in processed_read_count)
      - ignored_region_read_counts - region_name:read_count dictionary (not counted in processed_read_count) ____ REALLY??
      - processed_read_count, unaligned_read_count - various read counts, obvious
@@ -1554,7 +1555,7 @@ class Insertional_mutant_pool_dataset():
 
     # MAYBE-TODO should I make multi-datasets a subclass of normal ones instead of having the same class implement both?
 
-    def __init__(self, cassette_end='?', reads_are_reverse='?', multi_dataset=False):
+    def __init__(self, cassette_end='?', relative_read_direction='?', multi_dataset=False):
         """ Initializes empty dataset; saves properties as provided. """
         # _mutants_by_IB is the main data structure here, but it's also private:
         #      see "METHODS FOR EMULATING A CONTAINER TYPE" section below for proper ways to interact with mutants.
@@ -1564,7 +1565,7 @@ class Insertional_mutant_pool_dataset():
         self._mutants_by_IB = keybased_defaultdict(blank_mutant_function)
         # various dataset summary data - single for a single dataset, a dictionary for a multi-dataset object.
         self.multi_dataset = multi_dataset
-        if not multi_dataset:   self.summary = Dataset_summary_data(self, cassette_end, reads_are_reverse, None)
+        if not multi_dataset:   self.summary = Dataset_summary_data(self, cassette_end, relative_read_direction, None)
         else:                   self.summary = {}
         # data that's NOT related to a particular dataset
         # gene/annotation-related information - LATER-TODO should this even be here, or somewhere else?
@@ -1684,10 +1685,11 @@ class Insertional_mutant_pool_dataset():
         if self.multi_dataset:  raise MutantError("add_alignment_files_to_data not implemented for multi-datasets!")
         if self.summary.cassette_end not in SEQ_ENDS:
             raise MutantError("Cannot add data from an alignment reader if cassette_end isn't specified! Please set the "
-          +"summary.cassette_end attribute of this Insertional_mutant_pool_dataset instance to one of %s first."%SEQ_ENDS)
-        if self.summary.reads_are_reverse not in [True,False]:
-            raise MutantError("Cannot add data from an alignment reader if reads_are_reverse isn't set! Please set the "
-                  +"reads_are_reverse attribute of this Insertional_mutant_pool_dataset instance to True/False first.")
+                  +"summary.cassette_end attribute of this Insertional_mutant_pool_dataset instance to one of %s first."%SEQ_ENDS)
+        if self.summary.relative_read_direction not in RELATIVE_READ_DIRECTIONS:
+            raise MutantError("Cannot add data from an alignment reader if relative_read_direction isn't set! "
+                              +"Please set the relative_read_direction attribute of this Insertional_mutant_pool_dataset instance "
+                              +"to one of %s first."%RELATIVE_READ_DIRECTIONS)
 
         # read the IB cluster file; make a read_seq:centroid_seq dictionary for fast lookup.
         IB_centroid_to_seqs = general_utilities.unpickle(IB_cluster_file)
@@ -1701,13 +1703,12 @@ class Insertional_mutant_pool_dataset():
             # get the cassette insertion position (as an Insertion_position object)
             # MAYBE-TODO instead of generating cassette_side_position all the time, even with multiple identical reads, 
             #  check if seq is already present in mutant, or something?  To save time.
-            # TODO all the reads_are_reverse stuff should be relative_read_direction now!
             cassette_side_position = get_insertion_pos_from_flanking_region_pos(aln.iv, self.summary.cassette_end, 
-                                                                    self.summary.reads_are_reverse, immutable_position=True)
+                                                                    self.summary.relative_read_direction, immutable_position=True)
             mutant.add_read(cassette_side_aln, cassette_side_position, read_count=1, dataset_name=None))
             # Parse the genome-side alignment result to figure out position; add that to the mutant
             genome_side_position = get_RISCC_pos_from_read_pos(genome_side_aln.iv, 
-                                                               self.summary.cassette_end, self.summary.reads_are_reverse)
+                                                               self.summary.cassette_end, self.summary.relative_read_direction)
             N_errors = check_mutation_count_by_optional_NM_field(genome_side_aln, negative_if_absent=False)
             if genome_side_best_only:
                 mutant.improve_best_RISCC_read(genome_side_aln.read.seq, genome_side_position, N_errors, read_count=1, 
@@ -1851,8 +1852,10 @@ class Insertional_mutant_pool_dataset():
         # set name to None, as the safest option - only multi-datasets have names anyway, I think
         self.summary.dataset_name = None
         # for read/direction, keep the old value if old/new match, otherwise change to '?'
-        if self.summary.cassette_end != other_dataset.summary.cassette_end:             self.summary.cassette_end = '?'
-        if self.summary.reads_are_reverse != other_dataset.summary.reads_are_reverse:   self.summary.reads_are_reverse = '?'
+        if self.summary.cassette_end != other_dataset.summary.cassette_end:             
+            self.summary.cassette_end = '?'
+        if self.summary.relative_read_direction != other_dataset.summary.relative_read_direction:   
+            self.summary.relative_read_direction = '?'
         # MAYBE-TODO if merging a 3' and 5' dataset, maybe should use 'both' or something instead of '?' ?
 
         ### Merge extra readcount data, i.e. discarded/unaligned/removed/etc read counts from summary
@@ -2751,8 +2754,7 @@ class Insertional_mutant_pool_dataset():
         DVG.append((line_prefix+"(mutants with 2+, 10+, 100+, 1000+ reads):",
                     lambda summ: "(%s, %s, %s, %s)"%tuple([summ.N_mutants_over_readcount(X) for X in (2,10,100,1000)]) ))
         DVG.append((line_prefix+"(read location with respect to cassette: which end, which direction):", 
-                    lambda summ: "(%s, %s)"%(summ.cassette_end, 
-                                             {'?': '?', True: 'reverse', False: 'forward'}[summ.reads_are_reverse]) ))
+                    lambda summ: "(%s, %s)"%(summ.cassette_end, summ.relative_read_direction) ))
         DVG.append((line_prefix+"(average and median reads per mutant):", 
                     lambda summ: "(%d, %d)"%(round((summ.aligned_read_count)/summ.N_mutants), round(summ.median_readcount))))
 
