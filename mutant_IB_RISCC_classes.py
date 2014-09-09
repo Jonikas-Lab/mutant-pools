@@ -1094,9 +1094,9 @@ class Insertional_mutant_multi_dataset(Insertional_mutant):
     Some methods may not have multi-dataset functionality implemented, if I didn't think it would be useful.
     """
 
-    def __init__(self, insertion_position=None):
+    def __init__(self, IB=None, insertion_position=SPECIAL_POSITIONS.unknown):
         # multi-dataset mutants get general attributes
-        Insertional_mutant._set_general_attributes(self, insertion_position)
+        Insertional_mutant._set_general_attributes(self, IB, insertion_position)
         # instead of single readcount-related attributes, multi-dataset mutants get a by_dataset dictionary, 
         #  with dataset names as keys and readcount-related-only mutants as values.
         self.by_dataset = defaultdict(blank_readcount_only_mutant)
@@ -3195,17 +3195,17 @@ class Testing_position_functionality(unittest.TestCase):
 class Testing_Insertional_mutant(unittest.TestCase):
     """ Unit-tests for the Insertional_mutant class and its methods. """
 
-    def _test__init(self):
+    def test__init(self):
         for chromosome in ['chr1', 'chromosome_2', 'chrom3', 'a', 'adfads', '100', 'scaffold_88']:
             for strand in ['+','-']:
                 for position in [1,2,5,100,10000,4323423]:
                     ins_pos_5prime = Insertion_position(chromosome,strand,position_before=position)
                     ins_pos_3prime = Insertion_position(chromosome,strand,position_after=position)
                     # test "normal" mutants - check all details, including position
-                    mutant_5prime = Insertional_mutant(ins_pos_5prime)
-                    mutant_3prime = Insertional_mutant(ins_pos_3prime)
+                    mutant_5prime = Insertional_mutant(insertion_position=ins_pos_5prime)
+                    mutant_3prime = Insertional_mutant(insertion_position=ins_pos_3prime)
                     mutant_readcount_only = Insertional_mutant_readcount_only()
-                    mutant_multi_dataset = Insertional_mutant_multi_dataset(ins_pos_5prime)
+                    mutant_multi_dataset = Insertional_mutant_multi_dataset(insertion_position=ins_pos_5prime)
                     # test position details (only for the two "normal" mutants)
                     assert mutant_5prime.position.min_position == position
                     assert mutant_3prime.position.min_position == position-1
