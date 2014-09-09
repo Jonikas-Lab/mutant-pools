@@ -829,9 +829,13 @@ class Insertional_mutant():
             raise MutantError("RISCC read position %s is unacceptable - must be Insertion_position object or one of %s!"%(
                 new_position, ', '.join(SPECIAL_POSITIONS.all_undefined)))
         if seq in self.RISCC_genome_side_reads:
+            if not new_position in (self.RISCC_genome_side_reads[seq][0], SPECIAL_POSITIONS.unknown):
+                raise MutantError("Same RISCC genome-side seq has different positions! %s: %s, %s"%(seq, new_position, 
+                                                                                    self.RISCC_genome_side_reads[seq][0]))
+            if not (N_errors is None or N_errors == self.RISCC_genome_side_reads[seq][2]):
+                raise MutantError("Same RISCC genome-side seq has different positions! %s: %s, %s"%(seq, N_errors, 
+                                                                                    self.RISCC_genome_side_reads[seq][2]))
             self.RISCC_genome_side_reads[seq][1] += read_count
-            assert new_position in (self.RISCC_genome_side_reads[seq][0], SPECIAL_POSITIONS.unknown)
-            assert N_errors is None or N_errors == self.RISCC_genome_side_reads[seq][2]
         else:
             self.RISCC_genome_side_reads[seq] = [new_position, read_count, N_errors, SPECIAL_GENE_CODES.not_determined, '?', '?']
         # Note: adding gene/annotation info for those is implemented in the dataset methods.
@@ -853,7 +857,7 @@ class Insertional_mutant():
         # if new read isn't "confirming", it can't be better
         if not self._if_confirming_read(new_position, max_distance):    return False
         # if the new one is "confirming" and the old one isn't, new one has to be better
-        old_position = self.RISCC_genome_side_reads.values()[0].position
+        old_position = self.RISCC_genome_side_reads.values()[0][0]
         if not self._if_confirming_read(old_position, max_distance):    return True
         # if both the old and new position meet the basic conditions, pick the highest-distance one
         # TODO what about directionality?
@@ -877,7 +881,7 @@ class Insertional_mutant():
         # if decided to replace, discard old self.RISCC_genome_side_reads and make new one from just the current read data.
         if self._decide_if_replace_read(new_position, max_distance):
             self.RISCC_genome_side_reads = {}
-            self.add_RISCC_read(self, seq, new_position, N_errors, read_count)
+            self.add_RISCC_read(seq, new_position, N_errors, read_count)
         # TODO make this count unaligned/confirming/non-confirming reads, too, instead of keeping all these counts as functions that read the actual mutant data, which will be missing in this case?  I did something like that in mutant_Carette.py.
 
     def RISCC_N_confirming_reads(self, max_distance=MAX_POSITION_DISTANCE):
@@ -3457,11 +3461,11 @@ class Testing_Insertional_mutant(unittest.TestCase):
         """ Convenience function to make the args to Fake_HTSeq_genomic_pos from an Insertion_position """
         return pos.chromosome, pos.strand, pos.min_position, pos.min_position+20
 
-    def _test__add_RISCC_read(self):
+    def test__add_RISCC_read(self):
         """ Also tests RISCC_max_confirmed_distance """
         # make the cassette-side read
         pos0 = Insertion_position('chr1','+',position_before=100)
-        aln0 = Fake_HTSeq_aln(seq='AAA', readname='read1', pos=self._make_pos(pos0))
+        aln0 = Fake_HTSeq_aln(seq='AAA', readname='read1', pos=self._make_pos(pos0), optional_field_data={'NM':0})
         mutant = Insertional_mutant(insertion_position=pos0)
         assert mutant.total_read_count == 0
         assert isnan(mutant.RISCC_max_confirmed_distance(10))
@@ -3469,112 +3473,117 @@ class Testing_Insertional_mutant(unittest.TestCase):
         assert mutant.total_read_count == 1
         assert isnan(mutant.RISCC_max_confirmed_distance(10))
         # add unaligned or multi-aligned RISCC read - the max confirmed distance should still be NaN
-        mutant.add_RISCC_read(new_position=SPECIAL_POSITIONS.unaligned, HTSeq_alignment=None, seq='AAA')
+        mutant.add_RISCC_read('AAA', SPECIAL_POSITIONS.unaligned)
         assert isnan(mutant.RISCC_max_confirmed_distance(10))
-        mutant.add_RISCC_read(new_position=SPECIAL_GENE_CODES.multi_aligned, HTSeq_alignment=None, seq='AAA')
+        mutant.add_RISCC_read('AAC', SPECIAL_POSITIONS.multi_aligned)
         assert isnan(mutant.RISCC_max_confirmed_distance(10))
         # add RISCC reads - a confirming one, a non-confirming one, and a weird one.
         pos1 = Insertion_position('chr1','+',position_before=0)
-        aln1 = Fake_HTSeq_aln(seq='AAA', readname='read1', pos=self._make_pos(pos1))
-        mutant.add_RISCC_read(pos1, HTSeq_alignment=aln1)
+        mutant.add_RISCC_read('CAA', pos1)
         pos2 = Insertion_position('chr2','+',position_before=0)
-        aln2 = Fake_HTSeq_aln(seq='AGA', readname='read1', pos=self._make_pos(pos2))
-        mutant.add_RISCC_read(pos2, HTSeq_alignment=aln2)
+        mutant.add_RISCC_read('CAC', pos2)
         pos3 = Insertion_position('chr1','-',position_before=0)
-        aln3 = Fake_HTSeq_aln(seq='ACA', readname='read1', pos=self._make_pos(pos3))
-        mutant.add_RISCC_read(pos3, HTSeq_alignment=aln3)
+        mutant.add_RISCC_read('CAG', pos3)
         assert len(mutant.RISCC_genome_side_reads) == 5
-        aligned_mutants = [m for m in mutant.RISCC_genome_side_reads if m.position not in SPECIAL_POSITIONS.all_undefined]
-        assert [m.position.chromosome for m in aligned_mutants] == 'chr1 chr2 chr1'.split()
-        assert [m.position.strand for m in aligned_mutants] == '+ + -'.split()
+        aligned_RISCC_reads = [data for (seq,data) in sorted(mutant.RISCC_genome_side_reads.items()) 
+                               if data[0] not in SPECIAL_POSITIONS.all_undefined]
+        assert [data[0].chromosome for data in aligned_RISCC_reads] == 'chr1 chr2 chr1'.split()
+        assert [data[0].strand for data in aligned_RISCC_reads] == '+ + -'.split()
         assert mutant.RISCC_max_confirmed_distance(1000) == 100
         assert mutant.RISCC_max_confirmed_distance(100) == 100
         assert mutant.RISCC_max_confirmed_distance(10) == 0
+        # the same seq can't be added with different defined position, but can be added with unknown
+        self.assertRaises(MutantError, mutant.add_RISCC_read, 'AAA', pos1)
+        self.assertRaises(MutantError, mutant.add_RISCC_read, 'CAA', pos2)
+        self.assertRaises(MutantError, mutant.add_RISCC_read, 'CAA', pos2)
+        mutant.add_RISCC_read('AAA', SPECIAL_POSITIONS.unaligned)
+        mutant.add_RISCC_read('CAA', pos1)
+        mutant.add_RISCC_read('CAG', pos3)
+        mutant.add_RISCC_read('AAA', SPECIAL_POSITIONS.unknown)
+        mutant.add_RISCC_read('CAA', SPECIAL_POSITIONS.unknown)
+        mutant.add_RISCC_read('CAG', SPECIAL_POSITIONS.unknown)
 
-    def _test__improve_best_RISCC_read(self):
+    def test__improve_best_RISCC_read(self):
         """ Also tests RISCC_max_confirmed_distance """
         # make the cassette-side read
         pos0 = Insertion_position('chr1','+',position_before=100)
-        aln0 = Fake_HTSeq_aln(seq='AAA', readname='read1', pos=self._make_pos(pos0))
+        aln0 = Fake_HTSeq_aln(seq='AAA', readname='read1', pos=self._make_pos(pos0), optional_field_data={'NM':0})
         mutant = Insertional_mutant(insertion_position=pos0)
         assert mutant.position.min_position == 100
         assert mutant.total_read_count == 0
         assert isnan(mutant.RISCC_max_confirmed_distance(1000))
-        mutant.add_read(aln0)
+        mutant.add_read(aln0, pos0)
         assert mutant.total_read_count == 1
         assert isnan(mutant.RISCC_max_confirmed_distance(1000))
         # add bad read first, then better ones, make sure they're replaced (or not, if both are equally bad)
         #  (max confirmed distance should change from NaN to 0 once there are some non-confirming reads, 
         #   then to a positive value once there are some confirming reads)
-        pos1 = Insertion_position('chr2','+',position_before=10)
-        aln1 = Fake_HTSeq_aln(seq='AGA', readname='read1', pos=self._make_pos(pos1))
-        mutant.improve_best_RISCC_read(pos1, HTSeq_alignment=aln1, max_distance=50)
+        pos1 = Insertion_position('chr2','+',position_before=10)        # bad - wrong chromosome
+        mutant.improve_best_RISCC_read('AAA', pos1, max_distance=50)
         assert len(mutant.RISCC_genome_side_reads) == 1
-        assert mutant.RISCC_genome_side_reads[0].position.min_position == 10
+        assert mutant.RISCC_genome_side_reads.values()[0][0].min_position == 10
         assert mutant.RISCC_max_confirmed_distance(1000) == 0
-        pos2 = Insertion_position('chr1','-',position_before=11)
-        aln2 = Fake_HTSeq_aln(seq='ACA', readname='read1', pos=self._make_pos(pos2))
-        mutant.improve_best_RISCC_read(pos2, HTSeq_alignment=aln2, max_distance=50)
+        pos2 = Insertion_position('chr1','-',position_before=11)        # bad - wrong strand
+        mutant.improve_best_RISCC_read('AAA', pos2, max_distance=50)
         assert len(mutant.RISCC_genome_side_reads) == 1
-        assert mutant.RISCC_genome_side_reads[0].position.min_position == 10
+        assert mutant.RISCC_genome_side_reads.values()[0][0].min_position == 10
         assert mutant.RISCC_max_confirmed_distance(1000) == 0
-        pos3 = Insertion_position('chr1','+',position_before=12)
-        aln3 = Fake_HTSeq_aln(seq='AAA', readname='read1', pos=self._make_pos(pos3))
-        mutant.improve_best_RISCC_read(pos3, HTSeq_alignment=aln3, max_distance=50)
+        pos3 = Insertion_position('chr1','+',position_before=12)        # bad - distance larger than max_distance
+        mutant.improve_best_RISCC_read('AAA', pos3, max_distance=50)
         assert len(mutant.RISCC_genome_side_reads) == 1
-        assert mutant.RISCC_genome_side_reads[0].position.min_position == 10
+        assert mutant.RISCC_genome_side_reads.values()[0][0].min_position == 10
         assert mutant.RISCC_max_confirmed_distance(1000) == 0
-        pos4 = Insertion_position('chr1','+',position_before=80)
-        aln4 = Fake_HTSeq_aln(seq='AAA', readname='read1', pos=self._make_pos(pos4))
-        mutant.improve_best_RISCC_read(pos4, HTSeq_alignment=aln4, max_distance=50)
+        pos4 = Insertion_position('chr1','+',position_before=80)        # good - 20bp distance
+        mutant.improve_best_RISCC_read('AAA', pos4, max_distance=50)
         assert len(mutant.RISCC_genome_side_reads) == 1
-        assert mutant.RISCC_genome_side_reads[0].position.min_position == 80
+        assert mutant.RISCC_genome_side_reads.values()[0][0].min_position == 80
         assert mutant.RISCC_max_confirmed_distance(1000) == 20
-        pos5 = Insertion_position('chr1','+',position_before=70)
-        aln5 = Fake_HTSeq_aln(seq='AAA', readname='read1', pos=self._make_pos(pos5))
-        mutant.improve_best_RISCC_read(pos5, HTSeq_alignment=aln5, max_distance=50)
+        pos5 = Insertion_position('chr1','+',position_before=70)        # better - 30bp distance
+        mutant.improve_best_RISCC_read('AAA', pos5, max_distance=50)
         assert len(mutant.RISCC_genome_side_reads) == 1
-        assert mutant.RISCC_genome_side_reads[0].position.min_position == 70
-        assert mutant.RISCC_max_confirmed_distance(1000) == 30
+        assert mutant.RISCC_genome_side_reads.values()[0][0].min_position == 70
+        assert mutant.RISCC_max_confirmed_distance(1000) == 30          
+        mutant.improve_best_RISCC_read('AAA', pos3, max_distance=500)   # trying pos3 again with higher max_distance
+        assert len(mutant.RISCC_genome_side_reads) == 1
+        assert mutant.RISCC_genome_side_reads.values()[0][0].min_position == 12
+        assert mutant.RISCC_max_confirmed_distance(1000) == 88
         # add good read first, then worse ones, make sure it's NOT replaced (remember to start with new mutant!)
         mutant = Insertional_mutant(insertion_position=pos0)
         mutant.add_read(aln0)
-        mutant.improve_best_RISCC_read(pos5, HTSeq_alignment=aln5, max_distance=50)
+        mutant.improve_best_RISCC_read('AAA', pos5, max_distance=50)
         assert len(mutant.RISCC_genome_side_reads) == 1
-        assert mutant.RISCC_genome_side_reads[0].position.min_position == 70
+        assert mutant.RISCC_genome_side_reads.values()[0][0].min_position == 70
         assert mutant.RISCC_max_confirmed_distance(1000) == 30
-        mutant.improve_best_RISCC_read(pos1, HTSeq_alignment=aln1, max_distance=50)
+        mutant.improve_best_RISCC_read('AAA', pos1, max_distance=50)
         assert len(mutant.RISCC_genome_side_reads) == 1
-        assert mutant.RISCC_genome_side_reads[0].position.min_position == 70
+        assert mutant.RISCC_genome_side_reads.values()[0][0].min_position == 70
         assert mutant.RISCC_max_confirmed_distance(1000) == 30
-        mutant.improve_best_RISCC_read(pos2, HTSeq_alignment=aln2, max_distance=50)
+        mutant.improve_best_RISCC_read('AAA', pos2, max_distance=50)
         assert len(mutant.RISCC_genome_side_reads) == 1
-        assert mutant.RISCC_genome_side_reads[0].position.min_position == 70
+        assert mutant.RISCC_genome_side_reads.values()[0][0].min_position == 70
         assert mutant.RISCC_max_confirmed_distance(1000) == 30
-        mutant.improve_best_RISCC_read(pos3, HTSeq_alignment=aln3, max_distance=50)
+        mutant.improve_best_RISCC_read('AAA', pos3, max_distance=50)
         assert len(mutant.RISCC_genome_side_reads) == 1
-        assert mutant.RISCC_genome_side_reads[0].position.min_position == 70
+        assert mutant.RISCC_genome_side_reads.values()[0][0].min_position == 70
         assert mutant.RISCC_max_confirmed_distance(1000) == 30
-        mutant.improve_best_RISCC_read(pos4, HTSeq_alignment=aln4, max_distance=50)
+        mutant.improve_best_RISCC_read('AAA', pos4, max_distance=50)
         assert len(mutant.RISCC_genome_side_reads) == 1
-        assert mutant.RISCC_genome_side_reads[0].position.min_position == 70
+        assert mutant.RISCC_genome_side_reads.values()[0][0].min_position == 70
         assert mutant.RISCC_max_confirmed_distance(1000) == 30
         # make sure wrong-strand closer-distance new read won't replace old right-strand one! (this was a bug once)
         pos0 = Insertion_position('chr1','+',position_before=100)
-        aln0 = Fake_HTSeq_aln(seq='AAA', readname='read1', pos=self._make_pos(pos0))
+        aln0 = Fake_HTSeq_aln(seq='AAA', readname='read1', pos=self._make_pos(pos0), optional_field_data={'NM':0})
         mutant = Insertional_mutant(insertion_position=pos0)
         mutant.add_read(aln0)
         pos5 = Insertion_position('chr1','+',position_before=70)
-        aln5 = Fake_HTSeq_aln(seq='AAA', readname='read1', pos=self._make_pos(pos5))
-        mutant.improve_best_RISCC_read(pos5, HTSeq_alignment=aln5, max_distance=1000)
+        mutant.improve_best_RISCC_read('AAA', pos5, max_distance=1000)
         assert len(mutant.RISCC_genome_side_reads) == 1
-        assert mutant.RISCC_genome_side_reads[0].position.min_position == 70
+        assert mutant.RISCC_genome_side_reads.values()[0][0].min_position == 70
         assert mutant.RISCC_max_confirmed_distance(1000) == 30
         pos6 = Insertion_position('chr1','-',position_before=11)
-        aln6 = Fake_HTSeq_aln(seq='ACA', readname='read1', pos=self._make_pos(pos6))
-        mutant.improve_best_RISCC_read(pos6, HTSeq_alignment=aln6, max_distance=1000)
+        mutant.improve_best_RISCC_read('AAA', pos6, max_distance=1000)
         assert len(mutant.RISCC_genome_side_reads) == 1
-        assert mutant.RISCC_genome_side_reads[0].position.min_position == 70
+        assert mutant.RISCC_genome_side_reads.values()[0][0].min_position == 70
         assert mutant.RISCC_max_confirmed_distance(1000) == 30
 
     ### multi-dataset mutants
