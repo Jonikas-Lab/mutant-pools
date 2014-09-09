@@ -63,10 +63,13 @@ def define_option_parser():
                           +"to the same general location as cassette-side but with the maximal distance from it) "
                           +"and the overall counts of genome-side read categories, to save memory. (Default %default).")
     # gene-finding and gene-annotation options 
-    parser.add_option('-A', '--gene_annotation_folder', default='~/experiments/reference_data/chlamy_annotation', metavar='FOLDER', 
+    parser.add_option('-A', '--gene_annotation_folder', default='None', metavar='FOLDER', 
                       help="Folder containing gene position and annotation files (files should be from Phytozome: "
-                          +"gff file with gene positions, *_annotation_info.txt, maybe *_defline.txt etc) (default %default)")
-    # TODO change default to be based on an environmental variable!
+                          +"gff file with gene positions, *_annotation_info.txt, maybe *_defline.txt etc) "
+                          +"if None, gene IDs and annotation won't be added (default %default)")
+    # MAYBE-TODO change default to be based on an environmental variable?
+    # TODO or would it be better to still give the gene/annotation file names, but ALSO check them against the genome version?
+    # MAYBE-TODO add extra annotation files of some sort? Martin had lots of ideas...
     parser.add_option('-G', '--genome_version', type='int', default=5, metavar='G', 
                       help="Which genome version the input files were aligned against - picks the matching gene position "
                           +"and annotation/etc files from the -A folder (4 for v4.* genome, 5 for v5.*, etc) (default %default)")
@@ -175,22 +178,16 @@ def main(outfile, options):
                                   count_other_chromosomes = True, OUTPUT = sys.stdout)
     # MAYBE-TODO make an option for max_distance_to_count?  Does it matter, if it's not printed anyway?
 
-    ### optionally parse gene position/info files and look up the genes for each mutant in the data
-    # TODO TODO TODO rewrite this bit for new IB+Carette pipeline!  Use gene file and any annotation files from folder. 
-    #   (annotation files are a second priority)
-    if options.gene_position_reference_file is not None:
-        genefile = options.gene_position_reference_file
+    ### optionally parse gene position/info/annotation files and look up the genes for each mutant in the data
+    if options.gene_annotation_folder not in (None, 'None', 'NONE', 'none', ''):
+        # TODO find gene gff3 file and any annotation files based on options.gene_annotation_folder and options.genome_version
         if options.verbosity_level>1: print "adding genes from file %s to mutant data - time %s."%(genefile, time.ctime())
         all_alignment_data.find_genes_for_mutants(genefile, detailed_features=options.detailed_gene_features, 
-                                                  N_run_groups=options.N_detail_run_groups, 
-                                                  verbosity_level=options.verbosity_level)
-
-        # if we have gene info, optionally also add annotation
-        if options.gene_annotation_file:
-            if options.verbosity_level>1: 
-                print "adding gene annotation from file %s - time %s."%(options.gene_annotation_file, time.ctime())
-            all_alignment_data.add_gene_annotation(options.gene_annotation_file, 
-                       if_standard_Phytozome_file=options.annotation_file_standard_type, print_info=(options.verbosity_level >= 2))
+                                                  N_run_groups=options.N_detail_run_groups, verbosity_level=options.verbosity_level)
+        if options.verbosity_level>1: 
+            print "adding gene annotation from file %s - time %s."%(options.gene_annotation_file, time.ctime())
+        all_alignment_data.add_gene_annotation(gene_annotation_file, 
+                   if_standard_Phytozome_file=options.annotation_file_standard_type, print_info=(options.verbosity_level >= 2))
 
     ### output data to files
     save_dataset_files(all_alignment_data, outfile, options.verbosity_level, True, True, True, 
