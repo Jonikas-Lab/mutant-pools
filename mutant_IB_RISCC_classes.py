@@ -2968,11 +2968,11 @@ def read_mutant_file(infile):
 
 ################################################### Unit-tests and main ########################################################
 
+Fake_HTSeq_genomic_pos = Fake_deepseq_objects.Fake_HTSeq_genomic_pos
+Fake_HTSeq_aln = Fake_deepseq_objects.Fake_HTSeq_alignment
+
 class Testing_position_functionality(unittest.TestCase):
     """ Unit-tests for position-related classes and functions. """
-
-    Fake_HTSeq_genomic_pos = Fake_deepseq_objects.Fake_HTSeq_genomic_pos
-    Fake_HTSeq_aln = Fake_deepseq_objects.Fake_HTSeq_alignment
 
     def test__Insertion_position(self):
         # different ways of making the same position or approximately same position, 
@@ -3089,21 +3089,21 @@ class Testing_position_functionality(unittest.TestCase):
             self.assertRaises(MutantError, HTSeq_pos_to_tuple, bad_HTSeq_pos)
         ### should raise exception for invalid HTSeq_pos argument (bad strand, or start not before end)
         for strand,start,end in [('+',3,3), ('-',3,3), ('-',4,3), ('+',100,3), ('a',1,2), (1,1,2)]:
-            self.assertRaises(MutantError, HTSeq_pos_to_tuple, self.Fake_HTSeq_genomic_pos('C', strand, start, end))
+            self.assertRaises(MutantError, HTSeq_pos_to_tuple, Fake_HTSeq_genomic_pos('C', strand, start, end))
         ### testing normal functionality: should return a (chrom,start_pos,end_pos,strand) tuple with the same chromosome/strand, 
         #    and start/end positions converted from 0-based end-exclusive to 1-based end-inclusive.
         # (so the HTSeq position of AA in AATT would be 0-2, and converted would be 1-2; of TT, 2-4, and 3-4.)
         for strand in '+-':
-            assert HTSeq_pos_to_tuple(self.Fake_HTSeq_genomic_pos('C', strand, 3, 7)) == ('C', 4, 7, strand)
+            assert HTSeq_pos_to_tuple(Fake_HTSeq_genomic_pos('C', strand, 3, 7)) == ('C', 4, 7, strand)
             for (start,end) in [(0,5), (0,100), (10,12), (5,44)]:
-                assert HTSeq_pos_to_tuple(self.Fake_HTSeq_genomic_pos('C', strand, start, end)) == ('C', start+1, end, strand)
+                assert HTSeq_pos_to_tuple(Fake_HTSeq_genomic_pos('C', strand, start, end)) == ('C', start+1, end, strand)
 
     def _check_unaligned_alns(self, aln_parse_function, *extra_args):
         """ Check that the function returns the right SPECIAL_POSITIONS object when given an unaligned HTSeq aln.  """
-        fake_aln_unaligned_1     = self.Fake_HTSeq_aln('AAA', 'name', unaligned=True, optional_field_data={'XM':1})
-        fake_aln_unaligned_2     = self.Fake_HTSeq_aln('AAA', 'name', unaligned=True, optional_field_data={})
-        fake_aln_multi_aligned_1 = self.Fake_HTSeq_aln('AAA', 'name', unaligned=True, optional_field_data={'XM':2})
-        fake_aln_multi_aligned_2 = self.Fake_HTSeq_aln('AAA', 'name', unaligned=True, optional_field_data={'XM':20})
+        fake_aln_unaligned_1     = Fake_HTSeq_aln('AAA', 'name', unaligned=True, optional_field_data={'XM':1})
+        fake_aln_unaligned_2     = Fake_HTSeq_aln('AAA', 'name', unaligned=True, optional_field_data={})
+        fake_aln_multi_aligned_1 = Fake_HTSeq_aln('AAA', 'name', unaligned=True, optional_field_data={'XM':2})
+        fake_aln_multi_aligned_2 = Fake_HTSeq_aln('AAA', 'name', unaligned=True, optional_field_data={'XM':20})
         assert aln_parse_function(fake_aln_unaligned_1, *extra_args) == SPECIAL_POSITIONS.unaligned
         assert aln_parse_function(fake_aln_unaligned_2, *extra_args) == SPECIAL_POSITIONS.unaligned
         assert aln_parse_function(fake_aln_multi_aligned_1, *extra_args) == SPECIAL_POSITIONS.multi_aligned
@@ -3112,8 +3112,8 @@ class Testing_position_functionality(unittest.TestCase):
     def test__parse_flanking_region_aln_or_pos(self):
         # very basic test with an HTSeq alignment - test__HTSeq_pos_to_tuple tests more details of this
         refpos = ('chr1',1,5,'+')
-        pos = parse_flanking_region_aln_or_pos(self.Fake_HTSeq_aln('AAA', 'name', unaligned=False, pos=('chr1','+',0,5)))
-        assert pos == refpos == HTSeq_pos_to_tuple(self.Fake_HTSeq_genomic_pos('chr1','+',0,5))
+        pos = parse_flanking_region_aln_or_pos(Fake_HTSeq_aln('AAA', 'name', unaligned=False, pos=('chr1','+',0,5)))
+        assert pos == refpos == HTSeq_pos_to_tuple(Fake_HTSeq_genomic_pos('chr1','+',0,5))
         # check straight position tuples
         assert parse_flanking_region_aln_or_pos(refpos) == refpos
         # check unaligned and multi-aligned positions
@@ -3152,8 +3152,8 @@ class Testing_position_functionality(unittest.TestCase):
             pos = get_insertion_pos_from_flanking_region_pos(aln, side, rdir)
             assert (pos.min_position, pos.strand, pos.chromosome) == (expect_minpos, expect_strand, expect_chrom)
         for (start,end) in [(1,5), (1,100), (11,12), (6,44), (1000000001, 9000000000)]:
-            fake_aln_plus  = self.Fake_HTSeq_aln('AA', 'x', pos=('C', '+', start, end))
-            fake_aln_minus = self.Fake_HTSeq_aln('AA', 'x', pos=('C', '-', start, end))
+            fake_aln_plus  = Fake_HTSeq_aln('AA', 'x', pos=('C', '+', start, end))
+            fake_aln_minus = Fake_HTSeq_aln('AA', 'x', pos=('C', '-', start, end))
             tuple_plus = ('C', start+1, end, '+')
             tuple_minus = ('C', start+1, end, '-')
             for input_plus in (fake_aln_plus, tuple_plus):
@@ -3176,8 +3176,8 @@ class Testing_position_functionality(unittest.TestCase):
             pos = get_RISCC_pos_from_read_pos(aln, side, rdir)
             assert (pos.min_position, pos.strand, pos.chromosome) == (expect_minpos, expect_strand, expect_chrom)
         for (start,end) in [(1,5), (1,100), (11,12), (6,44), (1000000001, 9000000000)]:
-            fake_aln_plus  = self.Fake_HTSeq_aln('AA', 'x', pos=('C', '+', start, end))
-            fake_aln_minus = self.Fake_HTSeq_aln('AA', 'x', pos=('C', '-', start, end))
+            fake_aln_plus  = Fake_HTSeq_aln('AA', 'x', pos=('C', '+', start, end))
+            fake_aln_minus = Fake_HTSeq_aln('AA', 'x', pos=('C', '-', start, end))
             tuple_plus = ('C', start+1, end, '+')
             tuple_minus = ('C', start+1, end, '-')
             for input_plus in (fake_aln_plus, tuple_plus):
@@ -3235,10 +3235,8 @@ class Testing_Insertional_mutant(unittest.TestCase):
     def _test__add_read(self):
         # using fake HTSeq alignment class from deepseq_utilities; defining one perfect and one imperfect alignment
         # note: the detailed mutation-counting methods are imported from deepseq_utilities and unit-tested there.
-        from deepseq_utilities import Fake_deepseq_objects
-        Fake_HTSeq_alignment = Fake_deepseq_objects.Fake_HTSeq_alignment
-        perfect_aln = Fake_HTSeq_alignment(seq='AAA', cigar_string='===')  # CIGAR = means match
-        imperfect_aln = Fake_HTSeq_alignment(seq='GGG', cigar_string='=X=')  # CIGAR X means mismatch
+        perfect_aln = Fake_HTSeq_aln(seq='AAA', cigar_string='===')
+        imperfect_aln = Fake_HTSeq_aln(seq='GGG', cigar_string='=X=')
         mutant = Insertional_mutant(Insertion_position('chr','+',position_before=3))
         # adding perfect and imperfect to mutant increases all the counts as expected
         mutant.add_read(perfect_aln, read_count=3)
@@ -3431,9 +3429,8 @@ class Testing_Insertional_mutant(unittest.TestCase):
     def _test__add_RISCC_read(self):
         """ Also tests RISCC_max_confirmed_distance """
         # make the cassette-side read
-        Fake_HTSeq_alignment = Fake_deepseq_objects.Fake_HTSeq_alignment
         pos0 = Insertion_position('chr1','+',position_before=100)
-        aln0 = Fake_HTSeq_alignment(seq='AAA', readname='read1', pos=self._make_pos(pos0))
+        aln0 = Fake_HTSeq_aln(seq='AAA', readname='read1', pos=self._make_pos(pos0))
         mutant = Insertional_mutant(pos0)
         assert mutant.total_read_count == 0
         assert isnan(mutant.RISCC_max_confirmed_distance(10))
@@ -3447,13 +3444,13 @@ class Testing_Insertional_mutant(unittest.TestCase):
         assert isnan(mutant.RISCC_max_confirmed_distance(10))
         # add RISCC reads - a confirming one, a non-confirming one, and a weird one.
         pos1 = Insertion_position('chr1','+',position_before=0)
-        aln1 = Fake_HTSeq_alignment(seq='AAA', readname='read1', pos=self._make_pos(pos1))
+        aln1 = Fake_HTSeq_aln(seq='AAA', readname='read1', pos=self._make_pos(pos1))
         mutant.add_RISCC_read(pos1, HTSeq_alignment=aln1)
         pos2 = Insertion_position('chr2','+',position_before=0)
-        aln2 = Fake_HTSeq_alignment(seq='AGA', readname='read1', pos=self._make_pos(pos2))
+        aln2 = Fake_HTSeq_aln(seq='AGA', readname='read1', pos=self._make_pos(pos2))
         mutant.add_RISCC_read(pos2, HTSeq_alignment=aln2)
         pos3 = Insertion_position('chr1','-',position_before=0)
-        aln3 = Fake_HTSeq_alignment(seq='ACA', readname='read1', pos=self._make_pos(pos3))
+        aln3 = Fake_HTSeq_aln(seq='ACA', readname='read1', pos=self._make_pos(pos3))
         mutant.add_RISCC_read(pos3, HTSeq_alignment=aln3)
         assert len(mutant.RISCC_genome_side_reads) == 5
         aligned_mutants = [m for m in mutant.RISCC_genome_side_reads if m.position not in SPECIAL_POSITIONS.all_undefined]
@@ -3465,10 +3462,9 @@ class Testing_Insertional_mutant(unittest.TestCase):
 
     def _test__improve_best_RISCC_read(self):
         """ Also tests RISCC_max_confirmed_distance """
-        Fake_HTSeq_alignment = Fake_deepseq_objects.Fake_HTSeq_alignment
         # make the cassette-side read
         pos0 = Insertion_position('chr1','+',position_before=100)
-        aln0 = Fake_HTSeq_alignment(seq='AAA', readname='read1', pos=self._make_pos(pos0))
+        aln0 = Fake_HTSeq_aln(seq='AAA', readname='read1', pos=self._make_pos(pos0))
         mutant = Insertional_mutant(pos0)
         assert mutant.position.min_position == 100
         assert mutant.total_read_count == 0
@@ -3480,31 +3476,31 @@ class Testing_Insertional_mutant(unittest.TestCase):
         #  (max confirmed distance should change from NaN to 0 once there are some non-confirming reads, 
         #   then to a positive value once there are some confirming reads)
         pos1 = Insertion_position('chr2','+',position_before=10)
-        aln1 = Fake_HTSeq_alignment(seq='AGA', readname='read1', pos=self._make_pos(pos1))
+        aln1 = Fake_HTSeq_aln(seq='AGA', readname='read1', pos=self._make_pos(pos1))
         mutant.improve_best_RISCC_read(pos1, HTSeq_alignment=aln1, max_distance=50)
         assert len(mutant.RISCC_genome_side_reads) == 1
         assert mutant.RISCC_genome_side_reads[0].position.min_position == 10
         assert mutant.RISCC_max_confirmed_distance(1000) == 0
         pos2 = Insertion_position('chr1','-',position_before=11)
-        aln2 = Fake_HTSeq_alignment(seq='ACA', readname='read1', pos=self._make_pos(pos2))
+        aln2 = Fake_HTSeq_aln(seq='ACA', readname='read1', pos=self._make_pos(pos2))
         mutant.improve_best_RISCC_read(pos2, HTSeq_alignment=aln2, max_distance=50)
         assert len(mutant.RISCC_genome_side_reads) == 1
         assert mutant.RISCC_genome_side_reads[0].position.min_position == 10
         assert mutant.RISCC_max_confirmed_distance(1000) == 0
         pos3 = Insertion_position('chr1','+',position_before=12)
-        aln3 = Fake_HTSeq_alignment(seq='AAA', readname='read1', pos=self._make_pos(pos3))
+        aln3 = Fake_HTSeq_aln(seq='AAA', readname='read1', pos=self._make_pos(pos3))
         mutant.improve_best_RISCC_read(pos3, HTSeq_alignment=aln3, max_distance=50)
         assert len(mutant.RISCC_genome_side_reads) == 1
         assert mutant.RISCC_genome_side_reads[0].position.min_position == 10
         assert mutant.RISCC_max_confirmed_distance(1000) == 0
         pos4 = Insertion_position('chr1','+',position_before=80)
-        aln4 = Fake_HTSeq_alignment(seq='AAA', readname='read1', pos=self._make_pos(pos4))
+        aln4 = Fake_HTSeq_aln(seq='AAA', readname='read1', pos=self._make_pos(pos4))
         mutant.improve_best_RISCC_read(pos4, HTSeq_alignment=aln4, max_distance=50)
         assert len(mutant.RISCC_genome_side_reads) == 1
         assert mutant.RISCC_genome_side_reads[0].position.min_position == 80
         assert mutant.RISCC_max_confirmed_distance(1000) == 20
         pos5 = Insertion_position('chr1','+',position_before=70)
-        aln5 = Fake_HTSeq_alignment(seq='AAA', readname='read1', pos=self._make_pos(pos5))
+        aln5 = Fake_HTSeq_aln(seq='AAA', readname='read1', pos=self._make_pos(pos5))
         mutant.improve_best_RISCC_read(pos5, HTSeq_alignment=aln5, max_distance=50)
         assert len(mutant.RISCC_genome_side_reads) == 1
         assert mutant.RISCC_genome_side_reads[0].position.min_position == 70
@@ -3534,17 +3530,17 @@ class Testing_Insertional_mutant(unittest.TestCase):
         assert mutant.RISCC_max_confirmed_distance(1000) == 30
         # make sure wrong-strand closer-distance new read won't replace old right-strand one! (this was a bug once)
         pos0 = Insertion_position('chr1','+',position_before=100)
-        aln0 = Fake_HTSeq_alignment(seq='AAA', readname='read1', pos=self._make_pos(pos0))
+        aln0 = Fake_HTSeq_aln(seq='AAA', readname='read1', pos=self._make_pos(pos0))
         mutant = Insertional_mutant(pos0)
         mutant.add_read(aln0)
         pos5 = Insertion_position('chr1','+',position_before=70)
-        aln5 = Fake_HTSeq_alignment(seq='AAA', readname='read1', pos=self._make_pos(pos5))
+        aln5 = Fake_HTSeq_aln(seq='AAA', readname='read1', pos=self._make_pos(pos5))
         mutant.improve_best_RISCC_read(pos5, HTSeq_alignment=aln5, max_distance=1000)
         assert len(mutant.RISCC_genome_side_reads) == 1
         assert mutant.RISCC_genome_side_reads[0].position.min_position == 70
         assert mutant.RISCC_max_confirmed_distance(1000) == 30
         pos6 = Insertion_position('chr1','-',position_before=11)
-        aln6 = Fake_HTSeq_alignment(seq='ACA', readname='read1', pos=self._make_pos(pos6))
+        aln6 = Fake_HTSeq_aln(seq='ACA', readname='read1', pos=self._make_pos(pos6))
         mutant.improve_best_RISCC_read(pos6, HTSeq_alignment=aln6, max_distance=1000)
         assert len(mutant.RISCC_genome_side_reads) == 1
         assert mutant.RISCC_genome_side_reads[0].position.min_position == 70
