@@ -674,7 +674,16 @@ class Insertional_mutant():
             raise MutantError("Don't try to provide a dataset_name on a single mutant (rather than the multi-dataset subclass)!")
         # MAYBE-TODO this could be accomplished with a decorator instead, right?
 
-    def add_read(self, HTSeq_alignment, position=SPECIAL_GENE_CODES.not_determined, read_count=1, dataset_name=None):
+    def update_check_position(self, position):
+        if self.position in SPECIAL_POSITIONS.all_undefined:    
+            self.position = position
+        elif self.position == position or position in SPECIAL_POSITIONS.all_undefined:
+            pass
+        else:
+            raise MutantError("Different positions in same mutant! %s and %s, main seq %s"%(self.position, position, 
+                                                                                            self.get_main_sequence()))
+
+    def add_read(self, HTSeq_alignment, position=SPECIAL_POSITIONS.unknown, read_count=1, check_position=True, dataset_name=None):
         """ Add a read to the data (or multiple identical reads, if read_count>1); return True if perfect alignment.
 
         Specifically: increment total_read_count, increment perfect_read_count if read is a perfect 
@@ -690,13 +699,8 @@ class Insertional_mutant():
         self._ensure_dataset_None(dataset_name)
         # check/add position
         # LATER-TODO add handling to allow minor position errors to pass, especially +/-1bp due to PCR/seq indels.
-        if self.position in SPECIAL_POSITIONS.all_undefined:    
-            self.position = position
-        elif self.position == position or positon in SPECIAL_POSITIONS.all_undefined:
-            pass
-        else:
-            raise MutantError("Different positions in same mutant! %s and %s, main seq %s"%(self.position, position, 
-                                                                                            self.get_main_sequence()))
+        if check_position:
+            self.update_check_position(position)
         # if it's a new sequence, increment unique_sequence_count; add a count to the sequences_and_counts dictionary.
         seq = HTSeq_alignment.read.seq
         if seq not in self.sequences_and_counts:
@@ -1134,10 +1138,12 @@ class Insertional_mutant_multi_dataset(Insertional_mutant):
             except KeyError:    return blank_readcount_only_mutant()
         # TODO unit-tests?
 
-    def add_read(self, HTSeq_alignment, read_count=1, dataset_name=None):
+    def add_read(self, HTSeq_alignment, position=SPECIAL_POSITIONS.unknown, read_count=1, dataset_name=None):
         """ Add read to given dataset (see docstring for Insertional_mutant version) - dataset_name is required. """
+        self.update_check_position(position)
         readcount_data_container = self._check_dataset_name_return_data(dataset_name)
-        Insertional_mutant.add_read(readcount_data_container, HTSeq_alignment, read_count)
+        Insertional_mutant.add_read(readcount_data_container, HTSeq_alignment, SPECIAL_POSITIONS.unknown, 
+                                    read_count, check_position=False)
     
     def merge_mutant(self, *args, **kwargs):
         raise MutantError("merge_mutant NOT IMPLEMENTED on multi-dataset mutant object!")
@@ -3196,6 +3202,7 @@ class Testing_Insertional_mutant(unittest.TestCase):
     """ Unit-tests for the Insertional_mutant class and its methods. """
 
     def test__init(self):
+        """ For single, multi-dataset and readcount-only mutants. """
         for chromosome in ['chr1', 'chromosome_2', 'chrom3', 'a', 'adfads', '100', 'scaffold_88']:
             for strand in ['+','-']:
                 for position in [1,2,5,100,10000,4323423]:
@@ -3232,13 +3239,18 @@ class Testing_Insertional_mutant(unittest.TestCase):
                     assert all([x.unique_sequence_count == 0 for x in mutant_multi_dataset.by_dataset.values()])
                     assert all([x.sequences_and_counts == {} for x in mutant_multi_dataset.by_dataset.values()])
 
-    def _test__add_read(self):
+    def test__add_read(self):
+        """ For single, multi-dataset and readcount-only mutants. """
         # using fake HTSeq alignment class from deepseq_utilities; defining one perfect and one imperfect alignment
         # note: the detailed mutation-counting methods are imported from deepseq_utilities and unit-tested there.
-        perfect_aln = Fake_HTSeq_aln(seq='AAA', cigar_string='===')
-        imperfect_aln = Fake_HTSeq_aln(seq='GGG', cigar_string='=X=')
-        mutant = Insertional_mutant(Insertion_position('chr','+',position_before=3))
+        position =  Insertion_position('chr1',  '+', position_before=3)
+        position2 = Insertion_position('chr33', '+', position_before=3)
+        position3 = Insertion_position('chr',   '-', position_before=3)
+        position4 = Insertion_position('chr',   '+', position_before=300)
+        perfect_aln = Fake_HTSeq_aln(seq='AAA', optional_field_data={'NM':0})
+        imperfect_aln = Fake_HTSeq_aln(seq='GGG', optional_field_data={'NM':1})
         # adding perfect and imperfect to mutant increases all the counts as expected
+        mutant = Insertional_mutant(insertion_position=position)
         mutant.add_read(perfect_aln, read_count=3)
         assert mutant.total_read_count == mutant.perfect_read_count == 3
         assert mutant.unique_sequence_count == 1
@@ -3248,10 +3260,8 @@ class Testing_Insertional_mutant(unittest.TestCase):
         assert mutant.perfect_read_count == 3
         assert mutant.unique_sequence_count == 2
         assert mutant.sequences_and_counts == {'AAA':3, 'GGG':1}
-        # it should be impossible to add a read to a specific dataset in a single-dataset mutant 
-        self.assertRaises(MutantError, mutant.add_read, perfect_aln, read_count=3, dataset_name='d1')
         # same for a multi-dataset mutant - this time we need to specify which dataset we're adding to
-        mutant = Insertional_mutant_multi_dataset(Insertion_position('chr','+',position_before=3))
+        mutant = Insertional_mutant_multi_dataset(insertion_position=position)
         assert len(mutant.by_dataset) == 0
         mutant.add_read(perfect_aln, read_count=3, dataset_name='d1')
         assert len(mutant.by_dataset) == 1
@@ -3272,8 +3282,29 @@ class Testing_Insertional_mutant(unittest.TestCase):
         assert mutant.by_dataset['d2'].perfect_read_count == 0
         assert mutant.by_dataset['d2'].unique_sequence_count == 1
         assert mutant.by_dataset['d2'].sequences_and_counts == {'GGG':1}
+        # it should be impossible to add a read to a specific dataset in a single-dataset mutant 
+        mutant = Insertional_mutant(insertion_position=position)
+        self.assertRaises(MutantError, mutant.add_read, perfect_aln, read_count=3, dataset_name='d1')
         # it should be impossible to add a read to a multi-dataset mutant without giving a dataset_name
+        mutant = Insertional_mutant_multi_dataset(insertion_position=position)
         self.assertRaises(MutantError, mutant.add_read, perfect_aln, read_count=3)
+        ### position tests - should be same for single and multi-dataset mutants
+        for Mutant_class in (Insertional_mutant, Insertional_mutant_multi_dataset):
+            # adding reads with wrong positions doesn't work once the position is defined; but you can still add unaligned
+            mutant = Insertional_mutant(insertion_position=position)
+            self.assertRaises(MutantError, mutant.add_read, perfect_aln, position2)
+            self.assertRaises(MutantError, mutant.add_read, perfect_aln, position3)
+            self.assertRaises(MutantError, mutant.add_read, perfect_aln, position4)
+            mutant.add_read(perfect_aln, SPECIAL_POSITIONS.unknown)
+            mutant.add_read(perfect_aln, SPECIAL_POSITIONS.unaligned)
+            mutant.add_read(perfect_aln, SPECIAL_POSITIONS.multi_aligned)
+            # you can also make a mutant with a missing position and then add whatever position you want later
+            for special_position in SPECIAL_POSITIONS.all_undefined:
+                mutant = Insertional_mutant(insertion_position=special_position)
+                mutant.add_read(perfect_aln, position2)
+                self.assertRaises(MutantError, mutant.add_read, perfect_aln, position3)
+                self.assertRaises(MutantError, mutant.add_read, perfect_aln, position4)
+                mutant.add_read(perfect_aln, position2)
 
     def _test__add_counts(self):
         mutant = Insertional_mutant(Insertion_position('chr','+',position_before=3))
