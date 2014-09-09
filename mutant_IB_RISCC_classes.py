@@ -3389,7 +3389,7 @@ class Testing_Insertional_mutant(unittest.TestCase):
         self.assertRaises(MutantError, multi_mutant.add_sequence_and_counts, 'GGG',1)
         self.assertRaises(MutantError, mutant.add_sequence_and_counts, 'GGG',1, dataset_name='d1')
 
-    def _test__update_gene_info(self):
+    def test__update_gene_info(self):
         mutant = Insertional_mutant(insertion_position=Insertion_position('chr','+',position_before=3))
         assert mutant.gene == SPECIAL_GENE_CODES.not_determined
         assert mutant.orientation == mutant.gene_feature == '?'
@@ -3417,7 +3417,7 @@ class Testing_Insertional_mutant(unittest.TestCase):
         self.assertRaises(MutantError, mutant.update_gene_info, 'gene1', '-', 'f')
         self.assertRaises(MutantError, mutant.update_gene_info, 'gene1', '+', 'g')
 
-    def _test__get_main_sequence(self):
+    def test__get_main_sequence(self):
         # single-dataset mutant
         mutant = Insertional_mutant(insertion_position=Insertion_position('chr','+',position_before=3))
         assert mutant.get_main_sequence() == ('',0)
