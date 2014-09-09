@@ -1,18 +1,15 @@
 #!/usr/bin/env python2.7
-""" Take a deepseq alignment file; group the reads into insertional mutants.
-Output a line-per-mutant file containing position info, gene annotation data (optional), total/perfect read count, number of distinct sequences, and some of the sequences/counts (optional), and a summary of read/mutant counts etc. 
-Also output a line-per-gene file containing gene ID/name/position/annotation and the number and read-counts of mutants that were inserted into that gene (optional, NOT IMPLEMENTED YET).
+""" Convert seq/alignment data into full mutant data, grouped by internal barcode, with positions/genes/annotation.
+
+Outputs a line-per-mutant file containing position info, gene annotation data (optional), total/perfect read count, number of distinct sequences, and some of the sequences/counts (optional), and a summary of read/mutant counts etc. 
 Output files are in simple tab-separated plaintext format, with all header/summary lines starting with #.
 
-Grouping reads into mutants is currently done by alignment position (other options such as sequence clustering or grouping 1bp-adjacent positions together may be implemented later). 
-
-The input file should be a SAM-format deepseq alignment file created by bowtie, novoalign, or other deepseq aligner programs (tested mainly on bowtie), with optionally a metadata file created by my deepseq_alignment_wrapper.py or deepseq_preprocessing_wrapper.py scripts.
-The program assumes the SAM file contains only unique matches (i.e. each read was reported as aligning to at most one genomic location).
-It also only deals with single-end alignments at the moment.
+Grouping reads into mutants is done by clustered IBs (internal barcodes) - clustering the IBs should be done before this.
 
  -- Weronika Patena, Jonikas Lab, Carnegie Institution, 2011
 
 USAGE: mutant_count_alignments.py [options] outfile """
+# TODO update docstring!
 
 # basic library
 import sys, os, time
@@ -85,10 +82,6 @@ def define_option_parser():
     # MAYBE-TODO do we ever want to use --no_detailed_gene_features, really?
     # MAYBE-TODO add a "flank" option (with variable size), to catch mutants that are in the flanks of genes? Do we care?
     # MAYBE-TODO add "distance from gene start" and "distance from gene end" fields.
-
-    # adjacent flanking seq counting/merging
-    parser.add_option('-D', '--adjacent_max_distance', type='int', default=0, metavar='N',
-                      help="Count adjacent mutants only if they're at most N bases distant; if 0, no counting. (default %default)")
 
     ### output format options
     parser.add_option('-o', '--sort_data_key', choices=['position','read_count','none'], default='position', 
@@ -164,19 +157,12 @@ def main(outfile, options):
     #  by sequence?  Probably not very useful, since the genome-side seqs will mostly all be unique anyway, 
     #  and doing this only to the cassette-side reads would save less than half of the alignment work.
 
-    ### optionally merge some mutant categories?
+    ### optionally merge some mutant categories?  Or at least count them?
     # It makes no sense to merge adjacent mutants when the mutants are based on IB clustering rather than position.
     # MAYBE-TODO implement merging opposite-tandem mutants (two sides of same two-cassette insertion) based on position?  
     #  That means merging two different IBs... This should be done for same-side cases and ALSO for 3'+5' cases, 
     #  which we don't have any of yet, so can probably skip it for now...
     # If we do merging, change the counting below to print the data to MERGEFILE/CASSETTE_MERGEFILE rather than sys.stdout!
-
-    ### count adjacent mutants, even if not doing any merging - just print to STDOUT
-    if options.adjacent_max_distance:
-        all_alignment_data.count_adjacent_mutants(max_distance_to_print = options.adjacent_max_distance, 
-                                  max_distance_to_count = 10, count_cassette_chromosomes = False,
-                                  count_other_chromosomes = True, OUTPUT = sys.stdout)
-    # MAYBE-TODO make an option for max_distance_to_count?  Does it matter, if it's not printed anyway?
 
     ### optionally parse gene position/info/annotation files and look up the genes for each mutant in the data
     if options.gene_annotation_folder not in (None, 'None', 'NONE', 'none', ''):
@@ -225,10 +211,6 @@ def do_test_run():
                  ('with-gene-info_unmerged', "-B -e 5prime -r forward -g %s -n0"%gff_genefile, [aln_infile2]),
                  ('multiple-infiles', "-e 5prime -r forward -n0 -L", [aln_infile1,aln_infile2]),
                  ('dont-merge-tandems', "-n0", [aln_infile3]),
-                 ('merge-adjacent-none', "-n0 -Q -Y0", [aln_infile3]),
-                 ('merge-adjacent1-r3', "-MQ -D1 -w3 -Y0 -n0", [aln_infile3]),
-                 ('merge-adjacent1-r1', "-MQ -D1 -w1 -Y0 -n0", [aln_infile3]),
-                 ('merge-adjacent2-r3', "-MQ -D2 -w3 -Y0 -n0", [aln_infile3]), 
                  ('remove-from-other-all', "-x %s -n0"%dataset_to_remove, [aln_infile2]), 
                  ('remove-from-other-min4', "-x %s -z4 -n0"%dataset_to_remove, [aln_infile2]), 
                  ('remove-from-other-perfect', "-x %s -p -z4 -n0"%dataset_to_remove, [aln_infile2]),
