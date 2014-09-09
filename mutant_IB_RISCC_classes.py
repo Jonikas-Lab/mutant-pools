@@ -3588,18 +3588,18 @@ class Testing_Insertional_mutant(unittest.TestCase):
 
     ### multi-dataset mutants
 
-    def _test__add_other_mutant_as_dataset(self):
-        mutant1 = Insertional_mutant(Insertion_position('chr','+',position_before=3))
+    def test__add_other_mutant_as_dataset(self):
+        mutant1 = Insertional_mutant(insertion_position = Insertion_position('chr','+',position_before=3))
         mutant1.add_counts(2,1,1)
         mutant1.add_sequence_and_counts('AAA',2)
-        mutant2 = Insertional_mutant(Insertion_position('chr','+',position_before=3))
+        mutant2 = Insertional_mutant(insertion_position = Insertion_position('chr','+',position_before=3))
         mutant2.add_counts(1,0,1)
         mutant2.add_sequence_and_counts('GGG',1)
         # adding a mutant to a single-dataset mutant should fail
         if hasattr(mutant1, 'add_other_mutant_as_dataset'):
             self.assertRaises(MutantError, mutant1.add_other_mutant_as_dataset, mutant2, 'd2')
         # adding a mutant to a multi-dataset mutant should work
-        mutantM = Insertional_mutant_multi_dataset(mutant1.position)
+        mutantM = Insertional_mutant_multi_dataset(insertion_position = mutant1.position)
         mutantM.add_other_mutant_as_dataset(mutant1, 'd1')
         mutantM.add_other_mutant_as_dataset(mutant2, 'd2')
         assert mutantM.by_dataset['d1'].total_read_count == 2
@@ -3624,7 +3624,7 @@ class Testing_Insertional_mutant(unittest.TestCase):
         mutantM.add_other_mutant_as_dataset(mutant4, 'd4', check_constant_data=False)
         mutantM.add_other_mutant_as_dataset(mutant5, 'd5', check_constant_data=False)
 
-    def _test__give_single_dataset_mutant(self):
+    def test__give_single_dataset_mutant(self):
         mutant = Insertional_mutant_multi_dataset(insertion_position=Insertion_position('chr','+',position_before=3))
         mutant.add_counts(2,1,1, dataset_name='d1')
         mutant.add_sequence_and_counts('AAA',2, dataset_name='d1')
@@ -3657,7 +3657,7 @@ class Testing_Insertional_mutant(unittest.TestCase):
         mutant1 = Insertional_mutant_multi_dataset(Insertion_position('chr','+',position_before=3))
         self.assertRaises(MutantError, mutant1.give_single_dataset_mutant, 'd2')
 
-    def _test__give_all_single_dataset_mutants(self):
+    def test__give_all_single_dataset_mutants(self):
         mutant = Insertional_mutant_multi_dataset(insertion_position=Insertion_position('chr','+',position_before=3))
         mutant.add_counts(2,1,1, dataset_name='d1')
         mutant.add_sequence_and_counts('AAA',2, dataset_name='d1')
