@@ -79,6 +79,18 @@ def is_other_chromosome(chromosome_name):
 
 # MAYBE-TODO may want to put the is_*_chromosome functionality under command-line user control someday?  Provide option to give list of cassette chromosome names and "other" ones (or cassette ones and prefixes for genomic ones?)
 
+def check_valid_position_tuple(pos):
+    """ Takes a (chrom, start_pos, end_pos, strand) tuple - raises MutantError if it's wrong.
+
+    Start_pos and end_pos should be int, 1-based, inclusive (so in AATTGG, the position of AA is 1-2) - unlike in HTSeq!
+    Strand should be +/-.  No checks are done on chrom.
+    """
+    try:                                chrom, start_pos, end_pos, strand = pos
+    except (TypeError, ValueError):     raise MutantError("Didn't get a correct position tuple! %s"%pos)
+    if strand not in SEQ_STRANDS:       raise MutantError("Invalid strand %s!"%strand)
+    if start_pos < 1:                   raise MutantError("Sequence positions must be positive!")
+    if start_pos > end_pos:             raise MutantError("Sequence start can't be after end!")
+
 def HTSeq_pos_to_tuple(HTSeq_pos):
     """ Convert an HTSeq.GenomicPosition instance to a (chrom,start_pos,end_pos,strand) tuple. 
     
@@ -89,13 +101,12 @@ def HTSeq_pos_to_tuple(HTSeq_pos):
     except AttributeError:
         raise MutantError("Invalid position %s! Need an HTSeq iv object. (If empty, maybe read wasn't aligned?)"%(HTSeq_pos,))
     strand = HTSeq_pos.strand
-    if strand not in SEQ_STRANDS:   raise MutantError("Invalid strand %s!"%strand)
     # HTSeq is 0-based and I want 1-based, thus the +1; end has no +1 because in HTSeq end is the base AFTER the alignment.
     start_pos = HTSeq_pos.start+1
     end_pos = HTSeq_pos.end
-    if start_pos < 1:           raise MutantError("Sequence positions must be positive!")
-    if start_pos > end_pos:     raise MutantError("Sequence start can't be after end!")
-    return (chrom, start_pos, end_pos, strand)
+    output_pos = (chrom, start_pos, end_pos, strand)
+    check_valid_position_tuple(output_pos)
+    return output_pos
 
 def parse_flanking_region_aln_or_pos(flanking_region_aln_or_pos):
     """ Return (chrom, start_pos, end_pos, strand) tuple. 
@@ -104,16 +115,22 @@ def parse_flanking_region_aln_or_pos(flanking_region_aln_or_pos):
      or an HTSeq alignment object, then if aligned, figure out the tuple and return it, 
       or if unaligned, return SPECIAL_POSITIONS.unaligned or SPECIAL_POSITIONS.multi_aligned depending on optional XM field value.
     """
-    try:                                chrom, start_pos, end_pos, strand = flanking_region_aln_or_pos
-    except (TypeError, ValueError):     
-        if flanking_region_aln_or_pos.iv:      chrom, start_pos, end_pos, strand = HTSeq_pos_to_tuple(flanking_region_aln_or_pos.iv) 
+    try:                                
+        check_valid_position_tuple(flanking_region_aln_or_pos)
+        return flanking_region_aln_or_pos
+    except MutantError:
+        try:    
+            pos = flanking_region_aln_or_pos.iv
+        except AttributeError:
+            raise MutantError("parse_flanking_region_aln_or_pos input should be HTSeq aln or position tuple! "
+                             +"Got %s"%(flanking_region_aln_or_pos,))
+        if pos:                     return HTSeq_pos_to_tuple(pos) 
         # if unaligned, figure out if unaligned or multi-aligned, and just return the appropriate special position code
         else:   
             try:                    XM_val = get_HTSeq_optional_field(flanking_region_aln_or_pos, 'XM')
             except KeyError:        return SPECIAL_POSITIONS.unaligned
             if int(XM_val) > 1:     return SPECIAL_POSITIONS.multi_aligned
             else:                   return SPECIAL_POSITIONS.unaligned
-    return chrom, start_pos, end_pos, strand
 
 ###################################### Insertion position functions/classes #####################################
 
@@ -342,14 +359,11 @@ def get_insertion_pos_from_flanking_region_pos(flanking_region_aln_or_pos, casse
     parsed_position = parse_flanking_region_aln_or_pos(flanking_region_aln_or_pos)
     try:                                chrom, start_pos, end_pos, strand = parsed_position
     except (TypeError, ValueError):     return parsed_position
-    # check for position sanity
-    if strand not in SEQ_STRANDS:   raise MutantError("Invalid strand %s!"%strand)
-    if start_pos < 1:               raise MutantError("Flanking region positions must be positive!")
-    if start_pos > end_pos:         raise MutantError("Flanking region start can't be after end!")
+    check_valid_position_tuple(parsed_position)
     ### chromosome is always the same as read, so just leave it as is
     ### cassette strand is the same as read strand, OR the opposite if the read is opposite to cassette (happens in two cases)
     if (cassette_end=='5prime' and relative_read_direction=='inward'):      pass
-    elif (cassette_end=='3prime' and relative_read_direction=='outard'):    pass
+    elif (cassette_end=='3prime' and relative_read_direction=='outward'):    pass
     else:                                                                   strand = ('+' if strand=='-' else '-')
     ### cassette position depends on the read position and cassette_end in a somewhat complex way (see docstring)
     if (cassette_end=='5prime' and strand=='+') or (cassette_end=='3prime' and strand=='-'): pos_before, pos_after = end_pos, None
@@ -3080,72 +3094,74 @@ class Testing_position_functionality(unittest.TestCase):
             for (start,end) in [(0,5), (0,100), (10,12), (5,44)]:
                 assert HTSeq_pos_to_tuple(self.Fake_HTSeq_genomic_pos('C', strand, start, end)) == ('C', start+1, end, strand)
 
-    def test__parse_flanking_region_aln_or_pos(self):
-        # very basic test with an HTSeq alignment - test__HTSeq_pos_to_tuple tests more details of this
-        pos = parse_flanking_region_aln_or_pos(self.Fake_HTSeq_aln('AAA', 'name', unaligned=False, pos=('chr1','+',0,5)))
-        assert pos == ('chr1', 1, 5, '+') == HTSeq_pos_to_tuple(self.Fake_HTSeq_genomic_pos('chr1','+',0,5))
-        # check straight position tuples
-        assert parse_flanking_region_aln_or_pos(('chr1','+',1,5)) == ('chr1','+',1,5)
-        # check unaligned and multi-aligned positions
+    def _check_unaligned_alns(self, aln_parse_function, *extra_args):
+        """ Check that the function returns the right SPECIAL_POSITIONS object when given an unaligned HTSeq aln.  """
         fake_aln_unaligned_1     = self.Fake_HTSeq_aln('AAA', 'name', unaligned=True, optional_field_data={'XM':1})
         fake_aln_unaligned_2     = self.Fake_HTSeq_aln('AAA', 'name', unaligned=True, optional_field_data={})
         fake_aln_multi_aligned_1 = self.Fake_HTSeq_aln('AAA', 'name', unaligned=True, optional_field_data={'XM':2})
         fake_aln_multi_aligned_2 = self.Fake_HTSeq_aln('AAA', 'name', unaligned=True, optional_field_data={'XM':20})
-        print parse_flanking_region_aln_or_pos(fake_aln_unaligned_1)
-        assert parse_flanking_region_aln_or_pos(fake_aln_unaligned_1) == SPECIAL_POSITIONS.unaligned
-        assert parse_flanking_region_aln_or_pos(fake_aln_unaligned_2) == SPECIAL_POSITIONS.unaligned
-        assert parse_flanking_region_aln_or_pos(fake_aln_multi_aligned_1) == SPECIAL_POSITIONS.multi_aligned
-        assert parse_flanking_region_aln_or_pos(fake_aln_multi_aligned_2) == SPECIAL_POSITIONS.multi_aligned
+        assert aln_parse_function(fake_aln_unaligned_1, *extra_args) == SPECIAL_POSITIONS.unaligned
+        assert aln_parse_function(fake_aln_unaligned_2, *extra_args) == SPECIAL_POSITIONS.unaligned
+        assert aln_parse_function(fake_aln_multi_aligned_1, *extra_args) == SPECIAL_POSITIONS.multi_aligned
+        assert aln_parse_function(fake_aln_multi_aligned_2, *extra_args) == SPECIAL_POSITIONS.multi_aligned
 
-    def _test__get_insertion_pos_from_flanking_region_pos(self):
+    def test__parse_flanking_region_aln_or_pos(self):
+        # very basic test with an HTSeq alignment - test__HTSeq_pos_to_tuple tests more details of this
+        refpos = ('chr1',1,5,'+')
+        pos = parse_flanking_region_aln_or_pos(self.Fake_HTSeq_aln('AAA', 'name', unaligned=False, pos=('chr1','+',0,5)))
+        assert pos == refpos == HTSeq_pos_to_tuple(self.Fake_HTSeq_genomic_pos('chr1','+',0,5))
+        # check straight position tuples
+        assert parse_flanking_region_aln_or_pos(refpos) == refpos
+        # check unaligned and multi-aligned positions
+        self._check_unaligned_alns(parse_flanking_region_aln_or_pos)
+
+    def _check_basic_pos_inputs(self, get_pos_function):
+        """ Check basic inputs for function that takes (read_aln_or_pos, cassette_end, relative_read_direction). """
         # should raise exception for invalid argument (valid arguments: HTSeq position object or (chrom,start,end,strand) tuple
         #  (strand must be +/-, and start can't be after end)
         for bad_flanking_region in [None, '', 'aaa', 0, 1, 0.65, [], {}, True, False, ('C',2,3,4),('C',2,3,'x'),('C',3,2,'-')]:
             for cassette_end in SEQ_ENDS:
-                self.assertRaises(MutantError, get_insertion_pos_from_flanking_region_pos, bad_flanking_region, cassette_end)
-        # should raise exception for invalid cassette_end
-        for bad_cassette_end in ['','aaa',0,1,[],{},None,True,False,'start','end','middle','read','leftmost','rightmost']:
-            self.assertRaises(ValueError, get_insertion_pos_from_flanking_region_pos, ('C',1,5,'+'), bad_cassette_end)
+                for relative_read_direction in RELATIVE_READ_DIRECTIONS:
+                    self.assertRaises(MutantError, get_pos_function, bad_flanking_region, cassette_end, relative_read_direction)
+        # should raise exception for invalid cassette_end or relative_read_direction
+        bad_vals = ['','aaa',0,1,[],{},None,True,False,'start','end','middle','read','leftmost','rightmost']
+        for bad_val in bad_vals:
+            for relative_read_direction in RELATIVE_READ_DIRECTIONS:
+                self.assertRaises(MutantError, get_pos_function, ('C',1,5,'+'), bad_val, relative_read_direction)
+            for cassette_end in SEQ_ENDS:
+                self.assertRaises(MutantError, get_pos_function, ('C',1,5,'+'), cassette_end, bad_val)
 
-        ### testing normal functionality: should return an Insertion_position instance with the same chromosome, 
+    def test__get_insertion_pos_from_flanking_region_pos(self):
+        ### check for invalid position or cassette_end/relative_read_direction inputs, and for unaligned aln inputs
+        self._check_basic_pos_inputs(get_insertion_pos_from_flanking_region_pos)
+        self._check_unaligned_alns(get_insertion_pos_from_flanking_region_pos, '5prime', 'inward')
+
+        ### Testing normal functionality: should return an Insertion_position instance with the same chromosome, 
         #    and strand/position depending on the arguments in a somewhat complicated way.
-        # Mostly I should be testing position-tuple inputs here, since HTSeq pos object conversion to position tuples 
-        #  is dealt with by HTSeq_pos_to_tuple and tested separately, but I can test some HTSeq inputs too.
-
-        ## 1) A few spot-checks, based on the example at the end of "Possible read sides/directions" section in ../notes.txt
+        #   Checks based on the example at the end of "Possible read sides/directions" section in ../notes.txt
         #      (using HTSeq objects directly, because that's what the examples used)
         #    remember HTSeq position is 0-based and end-exclusive, and the position I want is 1-based end-inclusive!  
         #     So in the end the two relevant 1-based numbers end up being the same as the 0-based positions,
         #     because in the case of the start, min_position is actually start-1, and in the case of the end, we're adding 1
         #     to switch from 0-based to 1-based but then subtracting 1 to make the end the last base instead of the base after
-        fake_HTSeq_pos_plus = self.Fake_HTSeq_genomic_pos('C', '+', 3, 7)
-        fake_HTSeq_pos_minus = self.Fake_HTSeq_genomic_pos('C', '-', 3, 7)
-        assert get_insertion_pos_from_flanking_region_pos(fake_HTSeq_pos_plus, '5prime',reads_are_reverse=False).min_position == 7
-        assert get_insertion_pos_from_flanking_region_pos(fake_HTSeq_pos_plus, '3prime',reads_are_reverse=False).min_position == 3
-        assert get_insertion_pos_from_flanking_region_pos(fake_HTSeq_pos_minus,'5prime',reads_are_reverse=True ).min_position == 7
-        assert get_insertion_pos_from_flanking_region_pos(fake_HTSeq_pos_minus,'3prime',reads_are_reverse=True ).min_position == 3
-        assert get_insertion_pos_from_flanking_region_pos(fake_HTSeq_pos_plus, '5prime',reads_are_reverse=True ).min_position == 3
-        assert get_insertion_pos_from_flanking_region_pos(fake_HTSeq_pos_plus, '3prime',reads_are_reverse=True ).min_position == 7
-        assert get_insertion_pos_from_flanking_region_pos(fake_HTSeq_pos_minus,'5prime',reads_are_reverse=False).min_position == 3
-        assert get_insertion_pos_from_flanking_region_pos(fake_HTSeq_pos_minus,'3prime',reads_are_reverse=False).min_position == 7
-
-        ## 2) More checks in a loop, using position tuples and HTSeq_pos objects
-        for (strand_in, if_reverse, strand_out) in [('+',False,'+'), ('-',False,'-'), ('+',True,'-'), ('-',True,'+')]:
-            for (start,end) in [(1,5), (1,100), (11,12), (6,44)]:
-                pos_tuple = ('C', start, end, strand_in)
-                fake_HTSeq_pos = self.Fake_HTSeq_genomic_pos('C', strand_in, start-1, end)
-                result_5prime = get_insertion_pos_from_flanking_region_pos(pos_tuple, '5prime', if_reverse)
-                result_3prime = get_insertion_pos_from_flanking_region_pos(pos_tuple, '3prime', if_reverse)
-                assert get_insertion_pos_from_flanking_region_pos(fake_HTSeq_pos, '5prime', if_reverse) == result_5prime
-                assert get_insertion_pos_from_flanking_region_pos(fake_HTSeq_pos, '3prime', if_reverse) == result_3prime
-                assert result_5prime.chromosome == result_3prime.chromosome == 'C'
-                assert result_5prime.strand == result_3prime.strand == strand_out
-                if strand_out=='+':
-                    assert result_5prime.min_position == end
-                    assert result_3prime.min_position == start-1
-                elif strand_out=='-':
-                    assert result_5prime.min_position == start-1
-                    assert result_3prime.min_position == end
+        def _check_outputs(aln, side, rdir, expect_minpos, expect_strand, expect_chrom):
+            pos = get_insertion_pos_from_flanking_region_pos(aln, side, rdir)
+            assert (pos.min_position, pos.strand, pos.chromosome) == (expect_minpos, expect_strand, expect_chrom)
+        for (start,end) in [(1,5), (1,100), (11,12), (6,44), (1000000001, 9000000000)]:
+            fake_aln_plus  = self.Fake_HTSeq_aln('AA', 'x', pos=('C', '+', start, end))
+            fake_aln_minus = self.Fake_HTSeq_aln('AA', 'x', pos=('C', '-', start, end))
+            tuple_plus = ('C', start+1, end, '+')
+            tuple_minus = ('C', start+1, end, '-')
+            for input_plus in (fake_aln_plus, tuple_plus):
+                _check_outputs(input_plus, '5prime', 'inward',  end,   '+', 'C')
+                _check_outputs(input_plus, '5prime', 'outward', start, '-', 'C')
+                _check_outputs(input_plus, '3prime', 'inward' , end,   '-', 'C')
+                _check_outputs(input_plus, '3prime', 'outward', start, '+', 'C')
+            for input_minus in (fake_aln_minus, tuple_minus):
+                _check_outputs(input_minus,'5prime', 'inward',  start, '-', 'C')
+                _check_outputs(input_minus,'5prime', 'outward', end,   '+', 'C')
+                _check_outputs(input_minus,'3prime', 'inward' , start, '+', 'C')
+                _check_outputs(input_minus,'3prime', 'outward', end,   '-', 'C')
 
 
 class Testing_Insertional_mutant(unittest.TestCase):
