@@ -104,17 +104,16 @@ def parse_flanking_region_aln_or_pos(flanking_region_aln_or_pos):
      or an HTSeq alignment object, then if aligned, figure out the tuple and return it, 
       or if unaligned, return SPECIAL_POSITIONS.unaligned or SPECIAL_POSITIONS.multi_aligned depending on optional XM field value.
     """
-    try:                                chrom, start_pos, end_pos, strand = flanking_region_pos
+    try:                                chrom, start_pos, end_pos, strand = flanking_region_aln_or_pos
     except (TypeError, ValueError):     
-        if flanking_region_pos.iv:      chrom, start_pos, end_pos, strand = HTSeq_pos_to_tuple(flanking_region_pos.iv) 
+        if flanking_region_aln_or_pos.iv:      chrom, start_pos, end_pos, strand = HTSeq_pos_to_tuple(flanking_region_aln_or_pos.iv) 
         # if unaligned, figure out if unaligned or multi-aligned, and just return the appropriate special position code
         else:   
-            try:                XM_val = get_HTSeq_optional_field(HTSeq_alignment, 'XM')
-            except KeyError:    return SPECIAL_POSITIONS.unaligned
-            if XM_val > 1:      return SPECIAL_POSITIONS.multi_aligned
-            else:               return SPECIAL_POSITIONS.unaligned
+            try:                    XM_val = get_HTSeq_optional_field(flanking_region_aln_or_pos, 'XM')
+            except KeyError:        return SPECIAL_POSITIONS.unaligned
+            if int(XM_val) > 1:     return SPECIAL_POSITIONS.multi_aligned
+            else:                   return SPECIAL_POSITIONS.unaligned
     return chrom, start_pos, end_pos, strand
-# TODO unit-test!
 
 ###################################### Insertion position functions/classes #####################################
 
@@ -657,7 +656,7 @@ class Insertional_mutant():
             raise MutantError("Don't try to provide a dataset_name on a single mutant (rather than the multi-dataset subclass)!")
         # MAYBE-TODO this could be accomplished with a decorator instead, right?
 
-    def add_read(self, HTSeq_alignment, position=SPECIAL_GENE_CODES.unknown, read_count=1, dataset_name=None):
+    def add_read(self, HTSeq_alignment, position=SPECIAL_GENE_CODES.not_determined, read_count=1, dataset_name=None):
         """ Add a read to the data (or multiple identical reads, if read_count>1); return True if perfect alignment.
 
         Specifically: increment total_read_count, increment perfect_read_count if read is a perfect 
@@ -679,7 +678,7 @@ class Insertional_mutant():
             pass
         else:
             raise MutantError("Different positions in same mutant! %s and %s, main seq %s"%(self.position, position, 
-                                                                                            self.get_main_sequence())
+                                                                                            self.get_main_sequence()))
         # if it's a new sequence, increment unique_sequence_count; add a count to the sequences_and_counts dictionary.
         seq = HTSeq_alignment.read.seq
         if seq not in self.sequences_and_counts:
@@ -1225,7 +1224,7 @@ class Dataset_summary_data():
         if not cassette_end in SEQ_ENDS+['?']: 
             raise ValueError("The cassette_end variable must be one of %s or '?'!"%SEQ_ENDS)
         if relative_read_direction not in RELATIVE_READ_DIRECTIONS+['?']: 
-            raise ValueError("The relative_read_direction variable must be %s, or '?'!"%(', '.join(RELATIVE_READ_DIRECTIONS))
+            raise ValueError("The relative_read_direction variable must be %s, or '?'!"%(', '.join(RELATIVE_READ_DIRECTIONS)))
         # reference to the containing dataset (for read-counting purposes etc), 
         #  and the dataset name (None if it's a single dataset, string for multi-datasets)
         self.dataset_name = dataset_name
@@ -1714,7 +1713,7 @@ class Insertional_mutant_pool_dataset():
             #  check if seq is already present in mutant, or something?  To save time.
             cassette_side_position = get_insertion_pos_from_flanking_region_pos(aln.iv, self.summary.cassette_end, 
                                                                     self.summary.relative_read_direction, immutable_position=True)
-            mutant.add_read(cassette_side_aln, cassette_side_position, read_count=1, dataset_name=None))
+            mutant.add_read(cassette_side_aln, cassette_side_position, read_count=1, dataset_name=None)
             # Parse the genome-side alignment result to figure out position; add that to the mutant
             genome_side_position = get_RISCC_pos_from_read_pos(genome_side_aln.iv, 
                                                                self.summary.cassette_end, self.summary.relative_read_direction)
@@ -2953,8 +2952,8 @@ def read_mutant_file(infile):
 class Testing_position_functionality(unittest.TestCase):
     """ Unit-tests for position-related classes and functions. """
 
-    from deepseq_utilities import Fake_deepseq_objects
     Fake_HTSeq_genomic_pos = Fake_deepseq_objects.Fake_HTSeq_genomic_pos
+    Fake_HTSeq_aln = Fake_deepseq_objects.Fake_HTSeq_alignment
 
     def test__Insertion_position(self):
         # different ways of making the same position or approximately same position, 
@@ -3081,8 +3080,24 @@ class Testing_position_functionality(unittest.TestCase):
             for (start,end) in [(0,5), (0,100), (10,12), (5,44)]:
                 assert HTSeq_pos_to_tuple(self.Fake_HTSeq_genomic_pos('C', strand, start, end)) == ('C', start+1, end, strand)
 
+    def test__parse_flanking_region_aln_or_pos(self):
+        # very basic test with an HTSeq alignment - test__HTSeq_pos_to_tuple tests more details of this
+        pos = parse_flanking_region_aln_or_pos(self.Fake_HTSeq_aln('AAA', 'name', unaligned=False, pos=('chr1','+',0,5)))
+        assert pos == ('chr1', 1, 5, '+') == HTSeq_pos_to_tuple(self.Fake_HTSeq_genomic_pos('chr1','+',0,5))
+        # check straight position tuples
+        assert parse_flanking_region_aln_or_pos(('chr1','+',1,5)) == ('chr1','+',1,5)
+        # check unaligned and multi-aligned positions
+        fake_aln_unaligned_1     = self.Fake_HTSeq_aln('AAA', 'name', unaligned=True, optional_field_data={'XM':1})
+        fake_aln_unaligned_2     = self.Fake_HTSeq_aln('AAA', 'name', unaligned=True, optional_field_data={})
+        fake_aln_multi_aligned_1 = self.Fake_HTSeq_aln('AAA', 'name', unaligned=True, optional_field_data={'XM':2})
+        fake_aln_multi_aligned_2 = self.Fake_HTSeq_aln('AAA', 'name', unaligned=True, optional_field_data={'XM':20})
+        print parse_flanking_region_aln_or_pos(fake_aln_unaligned_1)
+        assert parse_flanking_region_aln_or_pos(fake_aln_unaligned_1) == SPECIAL_POSITIONS.unaligned
+        assert parse_flanking_region_aln_or_pos(fake_aln_unaligned_2) == SPECIAL_POSITIONS.unaligned
+        assert parse_flanking_region_aln_or_pos(fake_aln_multi_aligned_1) == SPECIAL_POSITIONS.multi_aligned
+        assert parse_flanking_region_aln_or_pos(fake_aln_multi_aligned_2) == SPECIAL_POSITIONS.multi_aligned
 
-    def test__get_insertion_pos_from_flanking_region_pos(self):
+    def _test__get_insertion_pos_from_flanking_region_pos(self):
         # should raise exception for invalid argument (valid arguments: HTSeq position object or (chrom,start,end,strand) tuple
         #  (strand must be +/-, and start can't be after end)
         for bad_flanking_region in [None, '', 'aaa', 0, 1, 0.65, [], {}, True, False, ('C',2,3,4),('C',2,3,'x'),('C',3,2,'-')]:
@@ -3136,7 +3151,7 @@ class Testing_position_functionality(unittest.TestCase):
 class Testing_Insertional_mutant(unittest.TestCase):
     """ Unit-tests for the Insertional_mutant class and its methods. """
 
-    def test__init(self):
+    def _test__init(self):
         for chromosome in ['chr1', 'chromosome_2', 'chrom3', 'a', 'adfads', '100', 'scaffold_88']:
             for strand in ['+','-']:
                 for position in [1,2,5,100,10000,4323423]:
@@ -3173,7 +3188,7 @@ class Testing_Insertional_mutant(unittest.TestCase):
                     assert all([x.unique_sequence_count == 0 for x in mutant_multi_dataset.by_dataset.values()])
                     assert all([x.sequences_and_counts == {} for x in mutant_multi_dataset.by_dataset.values()])
 
-    def test__add_read(self):
+    def _test__add_read(self):
         # using fake HTSeq alignment class from deepseq_utilities; defining one perfect and one imperfect alignment
         # note: the detailed mutation-counting methods are imported from deepseq_utilities and unit-tested there.
         from deepseq_utilities import Fake_deepseq_objects
@@ -3218,7 +3233,7 @@ class Testing_Insertional_mutant(unittest.TestCase):
         # it should be impossible to add a read to a multi-dataset mutant without giving a dataset_name
         self.assertRaises(MutantError, mutant.add_read, perfect_aln, read_count=3)
 
-    def test__update_gene_info(self):
+    def _test__update_gene_info(self):
         mutant = Insertional_mutant(Insertion_position('chr','+',position_before=3))
         assert mutant.gene == SPECIAL_GENE_CODES.not_determined
         assert mutant.orientation == mutant.gene_feature == '?'
@@ -3247,7 +3262,7 @@ class Testing_Insertional_mutant(unittest.TestCase):
         self.assertRaises(MutantError, mutant.update_gene_info, 'gene1', '+', 'g')
 
 
-    def test__merge_mutant(self):
+    def _test__merge_mutant(self):
         mutant1 = Insertional_mutant(Insertion_position('chr','+',position_before=3))
         mutant1.add_counts(2,2,1)
         mutant1.add_sequence_and_counts('AAA',2)
@@ -3275,7 +3290,7 @@ class Testing_Insertional_mutant(unittest.TestCase):
         mutant1.merge_mutant(mutant2, check_gene_data=False)
         # mutant-merging for multi-dataset mutants currently NOT IMPLEMENTED
 
-    def test__add_counts(self):
+    def _test__add_counts(self):
         mutant = Insertional_mutant(Insertion_position('chr','+',position_before=3))
         mutant.add_counts(0,0,0)
         assert mutant.total_read_count == 0
@@ -3326,7 +3341,7 @@ class Testing_Insertional_mutant(unittest.TestCase):
         self.assertRaises(MutantError, multi_mutant.add_counts, 1,1,1)
         self.assertRaises(MutantError, mutant.add_counts, 1,1,1, dataset_name='d1')
 
-    def test__add_sequence_and_counts(self):
+    def _test__add_sequence_and_counts(self):
         mutant = Insertional_mutant(Insertion_position('chr','+',position_before=3))
         # adding sequence/count to mutant.sequences_and_counts, WITHOUT touching mutant.unique_sequence_count
         mutant.add_sequence_and_counts('AAA',2,add_to_uniqseqcount=False)
@@ -3358,7 +3373,7 @@ class Testing_Insertional_mutant(unittest.TestCase):
         self.assertRaises(MutantError, multi_mutant.add_sequence_and_counts, 'GGG',1)
         self.assertRaises(MutantError, mutant.add_sequence_and_counts, 'GGG',1, dataset_name='d1')
 
-    def test__get_main_sequence(self):
+    def _test__get_main_sequence(self):
         # single-dataset mutant
         mutant = Insertional_mutant(Insertion_position('chr','+',position_before=3))
         assert mutant.get_main_sequence() == ('',0)
@@ -3391,7 +3406,7 @@ class Testing_Insertional_mutant(unittest.TestCase):
         assert mutant.get_main_sequence(1, dataset_name='d2') == ('TTT',3)
         assert mutant.get_main_sequence(1) == ('GGG',4)     # GGG is the most common sequence if we add both datasets
 
-    def test__add_other_mutant_as_dataset(self):
+    def _test__add_other_mutant_as_dataset(self):
         mutant1 = Insertional_mutant(Insertion_position('chr','+',position_before=3))
         mutant1.add_counts(2,1,1)
         mutant1.add_sequence_and_counts('AAA',2)
@@ -3427,7 +3442,7 @@ class Testing_Insertional_mutant(unittest.TestCase):
         mutantM.add_other_mutant_as_dataset(mutant4, 'd4', check_constant_data=False)
         mutantM.add_other_mutant_as_dataset(mutant5, 'd5', check_constant_data=False)
 
-    def test__give_single_dataset_mutant(self):
+    def _test__give_single_dataset_mutant(self):
         mutant = Insertional_mutant_multi_dataset(Insertion_position('chr','+',position_before=3))
         mutant.add_counts(2,1,1, dataset_name='d1')
         mutant.add_sequence_and_counts('AAA',2, dataset_name='d1')
@@ -3460,7 +3475,7 @@ class Testing_Insertional_mutant(unittest.TestCase):
         mutant1 = Insertional_mutant_multi_dataset(Insertion_position('chr','+',position_before=3))
         self.assertRaises(MutantError, mutant1.give_single_dataset_mutant, 'd2')
 
-    def test__give_all_single_dataset_mutants(self):
+    def _test__give_all_single_dataset_mutants(self):
         mutant = Insertional_mutant_multi_dataset(Insertion_position('chr','+',position_before=3))
         mutant.add_counts(2,1,1, dataset_name='d1')
         mutant.add_sequence_and_counts('AAA',2, dataset_name='d1')
@@ -3524,7 +3539,7 @@ class Testing_Insertional_mutant_pool_dataset(unittest.TestCase):
             dataset.add_mutant(mutant)
         return dataset
 
-    def test__init(self):
+    def _test__init(self):
         for cassette_end in SEQ_ENDS+['?']:
             for reads_are_reverse in [True,False,'?']:
                 data = Insertional_mutant_pool_dataset(cassette_end=cassette_end, reads_are_reverse=reads_are_reverse)
@@ -3548,12 +3563,12 @@ class Testing_Insertional_mutant_pool_dataset(unittest.TestCase):
 
     # LATER-TODO add unit-test for add_discarded_reads, find_genes_for_mutants, most_common_mutants, 
 
-    def test__add_RISCC_alignment_files_to_data(self):
+    def _test__add_RISCC_alignment_files_to_data(self):
         pass
         # MAYBE-TODO implement using a mock-up of HTSeq_alignment?  (see Testing_single_functions for how I did that)
         #   make sure it fails if self.cassette_end isn't defined...
 
-    def test__merge_other_dataset(self):
+    def _test__merge_other_dataset(self):
         ### testing that the various overall information gets merged correctly
         dataset = Insertional_mutant_pool_dataset()
         other_dataset = Insertional_mutant_pool_dataset()
@@ -3678,7 +3693,7 @@ class Testing_Insertional_mutant_pool_dataset(unittest.TestCase):
         self.assertRaises(MutantError, other_dataset.merge_other_dataset, dataset)
         # MAYBE-TODO add more detailed checks to see if the mutant sequences are merged correctly etc?  Or should that just be done in the mutant.merge_mutant unit-test?  It looks good enough.
 
-    def test__remove_mutants_below_readcount(self):
+    def _test__remove_mutants_below_readcount(self):
         positions_and_readcounts_raw = "A+100 5/5, A-200 2/2, A+300 1/1, A-400 5/2, A+500 5/1"
         dataset = self._make_test_mutant_dataset(positions_and_readcounts_raw, raw_chrom_names=True)
         assert set([m.position.min_position for m in dataset]) == set([100,200,300,400,500])
@@ -3691,7 +3706,7 @@ class Testing_Insertional_mutant_pool_dataset(unittest.TestCase):
         dataset.remove_mutants_below_readcount(4, perfect_reads=True)
         assert set([m.position.min_position for m in dataset]) == set([100])
 
-    def test___readcounts_sorted(self):
+    def _test___readcounts_sorted(self):
         # if the two values are readcounts
         dataset = Insertional_mutant_pool_dataset()
         assert dataset._readcounts_sorted(1,1) == (1,1)
@@ -3714,7 +3729,7 @@ class Testing_Insertional_mutant_pool_dataset(unittest.TestCase):
         dataset._readcounts_sorted(pos2, pos2) == (2,2)
         assert dataset._readcounts_sorted(pos1, pos2) == dataset._readcounts_sorted(pos2, pos1) == (2,1)
 
-    def test___readcount_ratio(self):
+    def _test___readcount_ratio(self):
         # if the two values are readcounts
         dataset = Insertional_mutant_pool_dataset()
         assert dataset._readcount_ratio(1,1) == 1
@@ -3735,7 +3750,7 @@ class Testing_Insertional_mutant_pool_dataset(unittest.TestCase):
         assert dataset._readcount_ratio(pos1, pos1) == dataset._readcount_ratio(pos2, pos2) == 1
         assert dataset._readcount_ratio(pos1, pos2) == dataset._readcount_ratio(pos2, pos1) == 2
 
-    def test__merge_adjacent_mutants(self):
+    def _test__merge_adjacent_mutants(self):
         ### basic tests
         # making a dataset with several different same-strand adjacent pairs (alternating strand between pairs):
         #   1*100 - dist 1 ratio 5
@@ -3952,7 +3967,7 @@ class Testing_Insertional_mutant_pool_dataset(unittest.TestCase):
                 self.assertRaises(MutantError, dataset.merge_adjacent_mutants, OUTPUT=None, 
                                  merge_cassette_chromosomes=cassette1, merge_other_chromosomes=other1)
 
-    def test__merge_opposite_tandem_mutants(self):
+    def _test__merge_opposite_tandem_mutants(self):
         ### setup
         # four same-position opposite-strand cases, with ratios 5, 2, 1, 1 (5:1, 5:5, 4:2, 1:1)
         positions_and_readcounts_raw = "A+100 5, A-100 1, A+200 5, A-200 5, A+300 4, A-300 2, A+400 1, A-400 1"
@@ -4100,7 +4115,7 @@ class Testing_Insertional_mutant_pool_dataset(unittest.TestCase):
                                   max_count_ratio=None, OUTPUT=None, 
                                   merge_cassette_chromosomes=cassette1, merge_other_chromosomes=other1)
 
-    def test__count_adjacent_mutants(self):
+    def _test__count_adjacent_mutants(self):
         positions_and_readcounts_raw = '+100 10, -100 5, +101 5, -99 5, -101 5, +105 1'
         # so we have 6*5/2 = 15 pairs
         #  (remember, for 5' cases, + before - is away-facing, - before + is toward-facing
@@ -4257,7 +4272,7 @@ class Testing_Insertional_mutant_pool_dataset(unittest.TestCase):
         assert mutant.orientation == 'sense'
         assert mutant.gene_feature == "5'UTR"
 
-    def test__read_data_from_file(self):
+    def _test__read_data_from_file(self):
         """ uses _check_infile1 and _check_infile2 functions for detail. """
         ## 1. input file with no gene information but more variation in other features
         input_file = 'test_data/count-aln__cassette-end-5prime.txt'
@@ -4281,7 +4296,7 @@ class Testing_Insertional_mutant_pool_dataset(unittest.TestCase):
         data.read_data_from_file(input_file, assume_new_sequences=True)
         assert mutant.unique_sequence_count == 2
 
-    def test__pickle_unpickle(self):
+    def _test__pickle_unpickle(self):
         """ uses _check_infile1 and _check_infile2 functions for detail. """
         import pickle, os
         picklefile = 'test.pickle'
@@ -4307,7 +4322,7 @@ class Testing_Insertional_mutant_pool_dataset(unittest.TestCase):
 class Testing_RISCC(unittest.TestCase):
     """ Unit-tests for position-related classes and functions. """
 
-    def test__get_RISCC_pos_from_read_pos(self):
+    def _test__get_RISCC_pos_from_read_pos(self):
         pos_tuple = ('C', 3, 7, '+')
         # note: For RISCC cassette-side reads, 5' data has 5prime and reads_are_reverse=True, 3' data has 3prime and reads_are_reverse=False.  NOT DEALING WITH other cases - they should raise an error!
         self.assertRaises(MutantError, get_RISCC_pos_from_read_pos, pos_tuple, '5prime', reads_are_reverse=False)
@@ -4332,7 +4347,7 @@ class Testing_RISCC(unittest.TestCase):
         """ Convenience function to make the args to Fake_HTSeq_genomic_pos from an Insertion_position """
         return pos.chromosome, pos.strand, pos.min_position, pos.min_position+20
 
-    def test__add_RISCC_read(self):
+    def _test__add_RISCC_read(self):
         """ Also tests RISCC_max_confirmed_distance """
         # make the cassette-side read
         Fake_HTSeq_alignment = Fake_deepseq_objects.Fake_HTSeq_alignment
@@ -4367,7 +4382,7 @@ class Testing_RISCC(unittest.TestCase):
         assert mutant.RISCC_max_confirmed_distance(100) == 100
         assert mutant.RISCC_max_confirmed_distance(10) == 0
 
-    def test__improve_best_RISCC_read(self):
+    def _test__improve_best_RISCC_read(self):
         """ Also tests RISCC_max_confirmed_distance """
         Fake_HTSeq_alignment = Fake_deepseq_objects.Fake_HTSeq_alignment
         # make the cassette-side read
