@@ -3306,8 +3306,8 @@ class Testing_Insertional_mutant(unittest.TestCase):
                 self.assertRaises(MutantError, mutant.add_read, perfect_aln, position4)
                 mutant.add_read(perfect_aln, position2)
 
-    def _test__add_counts(self):
-        mutant = Insertional_mutant(Insertion_position('chr','+',position_before=3))
+    def test__add_counts(self):
+        mutant = Insertional_mutant(insertion_position=Insertion_position('chr','+',position_before=3))
         mutant.add_counts(0,0,0)
         assert mutant.total_read_count == 0
         assert mutant.perfect_read_count == 0
@@ -3322,7 +3322,7 @@ class Testing_Insertional_mutant(unittest.TestCase):
         assert mutant.sequences_and_counts == {}
         # how mutant.unique_sequence_count changes depends on assume_new_sequences:
         #  - if False, mutant.unique_sequence_count is max(new_seq_count, mutant.unique_sequence_count)
-        mutant = Insertional_mutant(Insertion_position('chr','+',position_before=3))
+        mutant = Insertional_mutant(insertion_position=Insertion_position('chr','+',position_before=3))
         mutant.add_counts(0,0,0,assume_new_sequences=False)
         assert mutant.unique_sequence_count == 0
         mutant.add_counts(1,1,1,assume_new_sequences=False)
@@ -3334,7 +3334,7 @@ class Testing_Insertional_mutant(unittest.TestCase):
         mutant.add_counts(2,2,2,assume_new_sequences=False)
         assert mutant.unique_sequence_count == 2
         #  - if True and mutant.unique_sequence_count is new_seq_count + mutant.unique_sequence_count
-        mutant = Insertional_mutant(Insertion_position('chr','+',position_before=3))
+        mutant = Insertional_mutant(insertion_position=Insertion_position('chr','+',position_before=3))
         mutant.add_counts(0,0,0,assume_new_sequences=True)
         assert mutant.unique_sequence_count == 0
         mutant.add_counts(1,1,1,assume_new_sequences=True)
@@ -3348,7 +3348,7 @@ class Testing_Insertional_mutant(unittest.TestCase):
         mutant.add_counts(2,2,2,assume_new_sequences=False)
         assert mutant.unique_sequence_count == 6
         ### works for multi-dataset mutants (not looking at too much detail - should work the same as for single)
-        multi_mutant = Insertional_mutant_multi_dataset(Insertion_position('chr','+',position_before=3))
+        multi_mutant = Insertional_mutant_multi_dataset(insertion_position=Insertion_position('chr','+',position_before=3))
         multi_mutant.add_counts(2,2,1, dataset_name='d')
         assert multi_mutant.by_dataset['d'].total_read_count == 2
         assert multi_mutant.by_dataset['d'].perfect_read_count == 2
@@ -3357,8 +3357,8 @@ class Testing_Insertional_mutant(unittest.TestCase):
         self.assertRaises(MutantError, multi_mutant.add_counts, 1,1,1)
         self.assertRaises(MutantError, mutant.add_counts, 1,1,1, dataset_name='d1')
 
-    def _test__add_sequence_and_counts(self):
-        mutant = Insertional_mutant(Insertion_position('chr','+',position_before=3))
+    def test__add_sequence_and_counts(self):
+        mutant = Insertional_mutant(insertion_position=Insertion_position('chr','+',position_before=3))
         # adding sequence/count to mutant.sequences_and_counts, WITHOUT touching mutant.unique_sequence_count
         mutant.add_sequence_and_counts('AAA',2,add_to_uniqseqcount=False)
         assert mutant.sequences_and_counts == {'AAA':2}
@@ -3381,7 +3381,7 @@ class Testing_Insertional_mutant(unittest.TestCase):
         for not_a_number in [None,'','a','GGG']:
             self.assertRaises(TypeError,mutant.add_sequence_and_counts,'CCC',not_a_number)
         ### works for multi-dataset mutants (not looking at too much detail - should work the same as for single)
-        multi_mutant = Insertional_mutant_multi_dataset(Insertion_position('chr','+',position_before=3))
+        multi_mutant = Insertional_mutant_multi_dataset(insertion_position=Insertion_position('chr','+',position_before=3))
         assert multi_mutant.by_dataset['d'].sequences_and_counts == {}
         multi_mutant.add_sequence_and_counts('GGG',2, dataset_name='d')
         assert multi_mutant.by_dataset['d'].sequences_and_counts == {'GGG':2}
@@ -3390,7 +3390,7 @@ class Testing_Insertional_mutant(unittest.TestCase):
         self.assertRaises(MutantError, mutant.add_sequence_and_counts, 'GGG',1, dataset_name='d1')
 
     def _test__update_gene_info(self):
-        mutant = Insertional_mutant(Insertion_position('chr','+',position_before=3))
+        mutant = Insertional_mutant(insertion_position=Insertion_position('chr','+',position_before=3))
         assert mutant.gene == SPECIAL_GENE_CODES.not_determined
         assert mutant.orientation == mutant.gene_feature == '?'
         # updating no-info mutant with no info - no change
@@ -3419,7 +3419,7 @@ class Testing_Insertional_mutant(unittest.TestCase):
 
     def _test__get_main_sequence(self):
         # single-dataset mutant
-        mutant = Insertional_mutant(Insertion_position('chr','+',position_before=3))
+        mutant = Insertional_mutant(insertion_position=Insertion_position('chr','+',position_before=3))
         assert mutant.get_main_sequence() == ('',0)
         assert mutant.get_main_sequence(1) == ('',0)
         assert mutant.get_main_sequence(4) == ('',0)
@@ -3441,7 +3441,7 @@ class Testing_Insertional_mutant(unittest.TestCase):
         assert mutant.get_main_sequence(4) == ('',0)
         assert mutant.get_main_sequence(5) == ('',0)
         # multi-dataset mutant - getting the top sequence from single dataset or from all datasets added together
-        mutant = Insertional_mutant_multi_dataset(Insertion_position('chr','+',position_before=3))
+        mutant = Insertional_mutant_multi_dataset(insertion_position=Insertion_position('chr','+',position_before=3))
         mutant.add_sequence_and_counts('AAA',3, dataset_name='d1')
         mutant.add_sequence_and_counts('GGG',2, dataset_name='d1')
         mutant.add_sequence_and_counts('TTT',3, dataset_name='d2')
@@ -3462,7 +3462,7 @@ class Testing_Insertional_mutant(unittest.TestCase):
         # make the cassette-side read
         pos0 = Insertion_position('chr1','+',position_before=100)
         aln0 = Fake_HTSeq_aln(seq='AAA', readname='read1', pos=self._make_pos(pos0))
-        mutant = Insertional_mutant(pos0)
+        mutant = Insertional_mutant(insertion_position=pos0)
         assert mutant.total_read_count == 0
         assert isnan(mutant.RISCC_max_confirmed_distance(10))
         mutant.add_read(aln0)
@@ -3496,7 +3496,7 @@ class Testing_Insertional_mutant(unittest.TestCase):
         # make the cassette-side read
         pos0 = Insertion_position('chr1','+',position_before=100)
         aln0 = Fake_HTSeq_aln(seq='AAA', readname='read1', pos=self._make_pos(pos0))
-        mutant = Insertional_mutant(pos0)
+        mutant = Insertional_mutant(insertion_position=pos0)
         assert mutant.position.min_position == 100
         assert mutant.total_read_count == 0
         assert isnan(mutant.RISCC_max_confirmed_distance(1000))
@@ -3537,7 +3537,7 @@ class Testing_Insertional_mutant(unittest.TestCase):
         assert mutant.RISCC_genome_side_reads[0].position.min_position == 70
         assert mutant.RISCC_max_confirmed_distance(1000) == 30
         # add good read first, then worse ones, make sure it's NOT replaced (remember to start with new mutant!)
-        mutant = Insertional_mutant(pos0)
+        mutant = Insertional_mutant(insertion_position=pos0)
         mutant.add_read(aln0)
         mutant.improve_best_RISCC_read(pos5, HTSeq_alignment=aln5, max_distance=50)
         assert len(mutant.RISCC_genome_side_reads) == 1
@@ -3562,7 +3562,7 @@ class Testing_Insertional_mutant(unittest.TestCase):
         # make sure wrong-strand closer-distance new read won't replace old right-strand one! (this was a bug once)
         pos0 = Insertion_position('chr1','+',position_before=100)
         aln0 = Fake_HTSeq_aln(seq='AAA', readname='read1', pos=self._make_pos(pos0))
-        mutant = Insertional_mutant(pos0)
+        mutant = Insertional_mutant(insertion_position=pos0)
         mutant.add_read(aln0)
         pos5 = Insertion_position('chr1','+',position_before=70)
         aln5 = Fake_HTSeq_aln(seq='AAA', readname='read1', pos=self._make_pos(pos5))
@@ -3616,7 +3616,7 @@ class Testing_Insertional_mutant(unittest.TestCase):
         mutantM.add_other_mutant_as_dataset(mutant5, 'd5', check_constant_data=False)
 
     def _test__give_single_dataset_mutant(self):
-        mutant = Insertional_mutant_multi_dataset(Insertion_position('chr','+',position_before=3))
+        mutant = Insertional_mutant_multi_dataset(insertion_position=Insertion_position('chr','+',position_before=3))
         mutant.add_counts(2,1,1, dataset_name='d1')
         mutant.add_sequence_and_counts('AAA',2, dataset_name='d1')
         mutant.add_counts(1,0,1, dataset_name='d2')
@@ -3649,7 +3649,7 @@ class Testing_Insertional_mutant(unittest.TestCase):
         self.assertRaises(MutantError, mutant1.give_single_dataset_mutant, 'd2')
 
     def _test__give_all_single_dataset_mutants(self):
-        mutant = Insertional_mutant_multi_dataset(Insertion_position('chr','+',position_before=3))
+        mutant = Insertional_mutant_multi_dataset(insertion_position=Insertion_position('chr','+',position_before=3))
         mutant.add_counts(2,1,1, dataset_name='d1')
         mutant.add_sequence_and_counts('AAA',2, dataset_name='d1')
         mutant.add_counts(1,0,1, dataset_name='d2')
