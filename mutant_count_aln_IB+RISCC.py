@@ -55,7 +55,7 @@ def define_option_parser():
                       help="Are the cassette-side reads oriented inward or outward to the cassette? (default %default).")
 
     ### Functionality options
-    parser.add_option('-X, --best_genome_side_only', action="store_true", default=False,
+    parser.add_option('-X', '--best_genome_side_only', action="store_true", default=False,
                       help="Instead of storing all genome-side reads per mutant, only store the 'best' one (uniquely aligned, "
                           +"to the same general location as cassette-side but with the maximal distance from it) "
                           +"and the overall counts of genome-side read categories, to save memory. (Default %default).")
@@ -177,7 +177,7 @@ def main(outfile, options):
 
     ### output data to files
     save_dataset_files(all_alignment_data, outfile, options.verbosity_level, True, True, True, 
-                         True, options.sort_data_key, options)
+                       True, options.sort_data_key, options)
     # TODO write some info about all the other files that go with this one (pickle, merging-info, *cassette*)
 
 
@@ -195,7 +195,6 @@ def do_test_run():
     aln_infile0 = "test_data/INPUT_alignment0_old-format.sam"
     aln_infile1 = "test_data/INPUT_alignment1_genomic-unique.sam"
     aln_infile2 = "test_data/INPUT_alignment2_for-genes.sam"
-    aln_infile3 = "test_data/INPUT_alignment3_for-merging.sam"
     gff_genefile = "test_data/INPUT_gene-data-1_all-cases.gff3"
     dataset_to_remove = "test_data/INPUT_mutants_to_remove.txt"
 
@@ -203,21 +202,14 @@ def do_test_run():
                  ('cassette-end-5prime', "-e 5prime -r forward -n3 -L", [aln_infile1]),
                  ('cassette-end-3prime', "-e 3prime -r forward -n3 -L", [aln_infile1]),
                  ('read-direction-reverse', "-r reverse -e 5prime -n3 -L", [aln_infile1]),
-                 ('dont-count-cassette', "-l -e 5prime -r forward -n3 -L", [aln_infile1]),
-                 ('ignore-cassette', "-c -e 5prime -r forward -n3 -L", [aln_infile1]),
-                 ('separate-cassette', "-C -e 5prime -r forward -n3 -L", [aln_infile1]),
                  ('sorted-by-count', "-o read_count -e 5prime -r forward -n3 -L", [aln_infile1]),
                  ('with-gene-info_merged', "-e 5prime -r forward -g %s -n0"%gff_genefile, [aln_infile2]),
-                 ('with-gene-info_unmerged', "-B -e 5prime -r forward -g %s -n0"%gff_genefile, [aln_infile2]),
-                 ('multiple-infiles', "-e 5prime -r forward -n0 -L", [aln_infile1,aln_infile2]),
-                 ('dont-merge-tandems', "-n0", [aln_infile3]),
                  ('remove-from-other-all', "-x %s -n0"%dataset_to_remove, [aln_infile2]), 
                  ('remove-from-other-min4', "-x %s -z4 -n0"%dataset_to_remove, [aln_infile2]), 
                  ('remove-from-other-perfect', "-x %s -p -z4 -n0"%dataset_to_remove, [aln_infile2]),
                  ('remove-not-other-all', "-X %s -n0"%dataset_to_remove, [aln_infile2]), 
                  ('remove-not-other-min4', "-X %s -Z4 -n0"%dataset_to_remove, [aln_infile2]), 
                  ('remove-not-other-perfect', "-X %s -P -Z4 -n0"%dataset_to_remove, [aln_infile2]),
-                 ('old-infile-format', "-e 5prime -r forward -n3 -L", [aln_infile0]),
                 ]
     # TODO remove the mutation-detection lines from aln_infile1 and from all the outfiles, since that's been simplified?
     # TODO add run-test for removing data from multiple files?
