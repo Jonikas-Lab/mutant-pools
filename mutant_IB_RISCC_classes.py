@@ -608,7 +608,6 @@ class Insertional_mutant():
        - RISCC_genome_side_reads - contains "genome-side" reads (not immediately next to the cassette)
                                     that help determine the real insertion position (vs. junk fragments inserted with cassette).
                                  It's a dictionary - seq:(position, read_count, N_errors, gene, orientation, feature, annotation...)
-       - original_strand_readcounts - strand:count dict for when two opposite-strand mutants were merged into one
 
     This class also has subclasses for mutant types with additional functionality or purposefully limited functionality.
 
@@ -648,10 +647,6 @@ class Insertional_mutant():
         self.unique_sequence_count = 0
         self.sequences_and_counts  = defaultdict(int)
         self.RISCC_genome_side_reads = {}
-        # MAYBE-TODO remove this?  It's for mutant-merging, which we don't currently do, 
-        #  and when we do end up doing it, we'll care about counts from both ENDS, no matter if they're different strands or same.
-        #  But we'll also care about the strands for the purpose of counting total +/- strand reads, I suppose?
-        self.original_strand_readcounts = {}
 
     def read_info(self, dataset_name=None, strict=False):
         """ Help function to get read-info-containing object for both multi-dataset and single mutants.
@@ -762,13 +757,13 @@ class Insertional_mutant():
         feature_both = set([self.gene_feature, gene_feature]) - set(['?'])
         # if there are two different non-special values for any of the three attributes, raise MutantError
         if len(gene_both)>1 or len(orientation_both)>1 or len(feature_both)>1:
-            raise MutantError("Can't merge the two mutants: the gene/orientation/feature data differs!")
+            raise MutantError("Can't join the two mutants: the gene/orientation/feature data differs!")
         # otherwise set own data to the better one of own/new data (unless neither are present)
         if gene_both:           self.gene = gene_both.pop()
         if orientation_both:    self.orientation = orientation_both.pop()
         if feature_both:        self.gene_feature = feature_both.pop()
 
-    # MAYBE-TODO implement mutant-merging?  If yes, copy merge_mutant method from mutant_analysis_classes.py and edit.
+    # MAYBE-TODO implement mutant-merging?  If yes, copy join_mutant method from mutant_analysis_classes.py and edit.
     #  If we merge mutants that correspond to two sides of one insertion, they'll have to have multiple IBs! 
     #   5'+3', or 5'+5' or 3'+3' in cases with tandem tail-to-tail or head-to-head cassettes, and maybe even more complicated...
 
@@ -807,11 +802,6 @@ class Insertional_mutant():
         self.unique_sequence_count = source_mutant.unique_sequence_count
         # using dict to make a COPY of the dict instead of just creating another name for the same value
         self.sequences_and_counts  = dict(source_mutant.sequences_and_counts)
-        # the try/except is for dealing with merging older datasets that didn't have self.original_strand_readcounts
-        try:
-            self.original_strand_readcounts  = dict(source_mutant.original_strand_readcounts)
-        except AttributeError:
-            self.original_strand_readcounts = {}
 
     # MAYBE-TODO should there be a copy_mutant function to make a deepcopy?
 
@@ -1079,10 +1069,6 @@ class Insertional_mutant_readcount_only(Insertional_mutant):
         raise MutantError("It makes no sense to run _set_general_attributes on readcount-related-only mutant object"
                           +" - it has no non-readcount-related info!")
 
-    def merge_mutant(self, *args, **kwargs):
-        raise MutantError("merge_mutant NOT IMPLEMENTED on readcount-related-only mutant object!")
-        # MAYBE-TODO implement merging for multi-dataset mutants?  Seems like unnecessary complication for now.
-
     def _copy_non_readcount_data(self, source_mutant):
         raise MutantError("It makes no sense to run _copy_non_readcount_data on readcount-related-only mutant object"
                           +" - it has no non-readcount-related info!")
@@ -1149,10 +1135,6 @@ class Insertional_mutant_multi_dataset(Insertional_mutant):
         Insertional_mutant.add_read(readcount_data_container, HTSeq_alignment, SPECIAL_POSITIONS.unknown, 
                                     read_count, check_position=False)
     
-    def merge_mutant(self, *args, **kwargs):
-        raise MutantError("merge_mutant NOT IMPLEMENTED on multi-dataset mutant object!")
-        # MAYBE-TODO implement merging for multi-dataset mutants?  Seems like unnecessary complication for now.
-
     def add_counts(self, total_count, perfect_count, sequence_variant_count, assume_new_sequences=False, dataset_name=None):
         """ Add counts to given dataset (see docstring for Insertional_mutant version) - dataset_name is required. """
         readcount_data_container = self._check_dataset_name_return_data(dataset_name)
@@ -1264,29 +1246,11 @@ class Dataset_summary_data():
         self.discarded_other_end = 0
         self.non_aligned_read_count, self.unaligned, self.multiple_aligned = 0, None, None
         self.ignored_region_read_counts = defaultdict(int)
-        # mutant merging information
-        self.blank_adjacent_mutant_info()
         # MAYBE-TODO should cassette_end and relative_read_direction be specified for the whole dataset, or just for each set of data added, in add_RISCC_alignment_files_to_data? The only real issue with this would be that then I wouldn't be able to print this information in the summary - or I'd have to keep track of what the value was for each alignment reader added and print that in the summary if it's a single value, or 'varied' if it's different values. Might also want to keep track of how many alignment readers were involved, and print THAT in the summary!  Or even print each (infile_name, cassette_end, relative_read_direction) tuple as a separate line in the header.
         self.cassette_end = cassette_end
         self.relative_read_direction = relative_read_direction
 
     # TODO unit-test all the methods below!
-
-    def blank_adjacent_mutant_info(self):
-        # general adjacent counting/merging settings
-        self.adjacent_max_distance = None
-        self.merging_which_chromosomes = (None, None)
-        # info on merged mutants
-        self.merged_adjacent_same_strand_dict = defaultdict(int)
-        self.merged_adjacent_same_strand_readcounts_dict = defaultdict(list)
-        self.merged_opposite_tandems = 0
-        self.merged_opposite_tandems_readcounts = []
-        # info on unmerged close-by mutants
-        # MAYBE-TODO should the adjacent-mutant-counts (same_position_opposite, adjacent_opposite_toward, adjacent_opposite_away, adjacent_same_strand) be constants or property values?  May want to keep them as constants, they're expensive to calculate...
-        self.same_position_opposite = NaN
-        self.adjacent_opposite_toward_dict = defaultdict(nan_func)
-        self.adjacent_opposite_away_dict = defaultdict(nan_func)
-        self.adjacent_same_strand_dict = defaultdict(nan_func)
 
     def add_discarded_reads(self, N_all_discarded, N_wrong_start, N_no_cassette, N_other_end, replace=False):
         """ Add not-None arg values to appropriate self.discarded_* attributes (or replace them). 
@@ -1392,15 +1356,7 @@ class Dataset_summary_data():
     def strand_read_counts(self):
         strand_dict = {'+': 0, '-': 0}
         for m in self.dataset:
-            try:
-                strand_dict[m.position.strand] += m.read_info(self.dataset_name).total_read_count
-            except KeyError:
-                # special case for both-strand mutants - they have a original_strand_readcounts attribute
-                if m.position.strand == 'both':
-                    for strand,count in m.read_info(self.dataset_name).original_strand_readcounts.items():
-                        strand_dict[strand] += count
-                else:
-                    raise MutantError("Unknown strand %s! %s"%m.position.strand)
+            strand_dict[m.position.strand] += m.read_info(self.dataset_name).total_read_count
         return strand_dict
 
     def reads_in_chromosome(self, chromosome):
@@ -1492,44 +1448,6 @@ class Dataset_summary_data():
         highest_readcount_mutants = [mutant for mutant in self.dataset 
                                      if mutant.read_info(self.dataset_name).total_read_count==highest_readcount]
         return highest_readcount_mutants
-
-    @property
-    def adjacent_opposite_toward(self):
-        max_distance = self.adjacent_max_distance or 1
-        return sum([self.adjacent_opposite_toward_dict[i] for i in range(1, max_distance+1)])
-    @property
-    def adjacent_opposite_away(self):
-        max_distance = self.adjacent_max_distance or 1
-        return sum([self.adjacent_opposite_away_dict[i] for i in range(1, max_distance+1)])
-    @property
-    def adjacent_same_strand(self):
-        max_distance = self.adjacent_max_distance or 1
-        return sum([self.adjacent_same_strand_dict[i] for i in range(1, max_distance+1)])
-    @property
-    def merged_adjacent_pairs(self):
-        return sum(self.merged_adjacent_same_strand_dict.values())
-
-    def adjacent_mutant_summary(self, long_version=False, add_total_counts=True, max_distance=None):
-        """ Return string giving adjacent-mutant counts by category. """
-        # To be able to use the adjacent_same_strand etc properties with custom max_distance, 
-        #  set self.adjacent_max_distance to the custom value temporarily, then reset afterward
-        if max_distance is not None:
-            orig_max_distance = self.adjacent_max_distance
-            self.adjacent_max_distance = max_distance
-        if long_version:
-            string = "Adjacent mutant counts (max distance %s): %s adjacent same-strand pairs, %s same-position opposite-strand pairs, %s adjacent opposite-strand away-facing pairs (may be tandems with a deletion), %s adjacent opposite-strand toward-facing pairs (definitely two separate mutants)."
-            if add_total_counts:
-                string = "Dataset has %s mutants (with %s total reads). "%(len(self.dataset), 
-                                                                           self.aligned_read_count) + string
-        else:
-            string = "(max dist %s) %s adjacent same-strand pairs, %s opposite-tandem, %s adjacent-opposite away-facing, %s toward-facing"
-            if add_total_counts:
-                string = "%s mutants (%s reads); "%(len(self.dataset), self.aligned_read_count) + string
-        string = string%(self.adjacent_max_distance, self.adjacent_same_strand, 
-                       self.same_position_opposite, self.adjacent_opposite_away, self.adjacent_opposite_toward)
-        if max_distance is not None:
-            self.adjacent_max_distance = orig_max_distance 
-        return string
 
     @property
     def all_genes_in_dataset(self):
@@ -1786,7 +1704,7 @@ class Insertional_mutant_pool_dataset():
 
     ######### MULTI-DATASET METHODS
 
-    def _set_merged_genome_info(self, gene_annotation_header_values, total_genes_in_genome_values):
+    def _set_joint_genome_info(self, gene_annotation_header_values, total_genes_in_genome_values):
         """ Set self.gene_annotation_header and self.total_genes_in_genome based on inputs. 
 
         Set to blank if all inputs are blank; otherwise to the single unique non-blank value on the list; 
@@ -1823,7 +1741,7 @@ class Insertional_mutant_pool_dataset():
             summary_copy.dataset_name = dataset_name
             self.summary[dataset_name] = summary_copy
 
-            # Merge source dataset mutant data into own multi-dataset mutants
+            # Join source dataset mutant data into own multi-dataset mutants
             #  (get_mutant will create new empty mutant if one doesn't exist)
             for mutant in dataset_object:
                 # TODO should a both-strand mutant and a + or -strand mutant at the same position be considered the same mutant during joining datasets??  Currently they're not, and this can give pretty odd results!  Make it an option?  Make it depend on readcounts?  I'm not really sure...  (Also see "TODO how should mutant lookup by position deal with both-strand mutants?")
@@ -1832,12 +1750,12 @@ class Insertional_mutant_pool_dataset():
                                                         check_constant_data=check_gene_data)
             # MAYBE-TODO add option to only include mutants with non-zero reads (total or perfect) in all datasets?  Or should that only happen during printing?  Or do we even care?  If I ever want to do that, there was code for it in the old version of mutant_join_datasets.py (before 2012-04-26)
 
-        # Merge any pieces of global information that's not per-dataset
+        # Join any pieces of global information that's not per-dataset
         #  using getattr instead of just d.total_genes_in_genome because some older datasets don't HAVE the total_genes_in_genome
         #   attribute, and getattr lets me give a default of 0 when the attribute is missing 
-        #   (and 0 is used as blank_value in the merge_values_to_unique call in self._set_merged_genome_info).
-        self._set_merged_genome_info([d.gene_annotation_header for d in source_dataset_dict.values()], 
-                                     [getattr(d,'total_genes_in_genome',0) for d in source_dataset_dict.values()])
+        #   (and 0 is used as blank_value in the merge_values_to_unique call in self._set_joint_genome_info).
+        self._set_joint_genome_info([d.gene_annotation_header for d in source_dataset_dict.values()], 
+                                    [getattr(d,'total_genes_in_genome',0) for d in source_dataset_dict.values()])
         # This has no unit-tests, but has a run-test in mutant_join_datasets.py
 
     def mutants_in_dataset(self, dataset_name=None):
@@ -1877,60 +1795,7 @@ class Insertional_mutant_pool_dataset():
 
     ######### PROCESSING/MODIFYING DATASET
 
-    def merge_other_dataset(self, other_dataset):
-        """ Move all mutants from other_dataset to self (merge with existing same-position mutants if present).
-
-        Currently NOT IMPLEMENTED if either dataset contains both-stranded mutants (merged opposite-tandems). 
-        Only merges mutants with identical positions - 100-?, ?-101 and 100-101 are all considered distinct.
-        Mutants are removed from other_dataset.
-        """
-
-        ### Merge basic data from summary
-        # set name to None, as the safest option - only multi-datasets have names anyway, I think
-        self.summary.dataset_name = None
-        # for read/direction, keep the old value if old/new match, otherwise change to '?'
-        if self.summary.cassette_end != other_dataset.summary.cassette_end:             
-            self.summary.cassette_end = '?'
-        if self.summary.relative_read_direction != other_dataset.summary.relative_read_direction:   
-            self.summary.relative_read_direction = '?'
-        # MAYBE-TODO if merging a 3' and 5' dataset, maybe should use 'both' or something instead of '?' ?
-
-        ### Merge extra readcount data, i.e. discarded/unaligned/removed/etc read counts from summary
-        # using getattr because some older datasets don't have that, should be 0 by default
-        other_discarded_other_end = getattr(other_dataset.summary,'discarded_other_end',0)
-        self.summary.add_discarded_reads(other_dataset.summary.discarded_read_count, other_dataset.summary.discarded_wrong_start, 
-                             other_dataset.summary.discarded_no_cassette, other_discarded_other_end, replace=False)
-        self.summary.add_nonaligned_reads(other_dataset.summary.non_aligned_read_count, other_dataset.summary.unaligned, 
-                                          other_dataset.summary.multiple_aligned, replace=False)
-        self.summary.ignored_region_read_counts = add_dicts_of_ints(self.summary.ignored_region_read_counts, 
-                                                                    other_dataset.summary.ignored_region_read_counts)
-
-        ### Deal with the merging info from the summary:
-        # Throw an exception if attempting to merge two datasets mutant-merging has been done on - mutant-merging really 
-        #  should be done AFTER all the dataset merging, otherwise it may turn out inconsistent
-        if self.summary.merged_opposite_tandems or sum(self.summary.merged_adjacent_same_strand_dict.values())\
-           or other_dataset.summary.merged_opposite_tandems or sum(other_dataset.summary.merged_adjacent_same_strand_dict.values()):
-            raise MutantError("Cannot merge together two datasets that had mutant-merging done - the results may be inconsistent!")
-        # Blank the adjacent-counts to force a counting re-run; the merged counts should still be blank, we just checked that.
-        self.summary.blank_adjacent_mutant_info()
-        
-        ### Merge non-mutant info from the dataset itself, non-summary (gene annotation header and total genes in genome)
-        # (see comments on self._set_merged_genome_info in populate_multi_dataset for explanation of the getattr)
-        self._set_merged_genome_info([d.gene_annotation_header for d in (self, other_dataset)], 
-                                     [getattr(d,'total_genes_in_genome',0) for d in (self, other_dataset)])
-
-        ### Merge the mutants
-        if any([m.position.strand=='both' for m in self]):
-            raise MutantError("Cannot run merge_other_dataset into a dataset with both-stranded mutants!")
-        if any([m.position.strand=='both' for m in other_dataset]):
-            raise MutantError("Cannot run merge_other_dataset from a dataset with both-stranded mutants!")
-        for other_mutant in list(other_dataset):
-            this_mutant = self.get_mutant(other_mutant.position)
-            this_mutant.merge_mutant(other_mutant)
-            other_dataset.remove_mutant(other_mutant)
-        assert len(other_dataset) == other_dataset.summary.aligned_read_count == 0
-
-        # LATER-TODO what to do with cases where one dataset has a both-strand mutant and the other has a +strand or -strand one?  Should probably merge them, or if not, give an error (make that an option?).  And what about mutants with similar positions, like ?-101 and 100-? and 100-101?  (This would be relevant when merging 5' and 3' sets, for instance).  See half-implemented get_matching_position_mutants method.
+    # MAYBE-TODO add function to join two datasets together, merge mutant seqs/counts etc?
 
     def remove_mutants_in_other_dataset(self, other_dataset, readcount_min=1, perfect_reads=False):
         """ Remove any mutants with at least readcount_min reads in other_dataset (or perfect reads, if perfect_reads=True)
@@ -2232,18 +2097,6 @@ class Insertional_mutant_pool_dataset():
                     lambda summ: "(%s)"%summ.adjacent_max_distance ))
         DVG.append((line_prefix+" (if we're including mutants in cassette and in non-nuclear chromosomes):", 
                     lambda summ: "(%s, %s)"%summ.merging_which_chromosomes )) 
-        DVG.append((line_prefix+"merged same-strand adjacent mutant pairs and opposite-strand tandem pairs:", 
-                    lambda summ: "%s, %s"%(summ.merged_adjacent_pairs, summ.merged_opposite_tandems) ))
-        DVG.append((line_prefix+"remaining same-position opposite-strand pairs (if not merged as tandems):", 
-                    lambda summ: "%s"%summ.same_position_opposite )) 
-        DVG.append((line_prefix+'remaining adjacent opposite-strand "toward-facing" pairs (those are definitely real):', 
-                    lambda summ: "%s"%summ.adjacent_opposite_toward )) 
-        DVG.append((line_prefix+'remaining adjacent opposite-strand "away-facing" pairs (% of toward-facing):', 
-                    lambda summ: value_and_percentages(summ.adjacent_opposite_away, 
-                                                       [summ.adjacent_opposite_toward], percentage_format_str='%.0f') )) 
-        DVG.append((line_prefix+'remaining adjacent same-strand unmerged pairs (% of 2*toward-facing):', 
-                    lambda summ: value_and_percentages(summ.adjacent_same_strand, 
-                                                       [2*summ.adjacent_opposite_toward], percentage_format_str='%.0f') )) 
 
         DVG.append((header_prefix+"Distinct mutants (read groups) by cassette insertion position:", 
                     lambda summ: "%s"%summ.N_mutants ))
@@ -3158,7 +3011,7 @@ class Testing_Insertional_mutant_pool_dataset(unittest.TestCase):
         dataset = Insertional_mutant_pool_dataset()
         if not positions_and_readcounts_string: 
             return dataset
-        for string in positions_and_readcounts_string.split(', '):
+        for N, string in enumerate(positions_and_readcounts_string.split(', ')):
             raw_pos, readcount = string.split(' ')
             if '/' in readcount:    readcount, perfect = [int(x) for x in readcount.split('/')]
             else:                   readcount = perfect = int(readcount)
@@ -3174,7 +3027,7 @@ class Testing_Insertional_mutant_pool_dataset(unittest.TestCase):
             elif not chrom:
                 raise Exception("Short-position %s has no chromosome name - can't use with raw_chrom_names!")
             full_pos = Insertion_position(chrom, strand, position_before=pos, immutable=True)
-            mutant = Insertional_mutant(insertion_position=full_pos)
+            mutant = Insertional_mutant(IB=str(N), insertion_position=full_pos)
             mutant.total_read_count = readcount
             mutant.perfect_read_count = perfect
             dataset.add_mutant(mutant)
@@ -3208,131 +3061,6 @@ class Testing_Insertional_mutant_pool_dataset(unittest.TestCase):
         pass
         # MAYBE-TODO implement using a mock-up of HTSeq_alignment?  (see Testing_single_functions for how I did that)
         #   make sure it fails if self.cassette_end isn't defined...
-
-    def _test__merge_other_dataset(self):
-        ### testing that the various overall information gets merged correctly
-        dataset = Insertional_mutant_pool_dataset()
-        other_dataset = Insertional_mutant_pool_dataset()
-        for name1,name2 in [('TEST1', 'TEST2'), ('TEST', 'TEST'), ('TEST', None), (None, 'TEST'), (None, None)]: 
-            dataset.summary.dataset_name = name1
-            other_dataset.summary.dataset_name = name2
-            dataset.merge_other_dataset(other_dataset)
-            assert dataset.summary.dataset_name is None
-        for end_info in ['3prime 3prime 3prime', '5prime 5prime 5prime', '3prime 5prime ?', '3prime ? ?', '5prime ? ?', '? ? ?']:
-            end_a, end_b, end_both = end_info.split()
-            for end1,end2 in [(end_a,end_b),(end_b,end_a)]:
-                dataset.summary.cassette_end = end1
-                other_dataset.summary.cassette_end = end2
-                dataset.merge_other_dataset(other_dataset)
-                assert dataset.summary.cassette_end == end_both
-        for reverse_a,reverse_b,reverse_both in [(True,True,True),(False,False,False), (True,False,'?'), 
-                                                 (True,'?','?'), (False,'?','?'), ('?','?','?')]:
-            for reverse1,reverse2 in [(reverse_a,reverse_b),(reverse_b,reverse_a)]:
-                dataset.summary.relative_read_direction = reverse1
-                other_dataset.summary.relative_read_direction = reverse2
-                dataset.merge_other_dataset(other_dataset)
-                assert dataset.summary.relative_read_direction == reverse_both
-        ### testing that the extra readcount information gets merged correctly
-        # if both datasets have numbers, they get added together
-        dataset.summary.add_discarded_reads(60, 30, 20, 10, replace=True)
-        other_dataset.summary.add_discarded_reads(6, 3, 2, 1, replace=True)
-        dataset.summary.add_nonaligned_reads(30, 20, 10, replace=True)
-        other_dataset.summary.add_nonaligned_reads(3, 2, 1, replace=True)
-        dataset.summary.ignored_region_read_counts = {'test1':10, 'test2':20}
-        other_dataset.summary.ignored_region_read_counts = {'test1':1, 'test3':3}
-        dataset.merge_other_dataset(other_dataset)
-        assert (dataset.summary.discarded_read_count, dataset.summary.discarded_wrong_start, 
-                dataset.summary.discarded_no_cassette, dataset.summary.discarded_other_end) == (66, 33, 22, 11)
-        assert (dataset.summary.non_aligned_read_count, dataset.summary.unaligned, 
-                dataset.summary.multiple_aligned) == (33, 22, 11)
-        assert dataset.summary.ignored_region_read_counts == {'test1':11, 'test2':20, 'test3':3}
-        # if one dataset has numbers and the other has unknowns, the result should be unknowns either way, 
-        #  except summary.ignored_region_read_counts, which should still just get added)
-        for version in (1,2):
-            dataset.summary.add_discarded_reads(60, 30, 20, 10, replace=True)
-            other_dataset.summary.add_discarded_reads(None, None, None, None, replace=True)
-            dataset.summary.add_nonaligned_reads(30, 20, 10, replace=True)
-            other_dataset.summary.add_nonaligned_reads(None, None, None, replace=True)
-            dataset.summary.ignored_region_read_counts = {'test1':10, 'test2':20}
-            other_dataset.summary.ignored_region_read_counts = {}
-            if version==1:
-                dataset.merge_other_dataset(other_dataset)
-            else:
-                other_dataset.merge_other_dataset(dataset)
-                dataset = other_dataset
-            assert (dataset.summary.discarded_read_count, dataset.summary.discarded_wrong_start, 
-                    dataset.summary.discarded_no_cassette, dataset.summary.discarded_other_end) == ('unknown',) * 4
-            assert (dataset.summary.non_aligned_read_count, dataset.summary.unaligned, 
-                    dataset.summary.multiple_aligned) == ('unknown', 'unknown', 'unknown')
-            assert dataset.summary.ignored_region_read_counts == {'test1':10, 'test2':20}
-        ### testing that the mutant merging/counting gets dealt with correctly
-        # checking that all that data is made blank, if it's non-blank in either dataset
-        # these involve no merging
-        positions_and_readcounts_raw_1 = "A+100 1, B-201 1, C-300 1, E+500 1, D-400 1"
-        positions_and_readcounts_raw_2 = "A+100 1, A-101 1, A+301 1, A-300 1, A-400 1"
-        positions_and_readcounts_raw_3 = ""
-        all_raws = [positions_and_readcounts_raw_1, positions_and_readcounts_raw_2, positions_and_readcounts_raw_3]
-        for positions_and_readcounts_raw_a,positions_and_readcounts_raw_b in itertools.product(all_raws, all_raws):
-            # do merging-and-counting for one or both datasets
-            for merge_1,merge_2 in [(True,True), (True,False), (False,True)]:
-                dataset = self._make_test_mutant_dataset(positions_and_readcounts_raw_a)
-                other_dataset = self._make_test_mutant_dataset(positions_and_readcounts_raw_b)
-                if merge_1:
-                    dataset.merge_adjacent_mutants(OUTPUT=None)
-                    dataset.merge_opposite_tandem_mutants(OUTPUT=None)
-                    dataset.count_adjacent_mutants()
-                if merge_2:
-                    other_dataset.merge_adjacent_mutants(OUTPUT=None)
-                    other_dataset.merge_opposite_tandem_mutants(OUTPUT=None)
-                    other_dataset.count_adjacent_mutants()
-                dataset.merge_other_dataset(other_dataset)
-                assert dataset.summary.adjacent_max_distance == None
-                assert dataset.summary.merging_which_chromosomes == (None, None)
-                assert dataset.summary.merged_adjacent_same_strand_dict == defaultdict(int)
-                assert dataset.summary.merged_adjacent_same_strand_readcounts_dict == defaultdict(list)
-                assert dataset.summary.merged_opposite_tandems == 0
-                assert dataset.summary.merged_opposite_tandems_readcounts == []
-                assert isnan(dataset.summary.same_position_opposite)
-                assert dataset.summary.adjacent_opposite_toward_dict == defaultdict(nan_func)
-                assert dataset.summary.adjacent_opposite_away_dict == defaultdict(nan_func)
-                assert dataset.summary.adjacent_same_strand_dict == defaultdict(nan_func)
-        # checking that an exception is raised if either dataset had mutant-merging done
-        # 1 and 2 have merging, 3 doesn't
-        positions_and_readcounts_raw_1 = "A+100 5, A+101 5, B+100 5, B-100 5, C+100 5, C-101 1, D-100 1, D+101 1"
-        positions_and_readcounts_raw_2 = "A+100 1, A-100 1, A+301 1, A-300 1, A-400 1"
-        positions_and_readcounts_raw_3 = "A+100 1, A-101 1, A+301 1, A-300 1, A-400 1"
-        all_raws = [positions_and_readcounts_raw_1, positions_and_readcounts_raw_2, positions_and_readcounts_raw_3]
-        for positions_and_readcounts_raw_a,positions_and_readcounts_raw_b in itertools.permutations(all_raws, 2):
-            # do merging-and-counting for one or both datasets
-                dataset = self._make_test_mutant_dataset(positions_and_readcounts_raw_a)
-                other_dataset = self._make_test_mutant_dataset(positions_and_readcounts_raw_b)
-                dataset.merge_adjacent_mutants(leave_N_mutants=0, OUTPUT=None)
-                dataset.merge_opposite_tandem_mutants(leave_N_mutants=0, OUTPUT=None)
-                other_dataset.merge_adjacent_mutants(leave_N_mutants=0, OUTPUT=None)
-                other_dataset.merge_opposite_tandem_mutants(leave_N_mutants=0, OUTPUT=None)
-                self.assertRaises(MutantError, dataset.merge_other_dataset, other_dataset)
-        ### basic test that the correct mutants are being merged:  merge identical positions (first pair), 
-        #  but not one-off positions, opposite strands, different positions or different chromosomes (remaining pairs)
-        positions_and_readcounts_raw_1 = "A+100 5, B-200 5, C+300 5, D+500 5, E-400 5"
-        positions_and_readcounts_raw_2 = "A+100 1, B-201 1, C-300 1, E+500 1, D-400 1"
-        chromosomes = set([s[0] for s in positions_and_readcounts_raw_1.split(', ')+positions_and_readcounts_raw_2.split(', ')])
-        dataset = self._make_test_mutant_dataset(positions_and_readcounts_raw_1, raw_chrom_names=True)
-        other_dataset = self._make_test_mutant_dataset(positions_and_readcounts_raw_2, raw_chrom_names=True)
-        for chrom in chromosomes: 
-            assert dataset.summary.mutants_in_chromosome(chrom) == other_dataset.summary.mutants_in_chromosome(chrom) == 1
-            assert (dataset.summary.reads_in_chromosome(chrom), other_dataset.summary.reads_in_chromosome(chrom)) == (5, 1)
-        dataset.merge_other_dataset(other_dataset)
-        for chrom,N_mutants in zip(chromosomes,(1,2,2,2,2)):
-            assert (dataset.summary.mutants_in_chromosome(chrom),other_dataset.summary.mutants_in_chromosome(chrom)) == (N_mutants,0)
-            assert (dataset.summary.reads_in_chromosome(chrom), other_dataset.summary.reads_in_chromosome(chrom)) == (6, 0)
-        ### checking that an exception is raised if attempting to merge a both-strand mutant (in either dataset)
-        mutant_both = Insertional_mutant(Insertion_position('A','both',position_before=100, immutable=True))
-        mutant_both.add_counts(2,2,1)
-        mutant_both.add_sequence_and_counts('AAA',2)
-        other_dataset.add_mutant(mutant_both)
-        self.assertRaises(MutantError, dataset.merge_other_dataset, other_dataset)
-        self.assertRaises(MutantError, other_dataset.merge_other_dataset, dataset)
-        # MAYBE-TODO add more detailed checks to see if the mutant sequences are merged correctly etc?  Or should that just be done in the mutant.merge_mutant unit-test?  It looks good enough.
 
     def _test__remove_mutants_below_readcount(self):
         positions_and_readcounts_raw = "A+100 5/5, A-200 2/2, A+300 1/1, A-400 5/2, A+500 5/1"
