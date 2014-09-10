@@ -958,41 +958,6 @@ class Insertional_mutant():
             else:                                           total_distinct_positions_genome += len(distinct_positions)
         return total_distinct_positions_genome, total_distinct_positions_cassette
 
-    def RISCC_confirmation_status(self, side=None, max_distance=MAX_POSITION_DISTANCE, min_weird_distance=20):
-        """ Return status based on comparison of cassette-side and genome-side reads.
-
-        Also checks whether results make sense given which side of the cassette we're looking at, if provided
-        """
-        # TODO TODO TODO this is silly!  Instead of always assuming WRONG_POSITION, categorize based on max-conf-dist and %-wrong.
-        # TODO better docstring, unit-tests!
-        if not self.total_read_count:
-            return 'NOT_FOUND'
-        elif not self.RISCC_N_genomic_reads + self.RISCC_N_cassette_reads:
-            return 'NO_ALIGNED_READS'
-        # We take "sum(mutant.RISCC_N_distinct_positions(max_allowed_distance)) > 1" to check for EITHER genomic OR cassette positions - TODO rewrite that method to be more obvious?
-        elif sum(self.RISCC_N_distinct_positions(max_distance)) > 1:
-            return 'WRONG_POSITION'
-        else:
-            distances = []
-            for RISCC_read_data in self.RISCC_genome_side_reads.values():
-                try:                    distances.append(RISCC_read_data[0].min_position - self.position.min_position)
-                except AttributeError:  pass
-            # check to make sure the position of the genomic-side reads MAKES SENSE vs the cassette-side 
-            #  (is at least M earlier for +strand 5' and -strand 3', and M later for the other two cases)
-            # TODO really, min_weird_distance default should probably depend on the read length...?
-            if (((self.position.strand=='+' and side=="5'") or (self.position.strand=='-' and side=="3'")) 
-                and max(distances) > -min_weird_distance):
-                print ("WEIRD case: a genome-side RISCC read starts only %sbp from the insertion site! %s")%(-max(distances), 
-                                                                                                             self.position)
-                return 'WEIRD'
-            elif (((self.position.strand=='-' and side=="5'") or (self.position.strand=='+' and side=="3'")) 
-                  and min(distances) < min_weird_distance):
-                print ("WEIRD case: a genome-side RISCC read starts only %sbp from the insertion site! %s")%(min(distances), 
-                                                                                                             self.position)
-                return 'WEIRD'
-            else:
-                return 'CONFIRMED'
-
     def RISCC_max_confirmed_distance(self, max_distance=MAX_POSITION_DISTANCE):
         """ Return the distance between the cassette-side read and the furthest-away same-area genome-side read.
 
@@ -1146,6 +1111,14 @@ class Insertional_mutant_multi_dataset(Insertional_mutant):
         readcount_data_container = self._check_dataset_name_return_data(dataset_name)
         Insertional_mutant.add_sequence_and_counts(readcount_data_container, seq, seq_count, add_to_uniqseqcount, dataset_name=None)
     
+    @property
+    def total_read_count(self):
+        return sum(m.total_read_count for m in self.by_dataset.values())
+
+    @property
+    def perfect_read_count(self):
+        return sum(m.perfect_read_count for m in self.by_dataset.values())
+
     def get_main_sequence(self, N=1, dataset_name=None):
         """ Return the most common sequence in this mutant and its count (or Nth most common sequence if N is provided).
 
@@ -2165,51 +2138,35 @@ class Insertional_mutant_pool_dataset():
                 OUTPUT.write('\t' + line_value_getter(summ))
             OUTPUT.write('\n')
 
-    def _sort_data(self, sort_data_by=None):
+    def _sort_data(self, sort_data_by='position'):
         """ Sort the mutants by position or readcount, or leave unsorted. """
         all_mutants = iter(self)
         if sort_data_by=='position':
             sorted_data = sorted(all_mutants, key = lambda m: m.position)
             # x.position here is an Insertion_position object and has a sensible cmp function
+            # TODO do unaligned/multi-aligned/unknown positions sort sensibly here?
         elif sort_data_by=='read_count':
             if self.multi_dataset:  
                 raise MutantError("Sorting by readcount in print_data not implemented for multi-datasets!")
             sorted_data = sorted(all_mutants, key = lambda m: (m.total_read_count,m.perfect_read_count,m.position), reverse=True)
         else:
-            sorted_data = all_mutants
+            raise MutantError("Can't sort mutants by %s - only position or readcount are implemented!"%sort_data_by)
         return sorted_data
 
-    def print_data(self, OUTPUT=sys.stdout, sort_data_by=None, N_sequences=None, header_line=True, header_prefix="# "):
+    def print_data(self, OUTPUT=sys.stdout, sort_data_by=None, header_line=True, header_prefix="# "):
         """ Print full data, one line per mutant: position data, gene info, read counts, RISCC status/info.
         (see the file header line for exactly what all the output fields are).
-
-        For a normal dataset, print position/RISCC/gene info (10 fields), total_reads, perfect_reads, N_sequence_variants, 
-         the N_sequences most common sequences and counts (alternating, taking 2*N_sequences fields), 
-         and gene annotation if it exists (arbitrary number of tab-separated fields).
-
-        For a multi-dataset, print position/RISCC/gene info (10 fields), the main sequence (taken over all the datasets),
-         then reads_in_<x> and perfect_in_<x> for each dataset (total and perfect reads - total 2*N_datasets fields), 
-         then gene annotation if it exists.
 
         Data is printed to OUTPUT, which should be an open file object (stdout by default).
          Output is tab-separated, with optional header starting with "# ".  
         """
-        # TODO add IB!
-        if self.multi_dataset and N_sequences is not None and N_sequences!=1:
-            raise MutantError("Only one sequence can currently be printed in print_data for multi-datasets!")
-        if N_sequences is None and not self.multi_dataset:     N_sequences = 2
-
         ### print the header line (different for normal and multi-datasets)
+        # TODO should separate the number of RISCC reads and IB-only reads, really...
         if header_line:
-            header = ['chromosome','strand','min_position','full_position', 
-                      'RISCC-conf-dist', 'RISCC-N-conf-reads', 'RISCC-N-wrong-reads',
-                      'gene','orientation','feature']
-            if not self.multi_dataset:
-                header += ['total_reads','perfect_reads', 'N_sequence_variants']
-                for N in range(1,N_sequences+1):    
-                    header += ['read_sequence_%s'%N, 'seq_%s_count'%N]
-            else:
-                header += ['main_sequence']
+            header = ['chromosome', 'strand', 'min_position', 'full_position', 'total_reads', 'perfect_reads',
+                      'confirmed-dist', 'N-genome-side-conf-reads', 'N-genome-side-nonconf-reads',
+                      'gene', 'orientation', 'feature', 'IB_seq', 'main_cassette_side_seq']
+            if self.multi_dataset:
                 for dataset_name in self.dataset_order:
                     header += ['reads_in_%s'%dataset_name, 'perfect_in_%s'%dataset_name]
             header += self.gene_annotation_header
@@ -2226,17 +2183,12 @@ class Insertional_mutant_pool_dataset():
         for mutant in sorted_mutants:
             mutant_data = [mutant.position.chromosome, mutant.position.strand, 
                            mutant.position.min_position, mutant.position.full_position]
+            mutant_data += [mutant.total_read_count, mutant.perfect_read_count]
             mutant_data += [mutant.RISCC_max_confirmed_distance(), 
                             mutant.RISCC_N_confirming_reads(), mutant.RISCC_N_non_confirming_reads()]
             mutant_data += [mutant.gene, mutant.orientation, mutant.gene_feature] 
-            if not self.multi_dataset:
-                mutant_data += [mutant.total_read_count, mutant.perfect_read_count, mutant.unique_sequence_count]
-                for N in range(1,N_sequences+1):
-                    mutant_data += list(mutant.get_main_sequence(N))
-                    # MAYBE-TODO also give the length and number of mutations for each sequence? Optionally?  
-                    #   Length is easy, but do I even keep track of mutation number?  I probably should...
-            else:
-                mutant_data += [mutant.get_main_sequence(1)[0]]
+            mutant_data += [mutant_IB, mutant.get_main_sequence()[0]]
+            if self.multi_dataset:
                 for dataset_name in self.dataset_order:
                     mutant_data += [mutant.by_dataset[dataset_name].total_read_count, 
                                     mutant.by_dataset[dataset_name].perfect_read_count]

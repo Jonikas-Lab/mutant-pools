@@ -104,9 +104,9 @@ def define_option_parser():
     return parser
 
 # TODO merge this with a similar code bit in mutant_join_datasets.py to minimize code duplication
-def save_dataset_files(dataset, outfile, verbosity_level=0, if_pickle=True, count_cassette=True, count_other=True, 
-                       sort_data_by='position', options="N/A"):
-    """ Print summary and data to output file; optionally print summary to stdout; optionally pickle dataset to picklefile. 
+def save_dataset_files(dataset, outfile, verbosity_level=0, print_genome_side_details=True, 
+                       count_cassette=True, count_other=True, sort_data_by='position', options="N/A"):
+    """ Print data to file, plus summary, pickle, and optionally detail files; optionally print summary to stdout.
     
     The options argument is only used to be printed in the header to make it clear how the file was generated - 
      it should be the applicable optparse options object if there is one, or a text message otherwise.
@@ -116,19 +116,23 @@ def save_dataset_files(dataset, outfile, verbosity_level=0, if_pickle=True, coun
     if verbosity_level>0: dataset.print_summary(count_cassette=count_cassette, count_other=count_other)
     # print full data to outfile
     if verbosity_level>1: print "printing output - time %s."%time.ctime()
-    with open(outfile,'w') as OUTFILE:
-        write_header_data(OUTFILE,options)
+    outfile_basename = os.path.splitext(outfile)[0]
+    summary_outfile = outfile_basename + '_summary.txt'
+    pickled_outfile = outfile_basename + '.pickle'
+    detail_outfile = outfile_basename + '_detail.txt'
+    with open(summary_outfile,'w') as OUTFILE:
+        write_header_data(OUTFILE,options)      # writes timestamp, generating program/options, folder and computer name, etc
         OUTFILE.write("### SUMMARY:\n")
-        dataset.print_summary(OUTFILE, line_prefix="#  ", header_prefix="## ", 
-                              count_cassette = count_cassette, count_other=count_other)
-        OUTFILE.write("### HEADER AND DATA:\n")
-        dataset.print_data(OUTPUT=OUTFILE, sort_data_by=sort_data_by, header_line=True, header_prefix='# ')
-    # print pickled dataset to picklefile, if desired
-    if if_pickle:
-        outfile_basename = os.path.splitext(outfile)[0]
-        pickled_outfile = outfile_basename + '.pickle'
-        with open(pickled_outfile,'w') as PICKLEFILE:
-            pickle.dump(dataset, PICKLEFILE, 0)
+        dataset.print_summary(OUTFILE, count_cassette=count_cassette, count_other=count_other)
+        OUTFILE.write("# Basic mutant data in %s (or pickled in %s); detailed genome-side data in %s.\n"%(outfile, pickled_outfile, 
+                                                                                                          detail_outfile))
+    with open(outfile,'w') as OUTFILE:
+        dataset.print_data(OUTPUT=OUTFILE, sort_data_by=sort_data_by, header_line=True, header_prefix='')
+    with open(pickled_outfile,'w') as PICKLEFILE:
+        pickle.dump(dataset, PICKLEFILE, 0)
+    if print_genome_side_details:
+        with open(detail_outfile,'w') as OUTFILE:
+            dataset.print_detailed_RISCC_data(OUTPUT=OUTFILE, sort_data_by=sort_data_by)
 
 
 def main(outfile, options):
