@@ -21,7 +21,7 @@ from numpy import median, round, isnan
 import HTSeq
 from BCBio import GFF
 # my modules
-from general_utilities import split_into_N_sets_by_counts, add_dicts_of_ints, sort_lists_inside_dict, keybased_defaultdict, value_and_percentages, FAKE_OUTFILE, NaN, nan_func, merge_values_to_unique, unpickle
+from general_utilities import split_into_N_sets_by_counts, add_dicts_of_ints, sort_lists_inside_dict, invert_listdict_nodups, keybased_defaultdict, value_and_percentages, FAKE_OUTFILE, NaN, nan_func, merge_values_to_unique, unpickle
 from basic_seq_utilities import SEQ_ENDS, SEQ_STRANDS, SEQ_DIRECTIONS, SEQ_ORIENTATIONS, parse_fasta, parse_fastq, position_test_contains, position_test_overlap, chromosome_sort_key, get_seq_count_from_collapsed_header
 from deepseq_utilities import check_mutation_count_by_optional_NM_field, get_HTSeq_optional_field, Fake_deepseq_objects
 from parse_annotation_file import parse_gene_annotation_file
@@ -1543,7 +1543,7 @@ class Insertional_mutant_pool_dataset():
 
     ######### READING BASIC DATA INTO DATASET
 
-    @classmethod
+    @staticmethod
     def _next_until_name_match(generator, ref_name):
         """ grab the next alignment object from the generator until the name matches ref_name. """
         curr_name = ''
@@ -1553,23 +1553,23 @@ class Insertional_mutant_pool_dataset():
         return curr_aln
 
     @classmethod
-    def _parse_3files_parallel(file1_fastq, file2_sam, file3_sam):
+    def _parse_3files_parallel(cls, file1_fastq, file2_sam, file3_sam):
         """ Parse fastq+sam+sam files in parallel - generator yielding (name, seq1, aln2, aln3) tuples.
 
         It checks that the read names match (except for the paired-end side or anything else after a space).
         It assumes that file1 is the reference, and the other two files may have some extra names (will be ignored).
         """
         generator1 = parse_fastq(file1_fastq)
-        generator2 = HTSeq.SAM_Reader(file2_sam)
-        generator3 = HTSeq.SAM_Reader(file3_sam)
+        generator2 = iter(HTSeq.SAM_Reader(file2_sam))
+        generator3 = iter(HTSeq.SAM_Reader(file3_sam))
         if_finished_1, if_finished_2, if_finished_3 = False, False, False
         while True:
             try:                    name1, seq1, qual1 = generator1.next()
             except StopIteration:   if_finished_1, name1 = True, 'NOTHING_HERE'
             name1 = name1.split()[0]
-            try:                    aln2 = _next_until_name_match(generator2, name1)
+            try:                    aln2 = cls._next_until_name_match(generator2, name1)
             except StopIteration:   if_finished_2 = True
-            try:                    aln3 = _next_until_name_match(generator3, name1)
+            try:                    aln3 = cls._next_until_name_match(generator3, name1)
             except StopIteration:   if_finished_3 = True
             # if all the files still contained data, yield it
             if not any([if_finished_1, if_finished_2, if_finished_3]):
@@ -1591,8 +1591,8 @@ class Insertional_mutant_pool_dataset():
         """ Add paired-end RISCC reads to dataset mutants, based on IB clustering.
 
         Input files:
-            - IB_cluster_file must be a python pickle file containing a centroid_seq:set_of_IB_seqs dictionary;
-                with the centroids already adjusted as desired.  IB = Internal Barcode.
+            - IB_cluster_file must be a python pickle file (.pickle) or a python code file (.py) containing a 
+                centroid_seq:set_of_IB_seqs dictionary; with the centroids already adjusted as desired.  IB = Internal Barcode.
             - IB_fastq_file should be a fastq file containing the read IDs and sequences of all the clustered IBs.
             - the two aligned files should be SAM files generated from aligning the cassette-side and genome-side
                 paired reads separately against the chlamy genome and insertion cassette sequence, probably using 
@@ -1620,25 +1620,37 @@ class Insertional_mutant_pool_dataset():
                               +"to one of %s first."%RELATIVE_READ_DIRECTIONS)
 
         # read the IB cluster file; make a read_seq:centroid_seq dictionary for fast lookup.
-        IB_centroid_to_seqs = general_utilities.unpickle(IB_cluster_file)
-        IB_seq_to_centroid = general_utilities.invert_listdict_nodups(IB_centroid_to_seqs)
+        if IB_cluster_file.endswith('.pickle'):
+            IB_centroid_to_seqs = general_utilities.unpickle(IB_cluster_file)
+        elif IB_cluster_file.endswith('.py'):
+            # for some reason just doing execfile(IB_cluster_file) doesn't import stuff into local namespace, so using exec instead
+            exec open(IB_cluster_file).read()
+            try:    
+                len(IB_centroid_to_seqs)
+            except NameError:
+                raise MutantError("IB_cluster_file %s didn't define an IB_centroid_to_seqs dictionary!"%IB_cluster_file)
+        else:
+            raise MutantError("Unknown IB_cluster_file format in add_RISCC_alignment_files_to_data - must be .pickle or .py, "
+                              +"filename is %s"%IB_cluster_file)
+        IB_seq_to_centroid = invert_listdict_nodups(IB_centroid_to_seqs)
 
         for (readname, IB_seq, cassette_side_aln, genome_side_aln) in self._parse_3files_parallel(
                                             IB_fastq_file, cassette_side_flank_aligned_file, genome_side_aligned_file):
             try:                IB_centroid_seq = IB_seq_to_centroid[IB_seq]
             except KeyError:    raise MutantError("IB seq %s not found in cluster dict!"%IB_seq)
-            mutant = self.get_mutant[IB_seq]
+            IB_centroid_seq = IB_seq_to_centroid[IB_seq]
+            mutant = self.get_mutant(IB_centroid_seq)
             # get the cassette insertion position (as an Insertion_position object)
             # MAYBE-TODO instead of generating cassette_side_position all the time, even with multiple identical reads, 
             #  check if seq is already present in mutant, or something?  To save time.
-            cassette_side_position = get_insertion_pos_from_flanking_region_pos(aln.iv, self.summary.cassette_end, 
+            cassette_side_position = get_insertion_pos_from_flanking_region_pos(cassette_side_aln, self.summary.cassette_end, 
                                                                     self.summary.relative_read_direction, immutable_position=True)
             mutant.add_read(cassette_side_aln, cassette_side_position, read_count=1, dataset_name=None)
             # Parse the genome-side alignment result to figure out position; add that to the mutant
-            genome_side_position = get_RISCC_pos_from_read_pos(genome_side_aln.iv, 
+            genome_side_position = get_RISCC_pos_from_read_pos(genome_side_aln, 
                                                                self.summary.cassette_end, self.summary.relative_read_direction)
             N_errors = check_mutation_count_by_optional_NM_field(genome_side_aln, negative_if_absent=False)
-            if genome_side_best_only:
+            if best_genome_side_only:
                 mutant.improve_best_RISCC_read(genome_side_aln.read.seq, genome_side_position, N_errors, read_count=1, 
                                                max_distance=MAX_POSITION_DISTANCE)
             else:
@@ -2209,6 +2221,7 @@ class Insertional_mutant_pool_dataset():
 
         # TODO should probably add header
         # TODO add annotation!
+        # TODO change this to be a proper tab-separated file?
 
         ### sort all mutants by position or readcount (for single datasets only for now), or don't sort at all
         sorted_mutants = self._sort_data(sort_data_by)
@@ -3002,6 +3015,20 @@ class Testing_Insertional_mutant_pool_dataset(unittest.TestCase):
             self.assertRaises(ValueError, Insertional_mutant_pool_dataset, cassette_end, '?')
         for relative_read_direction in [True, False, None, 0, 1, 'reverse', 0.11, 23, 'asdfas', '', 'something', [2,1], {}]:
             self.assertRaises(ValueError, Insertional_mutant_pool_dataset, '?', relative_read_direction)
+
+    def test__add_RISCC_alignment_files_to_data(self):
+        dataset = Insertional_mutant_pool_dataset('3prime', 'outward')
+        dataset.add_RISCC_alignment_files_to_data('test_data/INPUT_RISCC1-IB-clusters.py', 'test_data/INPUT_RISCC1-IBs.fq', 
+                                                  'test_data/INPUT_RISCC1-alignment-cassette-side.sam', 
+                                                  'test_data/INPUT_RISCC1-alignment-genome-side.sam')
+        assert len(dataset) == 1
+        mutant = dataset.get_mutant('CCCC')
+        assert mutant.IB == 'CCCC'
+        assert str(mutant.position) == 'cassette_3_confirming + ?-101'
+        assert mutant.total_read_count == mutant.perfect_read_count == 3
+        # TODO add tests!!
+        # TODO add stuff to input files!
+
 
     def test__remove_mutants_below_readcount(self):
         positions_and_readcounts_raw = "A+100 5/5, A-200 2/2, A+300 1/1, A-400 5/2, A+500 5/1"

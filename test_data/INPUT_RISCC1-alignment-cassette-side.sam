@@ -1,0 +1,15 @@
+@@@ simple - three aligned cassette-side reads, with two different confirming genome-side reads
+@ this should be 3' and read outward from a +orientation cassette, so these are +strand
+testA_read1	0	cassette_3_confirming	101	255	4M	*	0	0	AAAA	####	XA:i:0	MD:Z:4	NM:i:0
+testA_read2	0	cassette_3_confirming	101	255	4M	*	0	0	AAAA	####	XA:i:0	MD:Z:4	NM:i:0
+testA_read3	0	cassette_3_confirming	101	255	4M	*	0	0	AAAC	####	XA:i:0	MD:Z:4	NM:i:0
+@
+@@@ three aligned cassette-side reads with SAME confirming genome-side reads, so only one confirming position
+@@@ aligned cassette-side reads with some confirming and some non-confirming genome-side reads
+@@@ aligned cassette-side reads with all non-confirming genome-side reads
+@@@ aligned cassette-side reads with some confirming and some unaligned genome-side reads
+@@@ aligned cassette-side reads with all unaligned or multi-aligned genome-side reads
+@@@ unaligned or multi-aligned cassette-side reads with aligned genome-side reads
+@@@ unaligned or multi-aligned cassette-side reads with unaligned genome-side reads
+@@@ reads that have genome-side but no cassette-side or IB
+@@@ reads that have genome-side and cassette-side but not IB? (if IB was wrong length or something)
