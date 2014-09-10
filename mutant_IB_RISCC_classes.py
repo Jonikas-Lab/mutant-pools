@@ -1745,7 +1745,7 @@ class Insertional_mutant_pool_dataset():
             #  (get_mutant will create new empty mutant if one doesn't exist)
             for mutant in dataset_object:
                 # TODO should a both-strand mutant and a + or -strand mutant at the same position be considered the same mutant during joining datasets??  Currently they're not, and this can give pretty odd results!  Make it an option?  Make it depend on readcounts?  I'm not really sure...  (Also see "TODO how should mutant lookup by position deal with both-strand mutants?")
-                curr_mutant = self.get_mutant(mutant.position)
+                curr_mutant = self.get_mutant(mutant.IB)
                 curr_mutant.add_other_mutant_as_dataset(mutant, dataset_name, overwrite=overwrite, 
                                                         check_constant_data=check_gene_data)
             # MAYBE-TODO add option to only include mutants with non-zero reads (total or perfect) in all datasets?  Or should that only happen during printing?  Or do we even care?  If I ever want to do that, there was code for it in the old version of mutant_join_datasets.py (before 2012-04-26)
@@ -1808,8 +1808,8 @@ class Insertional_mutant_pool_dataset():
         # go over all mutants in self; need to convert the iterator to a list to make a separate copy, 
         #  otherwise we'd be modifying the iterator while iterating through it, which isn't allowed.
         for mutant in list(self):
-            if get_readcount(other_dataset.get_mutant(mutant.position)) >= readcount_min:
-                self.remove_mutant(mutant.position)
+            if get_readcount(other_dataset.get_mutant(mutant.IB)) >= readcount_min:
+                self.remove_mutant(mutant.IB)
         # TODO really I shouldn't be removing mutants outright, just noting them as removed or something...  In that case should they or should they not show up in "for m in self"?  Probably not - they should have a separate dictionary?
         # TODO should I keep track of removed reads, and print in summary?  PROBABLY.
         # LATER-TODO unit-test - it does have run-tests though.
@@ -1825,8 +1825,8 @@ class Insertional_mutant_pool_dataset():
         # go over all mutants in self; need to convert the iterator to a list to make a separate copy, 
         #  otherwise we'd be modifying the iterator while iterating through it, which isn't allowed.
         for mutant in list(self):
-            if get_readcount(other_dataset.get_mutant(mutant.position)) < readcount_min:
-                self.remove_mutant(mutant.position)
+            if get_readcount(other_dataset.get_mutant(mutant.IB)) < readcount_min:
+                self.remove_mutant(mutant.IB)
         # TODO really I shouldn't be removing mutants outright, just noting them as removed or something...  In that case should they or should they not show up in "for m in self"?  Probably not - they should have a separate dictionary?
         # TODO should I keep track of removed reads, and print in summary?  PROBABLY.
         # LATER-TODO unit-test - it does have run-tests though.
@@ -1840,11 +1840,7 @@ class Insertional_mutant_pool_dataset():
         #  otherwise we'd be modifying the dataset while iterating through it, which isn't allowed.
         for mutant in list(self):
             if get_readcount(mutant) < min_readcount:
-                self.remove_mutant(mutant.position)
-        # now redo adjacent-mutant counting, with same parameters as before (most get auto-detected by default)
-        if self.summary.adjacent_max_distance is not None:
-            cassette,other = self.summary.merging_which_chromosomes
-            self.count_adjacent_mutants(count_cassette_chromosomes=cassette, count_other_chromosomes=other)
+                self.remove_mutant(mutant.IB)
         # TODO really I shouldn't be removing mutants outright, just noting them as removed or something...  In that case should they or should they not show up in "for m in self"?  Probably not - they should have a separate dictionary?
         # TODO should I keep track of removed reads, and print in summary?  MAYBE.
 
@@ -3055,14 +3051,7 @@ class Testing_Insertional_mutant_pool_dataset(unittest.TestCase):
         for relative_read_direction in [True, False, None, 0, 1, 'reverse', 0.11, 23, 'asdfas', '', 'something', [2,1], {}]:
             self.assertRaises(ValueError, Insertional_mutant_pool_dataset, '?', relative_read_direction)
 
-    # TODO lots of functions without unit-tests here!  Need to decide between unit-tests, run-tests and a mix.
-
-    def test__add_RISCC_alignment_files_to_data(self):
-        pass
-        # MAYBE-TODO implement using a mock-up of HTSeq_alignment?  (see Testing_single_functions for how I did that)
-        #   make sure it fails if self.cassette_end isn't defined...
-
-    def _test__remove_mutants_below_readcount(self):
+    def test__remove_mutants_below_readcount(self):
         positions_and_readcounts_raw = "A+100 5/5, A-200 2/2, A+300 1/1, A-400 5/2, A+500 5/1"
         dataset = self._make_test_mutant_dataset(positions_and_readcounts_raw, raw_chrom_names=True)
         assert set([m.position.min_position for m in dataset]) == set([100,200,300,400,500])
@@ -3080,6 +3069,8 @@ class Testing_Insertional_mutant_pool_dataset(unittest.TestCase):
         since some stuff like lambdas and __slots__ etc interferes with that. """
         pass
     # TODO implement
+
+    # TODO lots of functions without unit-tests here!  Need to decide between unit-tests, run-tests and a mix.
 
 
 if __name__ == "__main__":
