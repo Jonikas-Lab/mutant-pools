@@ -1,0 +1,2 @@
+chromosome	strand	min_position	full_position	total_reads	perfect_reads	confirmed-dist	N-genome-side-conf-reads	N-genome-side-nonconf-reads	gene	orientation	feature	IB_seq	main_cassette_side_seq
+cassette_3_confirming	+	100	?-101	3	3	54	2	0	gene_unknown	?	?	CCCC	AAAA

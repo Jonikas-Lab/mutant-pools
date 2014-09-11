@@ -181,7 +181,7 @@ def main(outfile, options):
 
     ### output data to files
     save_dataset_files(all_alignment_data, outfile, options.verbosity_level, True, True, True, 
-                       True, options.sort_data_key, options)
+                       options.sort_data_key, options)
     # TODO write some info about all the other files that go with this one (pickle, merging-info, *cassette*)
 
 
@@ -196,6 +196,8 @@ def main(outfile, options):
 def do_test_run():
     """ Test run: run script on test infile, compare output to reference file."""
     test_folder = "test_data"
+    RISCC_infiles_1 = ('test_data/INPUT_RISCC1-alignment-cassette-side.sam', 'test_data/INPUT_RISCC1-IBs.fq', 
+                       'test_data/INPUT_RISCC1-IB-clusters.py', 'test_data/INPUT_RISCC1-alignment-genome-side.sam')
     aln_infile0 = "test_data/INPUT_alignment0_old-format.sam"
     aln_infile1 = "test_data/INPUT_alignment1_genomic-unique.sam"
     aln_infile2 = "test_data/INPUT_alignment2_for-genes.sam"
@@ -203,17 +205,18 @@ def do_test_run():
     dataset_to_remove = "test_data/INPUT_mutants_to_remove.txt"
 
     test_runs = [
-                 ('cassette-end-5prime', "-e 5prime -r forward -n3 -L", [aln_infile1]),
-                 ('cassette-end-3prime', "-e 3prime -r forward -n3 -L", [aln_infile1]),
-                 ('read-direction-reverse', "-r reverse -e 5prime -n3 -L", [aln_infile1]),
-                 ('sorted-by-count', "-o read_count -e 5prime -r forward -n3 -L", [aln_infile1]),
-                 ('with-gene-info_merged', "-e 5prime -r forward -g %s -n0"%gff_genefile, [aln_infile2]),
-                 ('remove-from-other-all', "-x %s -n0"%dataset_to_remove, [aln_infile2]), 
-                 ('remove-from-other-min4', "-x %s -z4 -n0"%dataset_to_remove, [aln_infile2]), 
-                 ('remove-from-other-perfect', "-x %s -p -z4 -n0"%dataset_to_remove, [aln_infile2]),
-                 ('remove-not-other-all', "-X %s -n0"%dataset_to_remove, [aln_infile2]), 
-                 ('remove-not-other-min4', "-X %s -Z4 -n0"%dataset_to_remove, [aln_infile2]), 
-                 ('remove-not-other-perfect', "-X %s -P -Z4 -n0"%dataset_to_remove, [aln_infile2]),
+                 ('basic-3prime-outward', "-e 3prime -d outward -c %s -b %s -B %s -g %s"%RISCC_infiles_1, []),
+                #('cassette-end-5prime', "-e 5prime -r forward -n3 -L", [aln_infile1]),
+                #('cassette-end-3prime', "-e 3prime -r forward -n3 -L", [aln_infile1]),
+                #('read-direction-reverse', "-r reverse -e 5prime -n3 -L", [aln_infile1]),
+                #('sorted-by-count', "-o read_count -e 5prime -r forward -n3 -L", [aln_infile1]),
+                #('with-gene-info_merged', "-e 5prime -r forward -g %s -n0"%gff_genefile, [aln_infile2]),
+                #('remove-from-other-all', "-x %s -n0"%dataset_to_remove, [aln_infile2]), 
+                #('remove-from-other-min4', "-x %s -z4 -n0"%dataset_to_remove, [aln_infile2]), 
+                #('remove-from-other-perfect', "-x %s -p -z4 -n0"%dataset_to_remove, [aln_infile2]),
+                #('remove-not-other-all', "-X %s -n0"%dataset_to_remove, [aln_infile2]), 
+                #('remove-not-other-min4', "-X %s -Z4 -n0"%dataset_to_remove, [aln_infile2]), 
+                #('remove-not-other-perfect', "-X %s -P -Z4 -n0"%dataset_to_remove, [aln_infile2]),
                 ]
     # TODO remove the mutation-detection lines from aln_infile1 and from all the outfiles, since that's been simplified?
     # TODO add run-test for removing data from multiple files?
@@ -227,7 +230,7 @@ def do_test_run():
                            for testname,test_args,infiles in test_runs]
 
     parser = define_option_parser()
-    argument_converter = lambda parser,options,args: (args[:-1], args[-1], options)
+    argument_converter = lambda parser,options,args: (args[0], options)
     return run_functional_tests(test_names_and_args, parser, main, test_folder, 
                                 argument_converter=argument_converter, append_to_outfilenames='.txt') 
 

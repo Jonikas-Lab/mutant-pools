@@ -1,0 +1,7 @@
+# 1 mutants total; 1 (100%) have one genomic location; 1 (100%) have locations on only one genomic chromosome; 0 (0%) also have one or more cassette locations.
+ * 1 distinct genomic positions (on 1 chromosomes; 2 unique read sequences), plus 0 distinct cassette positions (0 reads) and 0 unaligned/multi-aligned reads:
+Cassette-side_position::: (chrom	strand	pos	gene	orientation	feature	readcount	perfect	main_seq	gene_name)
+cassette_3_confirming	+	?-101	gene_unknown	?	?	3	3	AAAA	-
+RISCC_genome-side_reads::: (chrom	strand	pos	gene	orientation	feature	readcount	perfect	main_seq	gene_name)
+cassette_3_confirming	+	124	gene_unknown	?	?	2	2	TTTT	-
+cassette_3_confirming	+	154	gene_unknown	?	?	1	1	CTTT	-

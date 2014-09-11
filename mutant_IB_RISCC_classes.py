@@ -9,7 +9,7 @@ This is a module to be imported and used by other programs.  Running it directly
 
 from __future__ import division
 # basic libraries
-import sys, re
+import sys, os, re
 import unittest
 from collections import defaultdict
 import itertools
@@ -21,7 +21,7 @@ from numpy import median, round, isnan
 import HTSeq
 from BCBio import GFF
 # my modules
-from general_utilities import split_into_N_sets_by_counts, add_dicts_of_ints, sort_lists_inside_dict, invert_listdict_nodups, keybased_defaultdict, value_and_percentages, FAKE_OUTFILE, NaN, nan_func, merge_values_to_unique, unpickle
+from general_utilities import split_into_N_sets_by_counts, add_dicts_of_ints, sort_lists_inside_dict, invert_listdict_nodups, keybased_defaultdict, value_and_percentages, FAKE_OUTFILE, NaN, nan_func, merge_values_to_unique, pickle, unpickle
 from basic_seq_utilities import SEQ_ENDS, SEQ_STRANDS, SEQ_DIRECTIONS, SEQ_ORIENTATIONS, parse_fasta, parse_fastq, position_test_contains, position_test_overlap, chromosome_sort_key, get_seq_count_from_collapsed_header
 from deepseq_utilities import check_mutation_count_by_optional_NM_field, get_HTSeq_optional_field, Fake_deepseq_objects
 from parse_annotation_file import parse_gene_annotation_file
@@ -993,7 +993,7 @@ class Insertional_mutant():
         ### print summary line
         # TODO is that a useful summary?  Is it confusing that the casette-side read isn't included in the read numbers?
         N_distinct_genome, N_distinct_cassette = self.RISCC_N_distinct_positions(max_distance)
-        OUTPUT.write(" * %s distinct genomic positions (on %s chromosomes; %s genomic reads), "%(N_distinct_genome, 
+        OUTPUT.write(" * %s distinct genomic positions (on %s chromosomes; %s unique read sequences), "%(N_distinct_genome, 
                                                                  self.RISCC_N_genomic_chromosomes, self.RISCC_N_genomic_reads)
                      +"plus %s distinct cassette positions (%s reads) and %s unaligned/multi-aligned reads:\n"%(N_distinct_cassette,
                                                                  self.RISCC_N_cassette_reads, self.RISCC_N_unaligned_reads))
@@ -1008,7 +1008,7 @@ class Insertional_mutant():
         ### print lines for each of the RISCC genome-side reads
         # sort the RISCC reads by alignment position - happens automatically, since position is first on the list
         OUTPUT.write("RISCC_genome-side_reads::: %s\n"%data_header)
-        for (seq, read_data) in sorted(self.RISCC_genome_side_reads.values(), key = lambda (s,d): d[0]):
+        for (seq, read_data) in sorted(self.RISCC_genome_side_reads.items(), key = lambda (s,d): d[0]):
             try:                    fields = [read_data[0].chromosome, read_data[0].strand, read_data[0].full_position.strip('?-')]
             except AttributeError:  fields = [read_data[0], '-', '-']
             readcount, N_errors = read_data[1:3]
@@ -1217,7 +1217,7 @@ class Dataset_summary_data():
         # TODO I should really go over this and figure out what should be None and what should be 0 and why!!
         self.discarded_read_count, self.discarded_wrong_start, self.discarded_no_cassette = None, None, None
         self.discarded_other_end = 0
-        self.non_aligned_read_count, self.unaligned, self.multiple_aligned = 0, None, None
+        self.non_aligned_read_count, self.unaligned, self.multiple_aligned = 0, 0, 0
         self.ignored_region_read_counts = defaultdict(int)
         # MAYBE-TODO should cassette_end and relative_read_direction be specified for the whole dataset, or just for each set of data added, in add_RISCC_alignment_files_to_data? The only real issue with this would be that then I wouldn't be able to print this information in the summary - or I'd have to keep track of what the value was for each alignment reader added and print that in the summary if it's a single value, or 'varied' if it's different values. Might also want to keep track of how many alignment readers were involved, and print THAT in the summary!  Or even print each (infile_name, cassette_end, relative_read_direction) tuple as a separate line in the header.
         self.cassette_end = cassette_end
@@ -1621,7 +1621,7 @@ class Insertional_mutant_pool_dataset():
 
         # read the IB cluster file; make a read_seq:centroid_seq dictionary for fast lookup.
         if IB_cluster_file.endswith('.pickle'):
-            IB_centroid_to_seqs = general_utilities.unpickle(IB_cluster_file)
+            IB_centroid_to_seqs = unpickle(IB_cluster_file)
         elif IB_cluster_file.endswith('.py'):
             # for some reason just doing execfile(IB_cluster_file) doesn't import stuff into local namespace, so using exec instead
             exec open(IB_cluster_file).read()
@@ -1647,8 +1647,8 @@ class Insertional_mutant_pool_dataset():
                                                                     self.summary.relative_read_direction, immutable_position=True)
             mutant.add_read(cassette_side_aln, cassette_side_position, read_count=1, dataset_name=None)
             # Parse the genome-side alignment result to figure out position; add that to the mutant
-            genome_side_position = get_RISCC_pos_from_read_pos(genome_side_aln, 
-                                                               self.summary.cassette_end, self.summary.relative_read_direction)
+            # MAYBE-TODO make an option for the genome-side reads to be outward from the cassette? Unlikely to be needed.
+            genome_side_position = get_RISCC_pos_from_read_pos(genome_side_aln, self.summary.cassette_end, 'inward')
             N_errors = check_mutation_count_by_optional_NM_field(genome_side_aln, negative_if_absent=False)
             if best_genome_side_only:
                 mutant.improve_best_RISCC_read(genome_side_aln.read.seq, genome_side_position, N_errors, read_count=1, 
@@ -2072,13 +2072,6 @@ class Insertional_mutant_pool_dataset():
                         lambda summ,chromosome=chromosome: value_and_percentages(summ.reads_in_chromosome(chromosome), 
                                                                                  [summ.aligned_read_count]) ))
         
-        DVG.append((header_prefix+"Mutant merging/counts (deciding when different-position reads should be one mutant)", 
-                    lambda summ: '' ))
-        DVG.append((line_prefix+" (adjacent-merging/counting max distance):", 
-                    lambda summ: "(%s)"%summ.adjacent_max_distance ))
-        DVG.append((line_prefix+" (if we're including mutants in cassette and in non-nuclear chromosomes):", 
-                    lambda summ: "(%s, %s)"%summ.merging_which_chromosomes )) 
-
         DVG.append((header_prefix+"Distinct mutants (read groups) by cassette insertion position:", 
                     lambda summ: "%s"%summ.N_mutants ))
         DVG.append((line_prefix+"(mutants with 2+, 10+, 100+, 1000+ reads):",
@@ -2199,7 +2192,7 @@ class Insertional_mutant_pool_dataset():
             mutant_data += [mutant.RISCC_max_confirmed_distance(), 
                             mutant.RISCC_N_confirming_reads(), mutant.RISCC_N_non_confirming_reads()]
             mutant_data += [mutant.gene, mutant.orientation, mutant.gene_feature] 
-            mutant_data += [mutant_IB, mutant.get_main_sequence()[0]]
+            mutant_data += [mutant.IB, mutant.get_main_sequence()[0]]
             if self.multi_dataset:
                 for dataset_name in self.dataset_order:
                     mutant_data += [mutant.by_dataset[dataset_name].total_read_count, 
@@ -2242,6 +2235,8 @@ class Insertional_mutant_pool_dataset():
         ### Print data for all mutants
         for mutant in sorted_mutants:
             mutant.RISCC_print_detail(OUTPUT, max_distance)
+            # TODO modify mutant.RISCC_print_detail to make more sense!
+            # TODO really, we don't care how many unique genome-side read SEQUENCES were read, but how many unique POSITIONS, since multiple seqs with the same position are just PCR/seq errors from the same original linear PCR product.  So probably change mutant.RISCC_genome_side_reads to be based on that somehow??
 
 
 def read_mutant_file(infile):
@@ -3016,19 +3011,28 @@ class Testing_Insertional_mutant_pool_dataset(unittest.TestCase):
         for relative_read_direction in [True, False, None, 0, 1, 'reverse', 0.11, 23, 'asdfas', '', 'something', [2,1], {}]:
             self.assertRaises(ValueError, Insertional_mutant_pool_dataset, '?', relative_read_direction)
 
-    def test__add_RISCC_alignment_files_to_data(self):
-        dataset = Insertional_mutant_pool_dataset('3prime', 'outward')
-        dataset.add_RISCC_alignment_files_to_data('test_data/INPUT_RISCC1-IB-clusters.py', 'test_data/INPUT_RISCC1-IBs.fq', 
-                                                  'test_data/INPUT_RISCC1-alignment-cassette-side.sam', 
-                                                  'test_data/INPUT_RISCC1-alignment-genome-side.sam')
+    def _check_RISCC1_outputs(self, dataset):
         assert len(dataset) == 1
         mutant = dataset.get_mutant('CCCC')
         assert mutant.IB == 'CCCC'
         assert str(mutant.position) == 'cassette_3_confirming + ?-101'
         assert mutant.total_read_count == mutant.perfect_read_count == 3
-        # TODO add tests!!
-        # TODO add stuff to input files!
 
+    def test__add_RISCC_alignment_files_to_data(self):
+        infiles = ['test_data/INPUT_RISCC1-IB-clusters.py', 'test_data/INPUT_RISCC1-IBs.fq', 
+                   'test_data/INPUT_RISCC1-alignment-cassette-side.sam', 'test_data/INPUT_RISCC1-alignment-genome-side.sam']
+        dataset = Insertional_mutant_pool_dataset('3prime', 'outward')
+        dataset.add_RISCC_alignment_files_to_data(*infiles)
+        self._check_RISCC1_outputs(dataset)
+        exec open(infiles[0])
+        picklefile = infiles[0].replace('.py', '.pickle')
+        pickle(IB_centroid_to_seqs, picklefile)
+        dataset = Insertional_mutant_pool_dataset('3prime', 'outward')
+        dataset.add_RISCC_alignment_files_to_data(picklefile, *infiles[1:])
+        self._check_RISCC1_outputs(dataset)
+        os.unlink(picklefile)
+        # TODO add more tests - but there's also a run-test for this.
+        # TODO add more complicated stuff to input files!
 
     def test__remove_mutants_below_readcount(self):
         positions_and_readcounts_raw = "A+100 5/5, A-200 2/2, A+300 1/1, A-400 5/2, A+500 5/1"
