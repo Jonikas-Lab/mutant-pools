@@ -1,5 +1,5 @@
 @@@ simple - three aligned cassette-side reads, with two different confirming genome-side location (with 2 and 1 reads)
-@ this should be 3' and read outward from a +orientation cassette, so these are +strand
+@ this should be 3' and cassette-side is read outward from a +orientation cassette, so these are +strand
 testA_read1	0	cassette_3_confirming	101	255	4M	*	0	0	AAAA	####	XA:i:0	MD:Z:4	NM:i:0
 testA_read2	0	cassette_3_confirming	101	255	4M	*	0	0	AAAA	####	XA:i:0	MD:Z:4	NM:i:0
 testA_read3	0	cassette_3_confirming	101	255	4M	*	0	0	AAAC	####	XA:i:0	MD:Z:4	NM:i:0

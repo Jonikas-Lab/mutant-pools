@@ -1585,6 +1585,7 @@ class Insertional_mutant_pool_dataset():
         # TODO unit-tests! There are some in experiments/arrayed_library/internal_barcode_processing/code/clustering_tools.py for a similar function - test__parse_3seq_parallel
 
     # TODO TODO TODO need function to deal with IB-only deepseq reads!  How do we want to handle those?  As multi-dataset mutants?  Or add some new functionality?  How should it interact with the RISCC data?  Does it matter which of the datasets is read in first?
+    # TODO how should the IB clustering for IB-only datasets be done?  1) Align them to the RISCC cluster centroids, 2) cluster RISCC and IB-only IB seqs all together, 3) cluster each dataset separately and look for matches. TODO
 
     def add_RISCC_alignment_files_to_data(self, IB_cluster_file, IB_fastq_file, cassette_side_flank_aligned_file, 
                                           genome_side_aligned_file, best_genome_side_only=False):
