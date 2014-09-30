@@ -426,10 +426,14 @@ class Insertional_mutant_pool_dataset_Carette(Insertional_mutant_pool_dataset):
                         raise MutantError("File %s wasn't supposed to be multiple alignments - why is read %s there twice??"%(
                             genome_side_infile, read_ID))
                     # convert the genome-side read HTSeq alignment data to an "insertion" position of the end of it!
-                    genome_side_position = get_Carette_pos_from_flanking_region_pos(aln.iv, self.summary.cassette_end, 
-                                                                                    self.summary.reads_are_reverse)
-                    if best_only:   mutant.improve_best_Carette_read(genome_side_position, aln, max_distance_for_best)
-                    else:           mutant.add_Carette_read(genome_side_position, aln)
+                    if aln.iv is None:
+                        if not best_only:
+                            mutant.add_Carette_read(new_position=UNALIGNED_POSITION, HTSeq_alignment=None, seq=aln.read.seq)
+                    else:
+                        genome_side_position = get_Carette_pos_from_flanking_region_pos(aln.iv, self.summary.cassette_end, 
+                                                                                        self.summary.reads_are_reverse)
+                        if best_only:   mutant.improve_best_Carette_read(genome_side_position, aln, max_distance_for_best)
+                        else:           mutant.add_Carette_read(genome_side_position, aln)
                 read_IDs.add(read_ID)
         # For fasta files, just assume it's unaligned, or multiple if that's set, and use the sequences.
         elif genome_side_infile.endswith('.fa'):
