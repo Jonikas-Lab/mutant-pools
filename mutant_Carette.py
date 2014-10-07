@@ -27,7 +27,7 @@ from deepseq_utilities import Fake_deepseq_objects
 
 ############################### Constants and help functions #####################################
 
-MAX_POSITION_DISTANCE = 1500
+MAX_POSITION_DISTANCE = 3000
 UNALIGNED_POSITION = "UNALIGNED"
 MULTI_ALIGNED_POSITION = "MULTIPLE"
 BAD_POSITIONS = [UNALIGNED_POSITION, MULTI_ALIGNED_POSITION]

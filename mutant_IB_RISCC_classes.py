@@ -34,7 +34,7 @@ from parse_annotation_file import parse_gene_annotation_file
 ### Constants
 
 RELATIVE_READ_DIRECTIONS = 'inward outward'.split()
-MAX_POSITION_DISTANCE = 1500
+MAX_POSITION_DISTANCE = 3000
 MULTIPLE_GENE_JOIN = ' & '
 
 class SPECIAL_POSITIONS(object):
