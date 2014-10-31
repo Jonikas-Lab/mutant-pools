@@ -1587,8 +1587,8 @@ class Insertional_mutant_pool_dataset():
     # TODO TODO TODO need function to deal with IB-only deepseq reads!  How do we want to handle those?  As multi-dataset mutants?  Or add some new functionality?  How should it interact with the RISCC data?  Does it matter which of the datasets is read in first?
     # TODO how should the IB clustering for IB-only datasets be done?  1) Align them to the RISCC cluster centroids, 2) cluster RISCC and IB-only IB seqs all together, 3) cluster each dataset separately and look for matches. TODO
 
-    def add_RISCC_alignment_files_to_data(self, IB_cluster_file, IB_fastq_file, cassette_side_flank_aligned_file, 
-                                          genome_side_aligned_file, best_genome_side_only=False):
+    def add_RISCC_alignment_files_to_data(self, cassette_side_flank_aligned_file, genome_side_aligned_file, IB_fastq_file, 
+                                          IB_cluster_file=None, best_genome_side_only=False):
         """ Add paired-end RISCC reads to dataset mutants, based on IB clustering.
 
         Input files:
@@ -1605,6 +1605,7 @@ class Insertional_mutant_pool_dataset():
         Function goes over the fastq and two aligned files in parallel. 
         """
         # TODO finish docstring
+        # MAYBE-TODO add option for not including IBs at all, and making the mutant dict by cassette-side alignment position like before?
         # MAYBE-TODO at some point, maybe add full parsing of multiple alignments, to compare their positions to those of 
         #  unique-aligned cases, rather than just marking them as multiple but treating them as unaligned?
         #  Might not be worth the effort, since if we have unique-aligned cases anyway, we can use those.
@@ -1621,25 +1622,26 @@ class Insertional_mutant_pool_dataset():
                               +"to one of %s first."%RELATIVE_READ_DIRECTIONS)
 
         # read the IB cluster file; make a read_seq:centroid_seq dictionary for fast lookup.
-        if IB_cluster_file.endswith('.pickle'):
-            IB_centroid_to_seqs = unpickle(IB_cluster_file)
-        elif IB_cluster_file.endswith('.py'):
-            # for some reason just doing execfile(IB_cluster_file) doesn't import stuff into local namespace, so using exec instead
-            exec open(IB_cluster_file).read()
-            try:    
-                len(IB_centroid_to_seqs)
-            except NameError:
-                raise MutantError("IB_cluster_file %s didn't define an IB_centroid_to_seqs dictionary!"%IB_cluster_file)
-        else:
-            raise MutantError("Unknown IB_cluster_file format in add_RISCC_alignment_files_to_data - must be .pickle or .py, "
-                              +"filename is %s"%IB_cluster_file)
+        if IB_cluster_file is not None:
+            if IB_cluster_file.endswith('.pickle'):
+                IB_centroid_to_seqs = unpickle(IB_cluster_file)
+            elif IB_cluster_file.endswith('.py'):
+                # for some reason just doing execfile(IB_cluster_file) doesn't import stuff into local namespace, so using exec
+                exec open(IB_cluster_file).read()
+                try:    
+                    len(IB_centroid_to_seqs)
+                except NameError:
+                    raise MutantError("IB_cluster_file %s didn't define an IB_centroid_to_seqs dictionary!"%IB_cluster_file)
+            else:
+                raise MutantError("Unknown IB_cluster_file format in add_RISCC_alignment_files_to_data - must be .pickle or .py, "
+                                  +"filename is %s"%IB_cluster_file)
         IB_seq_to_centroid = invert_listdict_nodups(IB_centroid_to_seqs)
 
         for (readname, IB_seq, cassette_side_aln, genome_side_aln) in self._parse_3files_parallel(
                                             IB_fastq_file, cassette_side_flank_aligned_file, genome_side_aligned_file):
             try:                IB_centroid_seq = IB_seq_to_centroid[IB_seq]
+            except NameError:   IB_centroid_seq = IB_seq
             except KeyError:    raise MutantError("IB seq %s not found in cluster dict!"%IB_seq)
-            IB_centroid_seq = IB_seq_to_centroid[IB_seq]
             mutant = self.get_mutant(IB_centroid_seq)
             # get the cassette insertion position (as an Insertion_position object)
             # MAYBE-TODO instead of generating cassette_side_position all the time, even with multiple identical reads, 
@@ -3020,16 +3022,16 @@ class Testing_Insertional_mutant_pool_dataset(unittest.TestCase):
         assert mutant.total_read_count == mutant.perfect_read_count == 3
 
     def test__add_RISCC_alignment_files_to_data(self):
-        infiles = ['test_data/INPUT_RISCC1-IB-clusters.py', 'test_data/INPUT_RISCC1-IBs.fq', 
-                   'test_data/INPUT_RISCC1-alignment-cassette-side.sam', 'test_data/INPUT_RISCC1-alignment-genome-side.sam']
+        infiles = ['test_data/INPUT_RISCC1-alignment-cassette-side.sam', 'test_data/INPUT_RISCC1-alignment-genome-side.sam', 
+                   'test_data/INPUT_RISCC1-IBs.fq', 'test_data/INPUT_RISCC1-IB-clusters.py']
         dataset = Insertional_mutant_pool_dataset('3prime', 'outward')
         dataset.add_RISCC_alignment_files_to_data(*infiles)
         self._check_RISCC1_outputs(dataset)
-        exec open(infiles[0])
-        picklefile = infiles[0].replace('.py', '.pickle')
+        exec open(infiles[-1])
+        picklefile = infiles[-1].replace('.py', '.pickle')
         pickle(IB_centroid_to_seqs, picklefile)
         dataset = Insertional_mutant_pool_dataset('3prime', 'outward')
-        dataset.add_RISCC_alignment_files_to_data(picklefile, *infiles[1:])
+        dataset.add_RISCC_alignment_files_to_data(*infiles[:-1], IB_cluster_file=picklefile)
         self._check_RISCC1_outputs(dataset)
         os.unlink(picklefile)
         # TODO add more tests - but there's also a run-test for this.
