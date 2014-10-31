@@ -196,16 +196,17 @@ def main(outfile, options):
 def do_test_run():
     """ Test run: run script on test infile, compare output to reference file."""
     test_folder = "test_data"
-    RISCC_infiles_1 = ('test_data/INPUT_RISCC1-alignment-cassette-side.sam', 'test_data/INPUT_RISCC1-IBs.fq', 
-                       'test_data/INPUT_RISCC1-IB-clusters.py', 'test_data/INPUT_RISCC1-alignment-genome-side.sam')
-    aln_infile0 = "test_data/INPUT_alignment0_old-format.sam"
-    aln_infile1 = "test_data/INPUT_alignment1_genomic-unique.sam"
-    aln_infile2 = "test_data/INPUT_alignment2_for-genes.sam"
-    gff_genefile = "test_data/INPUT_gene-data-1_all-cases.gff3"
-    dataset_to_remove = "test_data/INPUT_mutants_to_remove.txt"
+    RISCC_infiles_1 = ('test_data/INPUT_RISCC1-alignment-cassette-side.sam', 'test_data/INPUT_RISCC1-alignment-genome-side.sam', 
+                       'test_data/INPUT_RISCC1-IBs.fq', 'test_data/INPUT_RISCC1-IB-clusters.py')
+    #aln_infile0 = "test_data/INPUT_alignment0_old-format.sam"
+    #aln_infile1 = "test_data/INPUT_alignment1_genomic-unique.sam"
+    #aln_infile2 = "test_data/INPUT_alignment2_for-genes.sam"
+    #gff_genefile = "test_data/INPUT_gene-data-1_all-cases.gff3"
+    #dataset_to_remove = "test_data/INPUT_mutants_to_remove.txt"
 
     test_runs = [
-                 ('basic-3prime-outward', "-e 3prime -d outward -c %s -b %s -B %s -g %s"%RISCC_infiles_1, []),
+                 ('basic-3prime-outward_clust', "-e 3prime -d outward -c %s -g %s -b %s -B %s"%RISCC_infiles_1, []),
+                 ('basic-3prime-outward_no-clust', "-e 3prime -d outward -c %s -g %s -b %s"%RISCC_infiles_1[:-1], []),
                 #('cassette-end-5prime', "-e 5prime -r forward -n3 -L", [aln_infile1]),
                 #('cassette-end-3prime', "-e 3prime -r forward -n3 -L", [aln_infile1]),
                 #('read-direction-reverse', "-r reverse -e 5prime -n3 -L", [aln_infile1]),

@@ -770,7 +770,8 @@ class Insertional_mutant():
     @staticmethod
     def _get_main_sequence_from_data(seqs_to_counts, N=1):
         """ Return the most common sequence in the given data, and its count (or Nth most common sequence if N is provided). """
-        sequences_by_count = sorted([(count,seq) for (seq,count) in seqs_to_counts.iteritems()], reverse=True)
+        # change to -count to sort reverse by count but non-reverse by seq; then change to -count again to report original counts.
+        sequences_by_count = [(-count,seq) for (count,seq) in sorted([(-count,seq) for (seq,count) in seqs_to_counts.iteritems()])]
         # try returning the Nth sequence and count; return nothing if there are under N sequences.
         try:                return tuple(reversed(sequences_by_count[N-1]))
         except IndexError:  return ('',0)
@@ -1635,7 +1636,7 @@ class Insertional_mutant_pool_dataset():
             else:
                 raise MutantError("Unknown IB_cluster_file format in add_RISCC_alignment_files_to_data - must be .pickle or .py, "
                                   +"filename is %s"%IB_cluster_file)
-        IB_seq_to_centroid = invert_listdict_nodups(IB_centroid_to_seqs)
+            IB_seq_to_centroid = invert_listdict_nodups(IB_centroid_to_seqs)
 
         for (readname, IB_seq, cassette_side_aln, genome_side_aln) in self._parse_3files_parallel(
                                             IB_fastq_file, cassette_side_flank_aligned_file, genome_side_aligned_file):
@@ -2150,13 +2151,14 @@ class Insertional_mutant_pool_dataset():
         """ Sort the mutants by position or readcount, or leave unsorted. """
         all_mutants = iter(self)
         if sort_data_by=='position':
-            sorted_data = sorted(all_mutants, key = lambda m: m.position)
+            sorted_data = sorted(all_mutants, key = lambda m: (m.position, m.IB))
             # x.position here is an Insertion_position object and has a sensible cmp function
             # TODO do unaligned/multi-aligned/unknown positions sort sensibly here?
         elif sort_data_by=='read_count':
             if self.multi_dataset:  
                 raise MutantError("Sorting by readcount in print_data not implemented for multi-datasets!")
-            sorted_data = sorted(all_mutants, key = lambda m: (m.total_read_count,m.perfect_read_count,m.position), reverse=True)
+            sorted_data = sorted(all_mutants, key = lambda m: (m.total_read_count, m.perfect_read_count, m.position, m.IB), 
+                                 reverse=True)
         else:
             raise MutantError("Can't sort mutants by %s - only position or readcount are implemented!"%sort_data_by)
         return sorted_data
@@ -3022,6 +3024,7 @@ class Testing_Insertional_mutant_pool_dataset(unittest.TestCase):
         assert mutant.total_read_count == mutant.perfect_read_count == 3
 
     def test__add_RISCC_alignment_files_to_data(self):
+        # testing with IB clustering (.py file and .pickle file)
         infiles = ['test_data/INPUT_RISCC1-alignment-cassette-side.sam', 'test_data/INPUT_RISCC1-alignment-genome-side.sam', 
                    'test_data/INPUT_RISCC1-IBs.fq', 'test_data/INPUT_RISCC1-IB-clusters.py']
         dataset = Insertional_mutant_pool_dataset('3prime', 'outward')
@@ -3034,6 +3037,19 @@ class Testing_Insertional_mutant_pool_dataset(unittest.TestCase):
         dataset.add_RISCC_alignment_files_to_data(*infiles[:-1], IB_cluster_file=picklefile)
         self._check_RISCC1_outputs(dataset)
         os.unlink(picklefile)
+        # testing with IB clustering
+        dataset = Insertional_mutant_pool_dataset('3prime', 'outward')
+        dataset.add_RISCC_alignment_files_to_data(*infiles[:-1])
+        assert len(dataset) == 2
+        mutant = dataset.get_mutant('CCCC')
+        assert mutant.IB == 'CCCC'
+        assert str(mutant.position) == 'cassette_3_confirming + ?-101'
+        assert mutant.total_read_count == mutant.perfect_read_count == 2
+        mutant = dataset.get_mutant('CCCG')
+        assert mutant.IB == 'CCCG'
+        assert str(mutant.position) == 'cassette_3_confirming + ?-101'
+        assert mutant.total_read_count == mutant.perfect_read_count == 1
+
         # TODO add more tests - but there's also a run-test for this.
         # TODO add more complicated stuff to input files!
 
