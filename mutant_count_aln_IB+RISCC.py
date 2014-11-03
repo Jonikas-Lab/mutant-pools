@@ -59,11 +59,18 @@ def define_option_parser():
                       help="Instead of storing all genome-side reads per mutant, only store the 'best' one (uniquely aligned, "
                           +"to the same general location as cassette-side but with the maximal distance from it) "
                           +"and the overall counts of genome-side read categories, to save memory. (Default %default).")
+    parser.add_option('-U', '--ignore_unaligned', action="store_true", default=False,
+                      help="Don't process/count unaligned or multi-aligned genome-side reads (Default %default).")
+    parser.add_option('-D', '--max_allowed_cassette_side_dist', type='int', default=1, metavar='X', 
+                      help="Allow up to X bp distance between cassette-side reads in the same mutant. "
+                          +"If distance exceeds X, raise an error. (Default %default).")
+
     # gene-finding and gene-annotation options 
     parser.add_option('-A', '--gene_annotation_folder', default='None', metavar='FOLDER', 
                       help="Folder containing gene position and annotation files (files should be from Phytozome: "
                           +"gff file with gene positions, *_annotation_info.txt, maybe *_defline.txt etc) "
                           +"if None, gene IDs and annotation won't be added (default %default)")
+    # TODO run-tests for -U and -D?  -D has basic unit-test with realistic input files.
     # MAYBE-TODO change default to be based on an environmental variable?
     # TODO or would it be better to still give the gene/annotation file names, but ALSO check them against the genome version?
     # MAYBE-TODO add extra annotation files of some sort? Martin had lots of ideas...
@@ -148,7 +155,9 @@ def main(outfile, options):
     ### parse input files and store data - the add_RISCC_alignment_files_to_data function here does pretty much all the work!
     all_alignment_data.add_RISCC_alignment_files_to_data(options.casette_side_reads, options.genome_side_reads, 
                                                          options.internal_barcode_reads, options.internal_barcode_clusters, 
-                                                         best_genome_side_only = options.best_genome_side_only)
+                                                         best_genome_side_only = options.best_genome_side_only, 
+                                                         ignore_unaligned = options.ignore_unaligned, 
+                                                         max_allowed_cassette_side_dist = options.max_allowed_cassette_side_dist)
 
     ### MAYBE-TODO some kind of metadata parsing?  If so, copy relevant options and code from mutant_count_alignments.py.
     # TODO do we want to deal with metadata in the new IB+Carette pipeline? How?

@@ -1,0 +1,5 @@
+@@@ variant where one of the cassette-side reads has a position 1bp off
+@ this should be 3' and cassette-side is read outward from a +orientation cassette, so these are +strand
+testA_read1	0	cassette_3_confirming	101	255	4M	*	0	0	AAAA	####	XA:i:0	MD:Z:4	NM:i:0
+testA_read2	0	cassette_3_confirming	101	255	4M	*	0	0	AAAA	####	XA:i:0	MD:Z:4	NM:i:0
+testA_read3	0	cassette_3_confirming	102	255	4M	*	0	0	AAAC	####	XA:i:0	MD:Z:4	NM:i:0
