@@ -801,7 +801,7 @@ class Insertional_mutant():
                 # MAYBE-TODO check that the same seq isn't present in a different position?
                 self.RISCC_genome_side_aligned_reads[new_position][1] += read_count
                 try:                self.RISCC_genome_side_aligned_reads[new_position][2][seq][0] += read_count
-                except KeyError:    self.RISCC_genome_side_aligned_reads[new_position][2][seq] = (read_count, N_errors)
+                except KeyError:    self.RISCC_genome_side_aligned_reads[new_position][2][seq] = [read_count, N_errors]
             except KeyError:
                 seq_count_error_dict = {seq: [read_count, N_errors]}
                 self.RISCC_genome_side_aligned_reads[new_position] = [new_position, read_count, seq_count_error_dict, 
