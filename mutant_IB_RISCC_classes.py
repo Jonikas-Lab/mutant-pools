@@ -680,8 +680,8 @@ class Insertional_mutant():
         elif self.position == position or position in SPECIAL_POSITIONS.all_undefined:
             pass
         else:
-            raise MutantError("Different positions in same mutant! %s and %s, main seq %s"%(self.position, position, 
-                                                                                            self.get_main_sequence()))
+            raise MutantError("Different positions in same mutant! %s and %s, main seq %s, IB %s"%(self.position, position, 
+                                                                                            self.get_main_sequence(), self.IB))
 
     def add_read(self, HTSeq_alignment, position=SPECIAL_POSITIONS.unknown, read_count=1, check_position=True, dataset_name=None):
         """ Add a read to the data (or multiple identical reads, if read_count>1); return True if perfect alignment.
