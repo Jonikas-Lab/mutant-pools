@@ -268,7 +268,7 @@ if __name__ == "__main__":
 
     # otherwise parse the arguments and run main function
     try:
-        [outfile] = [args]
+        [outfile] = args
     except ValueError:
         parser.print_help()
         sys.exit("\nError: exactly one outfile is required! Infiles should be given as options.")
