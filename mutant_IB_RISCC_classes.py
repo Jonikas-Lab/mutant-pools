@@ -709,7 +709,10 @@ class Insertional_mutant():
         # increment total_read_count, and add read ID to the ID set
         self.total_read_count += read_count
         # figure out if the read is perfect and increment perfect_read_count if yes; return True if perfect else False.
-        mutation_count = check_mutation_count_by_optional_NM_field(HTSeq_alignment, negative_if_absent=False)
+        if position in SPECIAL_POSITIONS.all_undefined:
+            mutation_count = 10
+        else:
+            mutation_count = check_mutation_count_by_optional_NM_field(HTSeq_alignment, negative_if_absent=False)
         if mutation_count==0:  
             self.perfect_read_count += read_count
             return True
@@ -1112,8 +1115,7 @@ class Insertional_mutant_multi_dataset(Insertional_mutant):
         """ Add read to given dataset (see docstring for Insertional_mutant version) - dataset_name is required. """
         self.update_check_position(position)
         readcount_data_container = self._check_dataset_name_return_data(dataset_name)
-        Insertional_mutant.add_read(readcount_data_container, HTSeq_alignment, SPECIAL_POSITIONS.unknown, 
-                                    read_count, check_position=False)
+        Insertional_mutant.add_read(readcount_data_container, HTSeq_alignment, position, read_count, check_position=False)
     
     def add_counts(self, total_count, perfect_count, sequence_variant_count, assume_new_sequences=False, dataset_name=None):
         """ Add counts to given dataset (see docstring for Insertional_mutant version) - dataset_name is required. """
@@ -1669,7 +1671,10 @@ class Insertional_mutant_pool_dataset():
             # Parse the genome-side alignment result to figure out position; add that to the mutant
             # MAYBE-TODO make an option for the genome-side reads to be outward from the cassette? Unlikely to be needed.
             genome_side_position = get_RISCC_pos_from_read_pos(genome_side_aln, self.summary.cassette_end, 'inward')
-            N_errors = check_mutation_count_by_optional_NM_field(genome_side_aln, negative_if_absent=False)
+            if genome_side_position in SPECIAL_POSITIONS.all_undefined:
+                N_errors = 10
+            else:
+                N_errors = check_mutation_count_by_optional_NM_field(genome_side_aln, negative_if_absent=False)
             if best_genome_side_only:
                 mutant.improve_best_RISCC_read(genome_side_aln.read.seq, genome_side_position, N_errors, read_count=1, 
                                                max_distance=MAX_POSITION_DISTANCE)
@@ -2541,11 +2546,11 @@ class Testing_Insertional_mutant(unittest.TestCase):
         imperfect_aln = Fake_HTSeq_aln(seq='GGG', optional_field_data={'NM':1})
         # adding perfect and imperfect to mutant increases all the counts as expected
         mutant = Insertional_mutant(insertion_position=position)
-        mutant.add_read(perfect_aln, read_count=3)
+        mutant.add_read(perfect_aln, read_count=3, position=position)
         assert mutant.total_read_count == mutant.perfect_read_count == 3
         assert mutant.unique_sequence_count == 1
         assert mutant.sequences_and_counts == {'AAA':3}
-        mutant.add_read(imperfect_aln, read_count=1)
+        mutant.add_read(imperfect_aln, read_count=1, position=position)
         assert mutant.total_read_count == 4
         assert mutant.perfect_read_count == 3
         assert mutant.unique_sequence_count == 2
@@ -2553,12 +2558,13 @@ class Testing_Insertional_mutant(unittest.TestCase):
         # same for a multi-dataset mutant - this time we need to specify which dataset we're adding to
         mutant = Insertional_mutant_multi_dataset(insertion_position=position)
         assert len(mutant.by_dataset) == 0
-        mutant.add_read(perfect_aln, read_count=3, dataset_name='d1')
+        mutant.add_read(perfect_aln, read_count=3, dataset_name='d1', position=position)
         assert len(mutant.by_dataset) == 1
+        print mutant.by_dataset['d1'].total_read_count , mutant.by_dataset['d1'].perfect_read_count
         assert mutant.by_dataset['d1'].total_read_count == mutant.by_dataset['d1'].perfect_read_count == 3
         assert mutant.by_dataset['d1'].unique_sequence_count == 1
         assert mutant.by_dataset['d1'].sequences_and_counts == {'AAA':3}
-        mutant.add_read(imperfect_aln, read_count=1, dataset_name='d1')
+        mutant.add_read(imperfect_aln, read_count=1, dataset_name='d1', position=position)
         assert len(mutant.by_dataset) == 1
         assert mutant.by_dataset['d1'].total_read_count == 4
         assert mutant.by_dataset['d1'].perfect_read_count == 3
