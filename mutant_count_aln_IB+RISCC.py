@@ -157,7 +157,8 @@ def main(outfile, options):
                                                          options.internal_barcode_reads, options.internal_barcode_clusters, 
                                                          best_genome_side_only = options.best_genome_side_only, 
                                                          ignore_unaligned = options.ignore_unaligned, 
-                                                         max_allowed_cassette_side_dist = options.max_allowed_cassette_side_dist)
+                                                         max_allowed_cassette_side_dist = options.max_allowed_cassette_side_dist, 
+                                                         quiet = (options.verbosity_level==0))
 
     ### MAYBE-TODO some kind of metadata parsing?  If so, copy relevant options and code from mutant_count_alignments.py.
     # TODO do we want to deal with metadata in the new IB+Carette pipeline? How?

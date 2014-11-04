@@ -712,20 +712,32 @@ class Insertional_mutant():
         else:
             return False
 
-    def decide_and_check_position(self, max_allowed_dist=0):
+    def decide_and_check_position(self, max_allowed_dist=0, ratio_to_ignore=100, quiet=False):
         """ Set self.position to be the highest-count DEFINED position; check that all positions are within max_allowed_dist of it. 
+
+        If a defined position isn't within max_allowed_dist of the main position:
+         - if its readcount is ratio_to_ignore times lower than that of the main position, 
+            REMOVE IT and decrease total/perfect readcounts appropriately
+         - otherwise raise an exception.
         """
         if not self.sequences_counts_positions_errors:
             self.position = SPECIAL_POSITIONS.unknown
             return
-        main_seq, (_, main_pos, _) = min(self.sequences_counts_positions_errors.items(), 
-                                         key = lambda (s, (c, p, e)): (p in SPECIAL_POSITIONS.all_undefined, -c, e, s))
+        main_seq, (main_count, main_pos, main_Nerr) = min(self.sequences_counts_positions_errors.items(), 
+                                             key = lambda (s, (c, p, e)): (p in SPECIAL_POSITIONS.all_undefined, -c, e, s))
         self.position = main_pos
         for seq, (count, pos, N_err) in self.sequences_counts_positions_errors.items():
             if pos not in SPECIAL_POSITIONS.all_undefined:
                 if not get_position_distance(main_pos, pos, ignore_strand=False) <= max_allowed_dist:
-                    raise MutantError("Different cassette-side position in same mutant! (IB %s) %s %s, %s %s"%(self.IB, 
-                                                                                               main_pos, main_seq, pos, seq))
+                    if count*ratio_to_ignore <= main_count:
+                        del self.sequences_counts_positions_errors[seq]
+                        self.total_read_count -= count
+                        if N_err==0:    self.perfect_read_count -= count
+                    else:
+                        if not quiet:
+                            print ("Warning: Different cassette-side position in same mutant! REMOVING MUTANT. IB %s, "%self.IB 
+                                   +" %s %s %s reads, %s %s %s reads"%(main_pos, main_seq, main_count, pos, seq, count))
+                        return True
 
     def update_gene_info(self, gene, orientation, gene_feature):
         """ Update gene/orientation/feature: if both are the same or one is unknown, keep known; if different, raise error.
@@ -1571,7 +1583,7 @@ class Insertional_mutant_pool_dataset():
             else:
                 raise MutantError("Parsing seq/aln files in parallel - inconsistent finished states! "
                                   +"(If finished: %s %s, %s %s, %s %s)"%(file1_fastq, if_finished_1, 
-                                                                         file2_fasta, if_finished_2, file3_fastq, if_finished_3))
+                                                                         file2_sam, if_finished_2, file3_sam, if_finished_3))
         # TODO unit-tests! There are some in experiments/arrayed_library/internal_barcode_processing/code/clustering_tools.py for a similar function - test__parse_3seq_parallel
 
     # TODO TODO TODO need function to deal with IB-only deepseq reads!  How do we want to handle those?  As multi-dataset mutants?  Or add some new functionality?  How should it interact with the RISCC data?  Does it matter which of the datasets is read in first?
@@ -1579,7 +1591,7 @@ class Insertional_mutant_pool_dataset():
 
     def add_RISCC_alignment_files_to_data(self, cassette_side_flank_aligned_file, genome_side_aligned_file, IB_fastq_file, 
                                           IB_cluster_file=None, best_genome_side_only=False, ignore_unaligned=False, 
-                                          max_allowed_cassette_side_dist=1):
+                                          max_allowed_cassette_side_dist=1, quiet=False):
         """ Add paired-end RISCC reads to dataset mutants, based on IB clustering.
 
         Input files:
@@ -1661,8 +1673,12 @@ class Insertional_mutant_pool_dataset():
                     mutant.add_RISCC_read(genome_side_aln.read.seq, genome_side_position, N_errors, read_count=1)
                 # MAYBE-TODO if ignore_unaligned is True, do we still want to keep a count of unaligned seqs somehow?
 
+        IBs_to_remove = []
         for mutant in self:
-            mutant.decide_and_check_position(max_allowed_cassette_side_dist)
+            if_remove = mutant.decide_and_check_position(max_allowed_cassette_side_dist, quiet=quiet)
+            if if_remove:   IBs_to_remove.append(mutant.IB)
+        for IB in IBs_to_remove:
+            self.remove_mutant(IB)
 
         # TODO do we want to add different read category counts to the summary, or make that stuff properties?
         # MAYBE-TODO it might be good to just generate two separate mutant-sets, normal and cassette, with an option called separate_cassette or something, and print them to separate files - but that's more complicated, and right now I don't have the setup for a single dataset having multiple mutant-sets (although I guess I will have to eventually, for removed mutants etc). Right now I do it in mutant_count_alignments.py, which works but there's a lot of code repetition...
@@ -2568,15 +2584,15 @@ class Testing_Insertional_mutant(unittest.TestCase):
         alnAAT = Fake_HTSeq_aln(seq='AAT', optional_field_data={'NM':0})
         mutant = Insertional_mutant()
         assert mutant.position == SPECIAL_POSITIONS.unknown
-        mutant.decide_and_check_position()
+        assert not mutant.decide_and_check_position(quiet=True)
         assert mutant.position == SPECIAL_POSITIONS.unknown
         mutant.add_read(alnAAA, position0)
-        mutant.decide_and_check_position()
+        assert not mutant.decide_and_check_position(quiet=True)
         assert mutant.position == position0
         # can always add undefined positions
         for curr_position in SPECIAL_POSITIONS.all_undefined:
             mutant.add_read(alnAAT, curr_position, 10)
-            mutant.decide_and_check_position()
+            assert not mutant.decide_and_check_position(quiet=True)
             assert mutant.position == position0
         # adding positions that don't match the first one gives an error
         # (re-making mutant in each iteration here, since each bad position gets added BEFORE being checked)
@@ -2584,36 +2600,36 @@ class Testing_Insertional_mutant(unittest.TestCase):
             mutant = Insertional_mutant()
             mutant.add_read(alnAAA, position0)
             mutant.add_read(alnAAT, curr_position)
-            self.assertRaises(MutantError, mutant.decide_and_check_position)
+            assert mutant.decide_and_check_position(quiet=True) == True
         # but if I allow some distance, position_2bp_away can be okay, 
         #  and the main position switches to that and back depending on read counts.
         for max_allowed_dist in (2, 5, 10):
             mutant = Insertional_mutant()
             mutant.add_read(alnAAA, position0, 2)
             mutant.add_read(alnAAT, position_2bp_away, 1)
-            mutant.decide_and_check_position(max_allowed_dist)
+            assert not mutant.decide_and_check_position(max_allowed_dist, quiet=True)
             assert mutant.position == position0
             mutant.add_read(alnAAT, position_2bp_away, 2)
-            mutant.decide_and_check_position(max_allowed_dist)
+            assert not mutant.decide_and_check_position(max_allowed_dist, quiet=True)
             assert mutant.position == position_2bp_away
             mutant.add_read(alnAAA, position0, 2)
-            mutant.decide_and_check_position(max_allowed_dist)
+            assert not mutant.decide_and_check_position(max_allowed_dist, quiet=True)
             assert mutant.position == position0
-            self.assertRaises(MutantError, mutant.decide_and_check_position, 0)
+            assert mutant.decide_and_check_position(0, quiet=True) == True
         for max_allowed_dist in (0, 1):
             mutant = Insertional_mutant()
             mutant.add_read(alnAAA, position0)
             mutant.add_read(alnAAT, position_2bp_away)
-            self.assertRaises(MutantError, mutant.decide_and_check_position, max_allowed_dist)
-    # TODO finish this testing!!
+            assert mutant.decide_and_check_position(max_allowed_dist, quiet=True) == True
         # you can also make a mutant with a missing position and then add whatever position you want later
         for special_position in SPECIAL_POSITIONS.all_undefined:
             for curr_position in (position0, position_diff_chrom, position_diff_strand, position_10bp_away, position_2bp_away):
                 mutant = Insertional_mutant()
                 mutant.add_read(alnAAA, special_position, 10)
                 mutant.add_read(alnAAT, curr_position, 1)
-                mutant.decide_and_check_position()
+                assert not mutant.decide_and_check_position(quiet=True)
                 assert mutant.position == curr_position
+        # TODO add test for ratio_to_ignore=100!
 
     def test__update_gene_info(self):
         mutant = Insertional_mutant(insertion_position=Insertion_position('chr','+',position_before=3))
@@ -2995,9 +3011,10 @@ class Testing_Insertional_mutant_pool_dataset(unittest.TestCase):
         infiles = ['test_data/INPUT_RISCC2-alignment-cassette-side.sam'] + infiles[1:]
         dataset = Insertional_mutant_pool_dataset('3prime', 'outward')
         for dist in (1, 2, 5, 10, 100):
-            dataset.add_RISCC_alignment_files_to_data(*infiles, max_allowed_cassette_side_dist=dist)
+            dataset.add_RISCC_alignment_files_to_data(*infiles, max_allowed_cassette_side_dist=dist, quiet=True)
             assert len(dataset) == 1
-        self.assertRaises(MutantError, dataset.add_RISCC_alignment_files_to_data, *infiles, max_allowed_cassette_side_dist=0)
+            dataset.add_RISCC_alignment_files_to_data(*infiles, max_allowed_cassette_side_dist=0, quiet=True)
+            assert len(dataset) == 0
         # TODO add more tests - but there's also a run-test for this.
         # TODO add more complicated stuff to input files! see comments in input files.
 
