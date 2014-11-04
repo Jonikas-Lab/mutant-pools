@@ -929,7 +929,10 @@ class Insertional_mutant():
         """
         positions_by_chrom_strand = defaultdict(list)
         # add the cassette-side position (single)
-        positions_by_chrom_strand[(self.position.chromosome, self.position.strand)].append(self.position.min_position)
+        try:
+            positions_by_chrom_strand[(self.position.chromosome, self.position.strand)].append(self.position.min_position)
+        except AttributeError:
+            pass
         # add all the genome-side read positions; skip unaligned ones.
         for read_data in self.RISCC_genome_side_aligned_reads.values():
             pos = read_data[0]
@@ -991,8 +994,10 @@ class Insertional_mutant():
         data_header = "(chrom strand pos gene orientation feature readcount perfect main_seq gene_name)".replace(' ','\t')
         ### print cassette-side position
         OUTPUT.write("Cassette-side_position::: %s\n"%data_header)
-        main_pos_fields = [self.position.chromosome, self.position.strand, self.position.full_position, self.gene, self.orientation, 
-                           self.gene_feature, self.total_read_count, self.perfect_read_count, self.get_main_sequence()[0]]
+        try:                    main_pos_fields = [self.position.chromosome, self.position.strand, self.position.full_position] 
+        except AttributeError:  main_pos_fields = [self.position, '?', '?'] 
+        main_pos_fields += [self.gene, self.orientation, self.gene_feature, 
+                            self.total_read_count, self.perfect_read_count, self.get_main_sequence()[0]]
         try:                    main_pos_fields.append(self.gene_annotation[0])
         except AttributeError:  main_pos_fields.append('-')
         OUTPUT.write('\t'.join([str(x) for x in main_pos_fields]) + '\n')
@@ -1331,17 +1336,24 @@ class Dataset_summary_data():
     def strand_read_counts(self):
         strand_dict = {'+': 0, '-': 0}
         for m in self.dataset:
-            strand_dict[m.position.strand] += m.read_info(self.dataset_name).total_read_count
+            try:                    strand_dict[m.position.strand] += m.read_info(self.dataset_name).total_read_count
+            except AttributeError:  pass
         return strand_dict
 
     def reads_in_chromosome(self, chromosome):
         """ Return total number of reads in given chromosome."""
         return sum(m.read_info(self.dataset_name).total_read_count 
-                   for m in self.dataset if m.position.chromosome==chromosome)
+                   for m in self.dataset if m.position not in SPECIAL_POSITIONS.all_undefined and m.position.chromosome==chromosome)
 
     @property
     def all_chromosomes(self):
-        return set(m.position.chromosome for m in self.dataset if m.read_info(self.dataset_name).total_read_count)
+        chromosome_set = set()
+        for m in self.dataset:
+            if m.read_info(self.dataset_name).total_read_count:
+                try:                    chromosome_set.add(m.position.chromosome)
+                except AttributeError:  pass
+        return chromosome_set
+
     @property
     def cassette_chromosomes(self):
         return set(chrom for chrom in self.all_chromosomes if is_cassette_chromosome(chrom))
@@ -1396,7 +1408,7 @@ class Dataset_summary_data():
     def mutants_in_chromosome(self, chromosome):
         """ Return total number of mutants in given chromosome."""
         return sum(1 for m in self.dataset if m.read_info(self.dataset_name).total_read_count 
-                   and m.position.chromosome==chromosome)
+                   and m.position not in SPECIAL_POSITIONS.all_undefined and m.position.chromosome==chromosome)
 
     def merged_gene_feature_counts(self, merge_boundary_features=True, merge_confusing_features=False):
         """ Return (gene_feature,count) list, biologically sorted, optionally with all "boundary" features counted as one.
@@ -2210,8 +2222,11 @@ class Insertional_mutant_pool_dataset():
 
         ### for each mutant, print the mutant data line (different for normal and multi-datasets)
         for mutant in sorted_mutants:
-            mutant_data = [mutant.position.chromosome, mutant.position.strand, 
-                           mutant.position.min_position, mutant.position.full_position]
+            try:
+                mutant_data = [mutant.position.chromosome, mutant.position.strand, 
+                               mutant.position.min_position, mutant.position.full_position]
+            except AttributeError:
+                mutant_data = [mutant.position, '?', '?', '?']
             mutant_data += [mutant.total_read_count, mutant.perfect_read_count]
             mutant_data += [mutant.RISCC_max_confirmed_distance(), 
                             mutant.RISCC_N_confirming_seqs(), mutant.RISCC_N_non_confirming_seqs()]
