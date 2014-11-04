@@ -62,8 +62,12 @@ def define_option_parser():
     parser.add_option('-U', '--ignore_unaligned', action="store_true", default=False,
                       help="Don't process/count unaligned or multi-aligned genome-side reads (Default %default).")
     parser.add_option('-D', '--max_allowed_cassette_side_dist', type='int', default=1, metavar='X', 
-                      help="Allow up to X bp distance between cassette-side reads in the same mutant. "
-                          +"If distance exceeds X, raise an error. (Default %default).")
+                      help="Allow up to X bp distance between cassette-side positions in the same mutant. "
+                          +"If distance exceeds X, see -R option. (Default %default).")
+    parser.add_option('-R', '--max_cassette_side_ratio_to_ignore', type='int', default=100, metavar='X', 
+                      help="If a cassette-side position isn't within the -D allowed distance, then if it has R times fewer reads "
+                          +"than the main position, it is removed; otherwise the entire mutant is removed and a warning is printed. "
+                          +"(Default %default).")
 
     # gene-finding and gene-annotation options 
     parser.add_option('-A', '--gene_annotation_folder', default='None', metavar='FOLDER', 
@@ -154,11 +158,12 @@ def main(outfile, options):
                                                                                  options.relative_read_direction)
     ### parse input files and store data - the add_RISCC_alignment_files_to_data function here does pretty much all the work!
     all_alignment_data.add_RISCC_alignment_files_to_data(options.casette_side_reads, options.genome_side_reads, 
-                                                         options.internal_barcode_reads, options.internal_barcode_clusters, 
-                                                         best_genome_side_only = options.best_genome_side_only, 
-                                                         ignore_unaligned = options.ignore_unaligned, 
-                                                         max_allowed_cassette_side_dist = options.max_allowed_cassette_side_dist, 
-                                                         quiet = (options.verbosity_level==0))
+                                                     options.internal_barcode_reads, options.internal_barcode_clusters, 
+                                                     best_genome_side_only = options.best_genome_side_only, 
+                                                     ignore_unaligned = options.ignore_unaligned, 
+                                                     max_allowed_cassette_side_dist = options.max_allowed_cassette_side_dist, 
+                                                     max_cassette_side_ratio_to_ignore = options.max_cassette_side_ratio_to_ignore, 
+                                                     quiet = (options.verbosity_level==0))
 
     ### MAYBE-TODO some kind of metadata parsing?  If so, copy relevant options and code from mutant_count_alignments.py.
     # TODO do we want to deal with metadata in the new IB+Carette pipeline? How?

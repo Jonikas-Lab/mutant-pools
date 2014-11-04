@@ -1603,7 +1603,8 @@ class Insertional_mutant_pool_dataset():
 
     def add_RISCC_alignment_files_to_data(self, cassette_side_flank_aligned_file, genome_side_aligned_file, IB_fastq_file, 
                                           IB_cluster_file=None, best_genome_side_only=False, ignore_unaligned=False, 
-                                          max_allowed_cassette_side_dist=1, quiet=False):
+                                          max_allowed_cassette_side_dist=1, max_cassette_side_ratio_to_ignore=100, 
+                                          quiet=False):
         """ Add paired-end RISCC reads to dataset mutants, based on IB clustering.
 
         Input files:
@@ -1621,6 +1622,15 @@ class Insertional_mutant_pool_dataset():
           highest confirmed distance.  If ignore_unaligned, don't add unaligned/multi-aligned genome-side reads to mutants at all.
         Make sure that for each mutant, all the cassette-side positions are within max_allowed_cassette_side_dist bp of the
           main position (highest-readcount non-undefined one) - raise exception if not.
+
+        There may be some cases where one mutant has cassette-side reads with different positions (despite having the same IB). 
+        In those cases, there are three options:
+         - variant positions within max_allowed_cassette_side_dist bp of the most common position are allowed to remain
+         - variant positions that don't meet that criterion, but have at least max_cassette_side_ratio_to_ignore times fewer reads
+            than the most common position, are removed, and the total/perfect readcounts are decreased to match
+            (but the matching genome-side reads from those reads remain, since there's no easy way of removing them)
+         - if there's a variant position that doesn't meet either of these criteria, the entire mutant is removed, 
+            and a warning is printed, unless quiet is True.
     
         Function goes over the fastq and two aligned files in parallel. 
         """
@@ -1687,7 +1697,8 @@ class Insertional_mutant_pool_dataset():
 
         IBs_to_remove = []
         for mutant in self:
-            if_remove = mutant.decide_and_check_position(max_allowed_cassette_side_dist, quiet=quiet)
+            if_remove = mutant.decide_and_check_position(max_allowed_cassette_side_dist, 
+                                                         ratio_to_ignore=max_cassette_side_ratio_to_ignore, quiet=quiet)
             if if_remove:   IBs_to_remove.append(mutant.IB)
         for IB in IBs_to_remove:
             self.remove_mutant(IB)
