@@ -1669,16 +1669,19 @@ class Insertional_mutant_pool_dataset():
 
         for (readname, IB_seq, cassette_side_aln, genome_side_aln) in self._parse_3files_parallel(
                                             IB_fastq_file, cassette_side_flank_aligned_file, genome_side_aligned_file):
-            try:                IB_centroid_seq = IB_seq_to_centroid[IB_seq]
-            except NameError:   IB_centroid_seq = IB_seq
-            except KeyError:    raise MutantError("IB seq %s not found in cluster dict!"%IB_seq)
-            mutant = self.get_mutant(IB_centroid_seq)
             # get the cassette insertion position (as an Insertion_position object)
             # MAYBE-TODO instead of generating cassette_side_position all the time, even with multiple identical reads, 
             #  check if seq is already present in mutant, or something?  To save time.
             cassette_side_position = get_insertion_pos_from_flanking_region_pos(cassette_side_aln, self.summary.cassette_end, 
                                                                     self.summary.relative_read_direction, immutable_position=True)
-            # mutant.add_read checks that the position is consistent with mutant's previous position.
+            if ignore_unaligned and cassette_side_position in SPECIAL_POSITIONS.all_undefined:
+                continue
+                # TODO should probably still count it
+            # grab mutant based on IB (clustered or not)
+            try:                IB_centroid_seq = IB_seq_to_centroid[IB_seq]
+            except NameError:   IB_centroid_seq = IB_seq
+            except KeyError:    raise MutantError("IB seq %s not found in cluster dict!"%IB_seq)
+            mutant = self.get_mutant(IB_centroid_seq)
             mutant.add_read(cassette_side_aln, cassette_side_position, read_count=1, dataset_name=None)
             # Parse the genome-side alignment result to figure out position; add that to the mutant
             # MAYBE-TODO make an option for the genome-side reads to be outward from the cassette? Unlikely to be needed.
@@ -1695,6 +1698,7 @@ class Insertional_mutant_pool_dataset():
                     mutant.add_RISCC_read(genome_side_aln.read.seq, genome_side_position, N_errors, read_count=1)
                 # MAYBE-TODO if ignore_unaligned is True, do we still want to keep a count of unaligned seqs somehow?
 
+        # check that all mutants have consistent cassette positions; remove ones that don't.
         IBs_to_remove = []
         for mutant in self:
             if_remove = mutant.decide_and_check_position(max_allowed_cassette_side_dist, 
@@ -1702,6 +1706,7 @@ class Insertional_mutant_pool_dataset():
             if if_remove:   IBs_to_remove.append(mutant.IB)
         for IB in IBs_to_remove:
             self.remove_mutant(IB)
+            # TODO should probably count those
 
         # TODO do we want to add different read category counts to the summary, or make that stuff properties?
         # MAYBE-TODO it might be good to just generate two separate mutant-sets, normal and cassette, with an option called separate_cassette or something, and print them to separate files - but that's more complicated, and right now I don't have the setup for a single dataset having multiple mutant-sets (although I guess I will have to eventually, for removed mutants etc). Right now I do it in mutant_count_alignments.py, which works but there's a lot of code repetition...
