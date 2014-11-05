@@ -917,17 +917,18 @@ class Insertional_mutant():
             chroms.add(chrom)
         return sum(1 for chrom in chroms if not is_cassette_chromosome(chrom))
             
-    def RISCC_N_distinct_positions(self, max_distance=MAX_POSITION_DISTANCE):
-        """ Return number of distinct insertion positions implied by RISCC data (genomic, cassette, and #chromosomes).
+    def RISCC_N_distinct_regions(self, max_distance=MAX_POSITION_DISTANCE):
+        """ Return number of distinct insertion regions implied by RISCC data (genomic, cassette, and #chromosomes).
 
-        The output is a 3-tuple giving the number of distinct genome and cassette positions, 
-         and the number of distinct non-cassette chromosomes the positions are in.
+        The output is a 3-tuple giving the number of distinct genome and cassette regions, 
+         and the number of distinct non-cassette chromosomes the regions are in.
         Positions on different chromosomes/strands are always counted as distinct; positions on same chromosome/strand are 
-         counted as distinct if the distance between them is >=max_distance (THIS IS SLIGHTLY ROUGH).
+         counted as distinct regions if the distance between them is >=max_distance (THIS IS SLIGHTLY ROUGH).
         
-        Data used to generate positions includes the cassette-side position (single) and all the genome-side RISCC read positions. 
+        Data used to generate the #regions includes the cassette-side position (single) and all the genome-side RISCC positions. 
         Unaligned reads are ignored.
         """
+        # TODO add options for minimum #seqs and #reads to count a region as valid!
         positions_by_chrom_strand = defaultdict(list)
         # add the cassette-side position (single)
         try:
@@ -939,19 +940,19 @@ class Insertional_mutant():
             pos = read_data[0]
             try:                    positions_by_chrom_strand[(pos.chromosome, pos.strand)].append(pos.min_position)
             except AttributeError:  continue
-        # count total number of dictinct positions - different chromosomes or strands, or distance > max_distance
-        total_distinct_positions_genome = 0
-        total_distinct_positions_cassette = 0
+        # count total number of dictinct regions - different chromosomes or strands, or distance > max_distance
+        total_distinct_regions_genome = 0
+        total_distinct_regions_cassette = 0
         # for each chromosome, go over all positions and only count ones every MAX_POSITION_DISTANCE as distinct
         for chrom_strand, positions in positions_by_chrom_strand.items():
             positions.sort()
-            distinct_positions = [positions[0]]
+            distinct_regions = [positions[0]]
             for pos in positions[1:]:
-                if (pos-distinct_positions[-1]) > max_distance:
-                    distinct_positions.append(pos)
-            if is_cassette_chromosome(chrom_strand[0]):     total_distinct_positions_cassette += len(distinct_positions)
-            else:                                           total_distinct_positions_genome += len(distinct_positions)
-        return total_distinct_positions_genome, total_distinct_positions_cassette
+                if (pos-distinct_regions[-1]) > max_distance:
+                    distinct_regions.append(pos)
+            if is_cassette_chromosome(chrom_strand[0]):     total_distinct_regions_cassette += len(distinct_regions)
+            else:                                           total_distinct_regions_genome += len(distinct_regions)
+        return total_distinct_regions_genome, total_distinct_regions_cassette
 
     def RISCC_max_confirmed_distance(self, max_distance=MAX_POSITION_DISTANCE):
         """ Return the distance between the cassette-side read and the furthest-away same-area genome-side read.
@@ -987,7 +988,7 @@ class Insertional_mutant():
         """
         ### print summary line
         # TODO is that a useful summary?  Is it confusing that the casette-side read isn't included in the read numbers?
-        N_distinct_genome, N_distinct_cassette = self.RISCC_N_distinct_positions(max_distance)
+        N_distinct_genome, N_distinct_cassette = self.RISCC_N_distinct_regions(max_distance)
         OUTPUT.write(" * %s distinct genomic regions (on %s chromosomes; %s unique positions), "%(N_distinct_genome, 
                                                                  self.RISCC_N_genomic_chromosomes, self.RISCC_N_genomic_seqs)
                      +"plus %s distinct cassette regions (%s unique positions) and %s unaligned/multi-aligned seqs:\n"%(
@@ -2278,9 +2279,9 @@ class Insertional_mutant_pool_dataset():
         ### Quick summary
         N_total = len(self)
         # using sum because you can't do len on generators
-        N_single_genomic = sum(1 for m in self if m.RISCC_N_distinct_positions(max_distance)[0]==1)
+        N_single_genomic = sum(1 for m in self if m.RISCC_N_distinct_regions(max_distance)[0]==1)
         N_single_chrom = sum(1 for m in self if m.RISCC_N_genomic_chromosomes==1)
-        N_cassette = sum(1 for m in self if m.RISCC_N_distinct_positions(max_distance)[1]>0)
+        N_cassette = sum(1 for m in self if m.RISCC_N_distinct_regions(max_distance)[1]>0)
         OUTPUT.write("# %s mutants total; %s have one genomic location; "%(N_total, 
                                                                            value_and_percentages(N_single_genomic, [N_total]))
                      +"%s have locations on only one genomic chromosome; "%(value_and_percentages(N_single_chrom, [N_total]))
