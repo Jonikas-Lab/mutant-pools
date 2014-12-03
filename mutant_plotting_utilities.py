@@ -50,16 +50,25 @@ def _get_chromosomes_by_type(all_chromosomes, include_scaffolds, include_cassett
     else:               return sum(chosen_chromosomes.values(), [])
 
 
-def _get_plotline_pos(middle_pos, total_width, total_N, N):
-    """ Divide a total_width centered at middle_pos into total_N sections, and return the left and right edge of the Nth section. """
-    width_per_plot = total_width/total_N
-    left_pos = middle_pos - total_width/2 + width_per_plot*N
-    right_pos = middle_pos - total_width/2 + width_per_plot*(N+1)
+def _get_plotline_pos(middle_pos, total_width, relative_widths, total_N, N):
+    """ Give the left/right edge of the Nth section out of total_N with given relative_widths and total_width.
+
+    Divide a total_width centered at middle_pos into total_N sections (with
+    relative widths given by widths, or equal if None), and return the left and
+    right edge of the Nth section. 
+    """
+    if relative_widths is None: 
+        relative_widths = [1 for _ in range(total_N)]
+    real_width_sum = sum(relative_widths)
+    absolute_widths = [x/real_width_sum*total_width for x in relative_widths]
+    start_pos = middle_pos - total_width/2
+    left_pos = start_pos + sum(absolute_widths[:N])
+    right_pos = left_pos + absolute_widths[N]
     return left_pos, right_pos
 
 
 def mutant_positions_and_data(datasets=[], dataset_formats=0, density_plots=True, colors=None, names=None, maxes_per_base=None, 
-                              maxes_per_bin=None, strands=None, title='', bin_size=mutant_utilities.DEFAULT_BIN_SIZE, 
+                              maxes_per_bin=None, strands=None, widths=None, title='', bin_size=mutant_utilities.DEFAULT_BIN_SIZE, 
                               chromosome_lengths=None, interpolate=False, NaN_color='0.6', total_plotline_width=0.6, 
                               condense_colorbars=True, no_colorbars=False, 
                               include_scaffolds=False, include_cassette=False, include_other=False):
@@ -89,6 +98,7 @@ def mutant_positions_and_data(datasets=[], dataset_formats=0, density_plots=True
                 (use for values you wouldn't put on a 0-100% scale, like mutant positions, gene positions, etc)
      * strands is only needed for mutant datasets - each mutant dataset will be converted to a chromosome:position_list dict, 
         taking all mutants if the strands value is None, or only +strand/-strand/opposite-tandem mutants if it's '+'/'-'/'both'.
+     * widths are the relative widths of the plots - they will all add up to total_plotline_width. If None, all will be equal.
      * The names values are used as labels for the legend (if density=False) or colorbar (if density=True); 
         if '' is given, that dataset won't be included in the legend or won't have a colorbar
          (use for cases with multiple copies of similar datasets - they should use the same color as a labeled one!)
@@ -173,7 +183,7 @@ def mutant_positions_and_data(datasets=[], dataset_formats=0, density_plots=True
         # plot data for each chromosome
         for chr_N,chromosome in enumerate(all_chromosomes):
             chromosome_length = chromosome_lengths[chromosome]
-            left_pos, right_pos = _get_plotline_pos(chr_N, total_plotline_width, len(all_datasets_and_info), N)
+            left_pos, right_pos = _get_plotline_pos(chr_N, total_plotline_width, widths, len(all_datasets_and_info), N)
             # if we're not doing a density plot, just plot the positions as lines
             if not density_plot:
                 mplt.vlines(chr_N, left_pos, chromosome_length)
