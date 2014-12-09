@@ -889,9 +889,34 @@ class Insertional_mutant():
         """
         return len(self.RISCC_genome_side_aligned_reads) - self.RISCC_N_confirming_seqs(max_distance)
 
+    def RISCC_N_confirming_reads(self, max_distance=MAX_POSITION_DISTANCE):
+        """ Return the number of aligned genome-side READS that confirm the cassette-side position.
+
+        ("Confirm" means same chromosome, consistent strand, and at most max_distance away)
+        """
+        N = 0
+        for read_data in self.RISCC_genome_side_aligned_reads.values():
+            # skip non-aligned reads; check aligned reads for confirming.
+            try:                    chrom = read_data[0].chromosome
+            except AttributeError:  continue
+            if self._if_confirming_read(read_data[0], max_distance):  
+                N += read_data[1]
+        return N
+
+    def RISCC_N_non_confirming_reads(self, max_distance=MAX_POSITION_DISTANCE):
+        """ Return the number of aligned genome-side READS that DON'T confirm the cassette-side position.
+
+        ("Confirm" means same chromosome, consistent strand, and at most max_distance away)
+        """
+        return sum(x[1] for x in self.RISCC_genome_side_aligned_reads.values()) - self.RISCC_N_confirming_reads(max_distance)
+
     @property
     def RISCC_N_unaligned_seqs(self):
         return len(self.RISCC_genome_side_unaligned_reads)
+
+    @property
+    def RISCC_N_aligned_seqs(self):
+        return len(self.RISCC_genome_side_aligned_reads)
 
     @property
     def RISCC_N_genomic_seqs(self):
@@ -905,7 +930,39 @@ class Insertional_mutant():
 
     @property
     def RISCC_N_cassette_seqs(self):
-        return len(self.RISCC_genome_side_aligned_reads) - self.RISCC_N_genomic_seqs
+        return self.RISCC_N_aligned_seqs - self.RISCC_N_genomic_seqs
+
+    @property
+    def RISCC_N_unaligned_reads(self):
+        return sum(x[1] for x in self.RISCC_genome_side_unaligned_reads.values())
+
+    @property
+    def RISCC_N_aligned_reads(self):
+        return sum(x[1] for x in self.RISCC_genome_side_aligned_reads.values())
+
+    @property
+    def RISCC_N_genomic_reads(self):
+        N = 0
+        for read_data in self.RISCC_genome_side_aligned_reads.values():
+            try:                    chrom = read_data[0].chromosome
+            except AttributeError:  continue
+            if not is_cassette_chromosome(chrom):
+                N += read_data[1]
+        return N
+
+    @property
+    def RISCC_N_cassette_reads(self):
+        return self.RISCC_N_aligned_reads - self.RISCC_N_genomic_reads
+
+    def RISCC_percent_confirming_seqs(self, max_distance=MAX_POSITION_DISTANCE):
+        """ % of unique genome-side sequences that confirm the cassette-side position (same chrom/strand, within max_distance).
+        """
+        return self.RISCC_N_confirming_seqs(max_distance) / self.RISCC_N_aligned_seqs * 100
+
+    def RISCC_percent_confirming_reads(self, max_distance=MAX_POSITION_DISTANCE):
+        """ % of genome-side READS that confirm the cassette-side position (same chrom/strand, within max_distance).
+        """
+        return self.RISCC_N_confirming_reads(max_distance) / self.RISCC_N_aligned_reads * 100
 
     @property
     def RISCC_N_genomic_chromosomes(self):
