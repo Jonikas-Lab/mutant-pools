@@ -1003,7 +1003,7 @@ def _adjust_feature_mutant_counts(feature_mutant_counts, ignore_UTR_introns=2, l
         feature_mutant_counts["three_prime_UTR"] = feature_mutant_counts.pop("3'UTR")
     return feature_mutant_counts
 
-def insertion_density_by_feature(dataset, feature_lengths, relative_to_all=False, add_line=False, exclude_multiple=False, 
+def insertion_density_by_feature(dataset, feature_lengths, relative_to=None, add_line=False, exclude_multiple=False, 
                                  separate_sense_antisense=True, show_both_for_all=True, feature_length_type=''):
     """ Plot a bar-chart of the average density of insertions in different gene features, for all genes combined. 
 
@@ -1016,8 +1016,10 @@ def insertion_density_by_feature(dataset, feature_lengths, relative_to_all=False
     If exclude_multiple is True, case where feature=MULTIPLE_SPLICE_VARIANTS are treated that way as well; 
      otherwise they're counted as a separate feature.
 
-    If relative_to_all is True, the y labels will be changed to the "all" bar is at 1, and the "all" category itself 
+    If relative_to is 'all', the y labels will be changed so the "all" bar is at 1, and the "all" category itself 
      won't be plotted (since it'll always be at 1); if add_line is True, a horizontal line will be added at 1.
+    Similarly if relative_to is 'intergenic'; the y labels will be changed to relative measures putting the intergenic density
+     at 1, and neither "intergenic" nor "all" will be plotted.
 
     If separate_sense_antisense is True, separate mutant counts by sense/antisense orientation compared to the gene,
       and plot them as two separate bar sets on the same graph (except for intergenic categories, which have no orientation);
@@ -1027,9 +1029,13 @@ def insertion_density_by_feature(dataset, feature_lengths, relative_to_all=False
     Feature_length_type will be used in the label to specify what kind of length was used (raw, mappable, etc), if given.
     """
     # include or exclude "MULTIPLE_SPLICE_VARIANTS" and "all" features depending on options.
+    allowed_relative_to_vals = ('all', 'intergenic', None)
+    if relative_to not in allowed_relative_to_vals:  
+        raise Exception("relative_to must be one of %s, not %s!"%(allowed_relative_to_vals, relative_to))
     if exclude_multiple:    features_printable = "all intergenic gene exon intron 5'UTR 3'UTR"
     else:                   features_printable = "all intergenic gene exon intron 5'UTR 3'UTR MULTIPLE_SPLICE_VARIANTS"
-    if relative_to_all:     features_printable = features_printable[4:]
+    if relative_to=='all':          features_printable = ' '.join(features_printable.split()[1:])
+    elif relative_to=='intergenic': features_printable = ' '.join(features_printable.split()[2:])
     features_order = features_printable.replace("5'", "five_prime_").replace("3'", "three_prime_").replace('exon','CDS').split()
     ### if not separating sense and antisense, just get the feature counts and densities and plot them as a single set of bars
     if not separate_sense_antisense:
@@ -1087,15 +1093,17 @@ def insertion_density_by_feature(dataset, feature_lengths, relative_to_all=False
     mplt.xlim(-0.6, len(features_order)-0.4)
     # save ylim, set it later because some of the stuff below can mess it up
     ymax = mplt.ylim()[1]
-    # add line at 1 if desired
-    if add_line:
-        overall_mutant_density_mapp = feature_mutant_counts['all']/feature_lengths['all']
-        mplt.hlines(overall_mutant_density_mapp, *mplt.xlim(), linestyles='dotted')
-    # if result should be relative to the "all" setting, just change the yticks and labels (and make ymax be min 1.5)
-    if relative_to_all:
+    # if result should be relative to all/intergenic, just change the yticks and labels (and make ymax be min 1.5)
+    if relative_to:
+        if relative_to=='all':
+            reference_mapp = feature_mutant_counts['all']/feature_lengths['all']
+        elif relative_to=='intergenic':
+            reference_mapp = feature_mutant_counts['intergenic']/feature_lengths['intergenic']
         yticks = [0,0.5,1,1.5, 2]
-        mplt.yticks([x*overall_mutant_density_mapp for x in yticks], yticks)
-        ymax = max(ymax, 1.5*overall_mutant_density_mapp)
+        mplt.yticks([x*reference_mapp for x in yticks], yticks)
+        if add_line:
+            mplt.hlines(reference_mapp, *mplt.xlim(), linestyles='dotted')
+        ymax = max(ymax, 1.5*reference_mapp)
     # otherwise the y scale is the number of mutants per base, so multiply by 1000 so it's per kb
     else:
         mplt.yticks(mplt.yticks()[0], [x*1000 for x in mplt.yticks()[0]])
@@ -1103,9 +1111,9 @@ def insertion_density_by_feature(dataset, feature_lengths, relative_to_all=False
     mplt.ylim(0, ymax)
     # set ylabel
     feature_length_info = ' '+feature_length_type if feature_length_type else ''
-    if relative_to_all:
-        mplt.ylabel('mutant density as fraction of overall mutant density\n(over%s feature length)'%feature_length_info, 
-                   horizontalalignment='center')
+    if relative_to:
+        mplt.ylabel('mutant density as fraction of %s mutant density\n(over%s feature length)'%(
+                        'overall' if relative_to=='all' else 'intergenic', feature_length_info), horizontalalignment='center')
     else:
         mplt.ylabel('average mutants per kb\nof%s feature length'%feature_length_info)
 
