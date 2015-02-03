@@ -494,10 +494,11 @@ def gene_mappability(mappability_by_flanking_region, genefile=mutant_utilities.D
 
 def _get_chrom_either_strand(input_val):
     """ input_val can be either just a chrom string, or a (chrom,strand) tuple - return chrom. """
-    try:
-        if len(input_val)==2:   return input_val[0]
-        else:                   raise Exception("Input should be either (chrom,strand) or chrom, not %s!"%input_val)
-    except TypeError:           return input_val
+    try:                            
+        if len(input_val)==2:   input_val = input_val[0]
+    except TypeError:               raise Exception("Input should be either (chrom,strand) or chrom, not %s!"%input_val)
+    if not type(input_val)==str:    raise Exception("Input should be either (chrom,strand) or chrom, not %s!"%input_val)
+    return input_val
 
 
 def N_mutants_in_dataset(dataset, all_chromosomes=None):
