@@ -22,7 +22,7 @@ import HTSeq
 from BCBio import GFF
 # my modules
 from general_utilities import split_into_N_sets_by_counts, add_dicts_of_ints, sort_lists_inside_dict, invert_listdict_nodups, keybased_defaultdict, value_and_percentages, FAKE_OUTFILE, NaN, nan_func, merge_values_to_unique, pickle, unpickle
-from basic_seq_utilities import SEQ_ENDS, SEQ_STRANDS, SEQ_DIRECTIONS, SEQ_ORIENTATIONS, parse_fasta, parse_fastq, position_test_contains, position_test_overlap, chromosome_sort_key, get_seq_count_from_collapsed_header
+from basic_seq_utilities import SEQ_ENDS, SEQ_STRANDS, SEQ_DIRECTIONS, SEQ_ORIENTATIONS, name_seq_generator_from_fasta_fastq, position_test_contains, position_test_overlap, chromosome_sort_key, get_seq_count_from_collapsed_header
 from deepseq_utilities import check_mutation_count_by_optional_NM_field, get_HTSeq_optional_field, Fake_deepseq_objects
 from parse_annotation_file import parse_gene_annotation_file
 
@@ -1626,18 +1626,18 @@ class Insertional_mutant_pool_dataset():
         return curr_aln
 
     @classmethod
-    def _parse_3files_parallel(cls, file1_fastq, file2_sam, file3_sam):
+    def _parse_3files_parallel(cls, file1_fastx, file2_sam, file3_sam):
         """ Parse fastq+sam+sam files in parallel - generator yielding (name, seq1, aln2, aln3) tuples.
 
         It checks that the read names match (except for the paired-end side or anything else after a space).
         It assumes that file1 is the reference, and the other two files may have some extra names (will be ignored).
         """
-        generator1 = parse_fastq(file1_fastq)
+        generator1 = name_seq_generator_from_fasta_fastq(file1_fastx)
         generator2 = iter(HTSeq.SAM_Reader(file2_sam))
         generator3 = iter(HTSeq.SAM_Reader(file3_sam))
         if_finished_1, if_finished_2, if_finished_3 = False, False, False
         while True:
-            try:                    name1, seq1, qual1 = generator1.next()
+            try:                    name1, seq1 = generator1.next()
             except StopIteration:   if_finished_1, name1 = True, 'NOTHING_HERE'
             name1 = name1.split()[0]
             try:                    aln2 = cls._next_until_name_match(generator2, name1)
@@ -1653,7 +1653,7 @@ class Insertional_mutant_pool_dataset():
             # if file1 WASN'T finished but one of the others was, that's a problem!
             else:
                 raise MutantError("Parsing seq/aln files in parallel - inconsistent finished states! "
-                                  +"(If finished: %s %s, %s %s, %s %s)"%(file1_fastq, if_finished_1, 
+                                  +"(If finished: %s %s, %s %s, %s %s)"%(file1_fastx, if_finished_1, 
                                                                          file2_sam, if_finished_2, file3_sam, if_finished_3))
         # TODO unit-tests! There are some in experiments/arrayed_library/internal_barcode_processing/code/clustering_tools.py for a similar function - test__parse_3seq_parallel
 
