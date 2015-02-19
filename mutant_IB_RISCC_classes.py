@@ -736,8 +736,8 @@ class Insertional_mutant():
                     else:
                         if not quiet:
                             print ("Warning: Different cassette-side position in same mutant! REMOVING MUTANT. IB %s, "%self.IB 
-                                   +" %s %s %err %s reads, %s %s %err %s reads"%(main_pos, main_seq, main_Nerr, main_count, 
-                                                                                 pos, seq, count, N_err))
+                                   +" %s %s %serr %s reads, %s %s %err %s reads"%(main_pos, main_seq, main_Nerr, main_count, 
+                                                                                  pos, seq, count, N_err))
                         return True
 
     def update_gene_info(self, gene, orientation, gene_feature):
