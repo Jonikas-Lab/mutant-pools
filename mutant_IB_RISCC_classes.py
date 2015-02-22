@@ -2104,12 +2104,12 @@ class Insertional_mutant_pool_dataset():
         N_annotated = 0
         for mutant in self:
             annotation = self._get_annotation_for_gene(mutant.gene, gene_annotation_dict)
-            mutant.gene_annotation = joint_annotations
-            if joint_annotations:    N_annotated += 1
+            mutant.gene_annotation = annotation
+            if annotation:          N_annotated += 1
             for RISCC_data in mutant.RISCC_genome_side_aligned_reads.values():
                 annotation = self._get_annotation_for_gene(RISCC_data[3], gene_annotation_dict)
-                RISCC_data += joint_annotations
-                if joint_annotations:    N_annotated += 1
+                RISCC_data += annotation
+                if annotation:      N_annotated += 1
         if print_info:          print "Added %s annotations"%N_annotated
         elif not N_annotated:   print "Warning: No gene annotations found!"
         # LATER-TODO add this to the gene-info run-test case!
