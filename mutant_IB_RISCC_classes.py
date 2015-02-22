@@ -2000,7 +2000,8 @@ class Insertional_mutant_pool_dataset():
         #  Inclue both the main mutants, AND all the RISCC genome-side read sub-mutants!
         insertion_data_by_chromosome = defaultdict(list)
         for mutant in self:
-            insertion_data_by_chromosome[mutant.position.chromosome].append(mutant)
+            if mutant.position not in SPECIAL_POSITIONS.all_undefined:
+                insertion_data_by_chromosome[mutant.position.chromosome].append(mutant)
             for RISCC_read_data in mutant.RISCC_genome_side_aligned_reads.values():
                 insertion_data_by_chromosome[RISCC_read_data[0].chromosome].append(RISCC_read_data)
         self._find_genes_for_list(insertion_data_by_chromosome, genefile, detailed_features, N_run_groups, verbosity_level)
