@@ -461,7 +461,7 @@ def find_gene_by_pos_gff3(insertion_pos, chromosome_GFF_record, detailed_feature
     ### Pick genes to return - either all the genes that overlap the insertion, OR the closest gene on each side if none overlap
     if not gene_distances:
         nearest_genes = []
-    if min(zip(*gene_distances)[1]) == 0:
+    elif min(zip(*gene_distances)[1]) == 0:
         nearest_genes = [(gene,dist) for (gene,dist) in gene_distances if dist==0]
     elif nearest_genes_for_intergenic:
         nearest_gene_downstream = min(gene_distances, key = lambda (gene,dist): 0 if dist<0 else dist)
