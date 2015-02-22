@@ -1998,11 +1998,11 @@ class Insertional_mutant_pool_dataset():
         # Group all the mutants by chromosome, so that I can go over each chromosome in genefile separately
         #   instead of reading in all the data at once (which uses a lot of memory)
         #  Inclue both the main mutants, AND all the RISCC genome-side read sub-mutants!
-        insertion_data_by_chromosome = defaultdict(set)
+        insertion_data_by_chromosome = defaultdict(list)
         for mutant in self:
             insertion_data_by_chromosome[mutant.position.chromosome].add(mutant)
             for RISCC_read_data in mutant.RISCC_genome_side_aligned_reads.values():
-                insertion_data_by_chromosome[RISCC_read_data[0].chromosome].add(tuple(RISCC_read_data))
+                insertion_data_by_chromosome[RISCC_read_data[0].chromosome].append(RISCC_read_data)
         self._find_genes_for_list(insertion_data_by_chromosome, genefile, detailed_features, N_run_groups, verbosity_level)
 
     def _find_genes_for_list(self, insertion_data_by_chromosome, genefile, detailed_features=False, 
