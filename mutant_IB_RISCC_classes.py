@@ -1985,7 +1985,8 @@ class Insertional_mutant_pool_dataset():
         # TODO really I shouldn't be removing mutants outright, just noting them as removed or something...  In that case should they or should they not show up in "for m in self"?  Probably not - they should have a separate dictionary?
         # TODO should I keep track of removed reads, and print in summary?  MAYBE.
 
-    def find_genes_for_mutants(self, genefile, detailed_features=False, N_run_groups=3, verbosity_level=1):
+    def find_genes_for_mutants(self, genefile, detailed_features=False, nearest_genes_for_intergenic=False, 
+                               N_run_groups=3, verbosity_level=1):
         """ To each mutant in the dataset, add the gene it's in (look up gene positions for each mutant using genefile).
 
         ALSO add gene data to all the RISCC-genome-side-read mutants inside each mutant!
@@ -2006,10 +2007,11 @@ class Insertional_mutant_pool_dataset():
                 insertion_data_by_chromosome[mutant.position.chromosome].append(mutant)
             for RISCC_read_data in mutant.RISCC_genome_side_aligned_reads.values():
                 insertion_data_by_chromosome[RISCC_read_data[0].chromosome].append(RISCC_read_data)
-        self._find_genes_for_list(insertion_data_by_chromosome, genefile, detailed_features, N_run_groups, verbosity_level)
+        self._find_genes_for_list(insertion_data_by_chromosome, genefile, detailed_features, nearest_genes_for_intergenic, 
+                                  N_run_groups, verbosity_level)
 
     def _find_genes_for_list(self, insertion_data_by_chromosome, genefile, detailed_features=False, 
-                             N_run_groups=3, verbosity_level=1):
+                             nearest_genes_for_intergenic=False, N_run_groups=3, verbosity_level=1):
         # First get the list of all chromosomes in the file, WITHOUT reading it all into memory
         with open(genefile) as GENEFILE:
             GFF_limit_data = GFF.GFFExaminer().available_limits(GENEFILE)
@@ -2036,7 +2038,8 @@ class Insertional_mutant_pool_dataset():
                     for thing in insertion_data_by_chromosome[chromosome_record.id]:
                         if isinstance(thing, Insertional_mutant):  position = thing.position
                         else:                                      position = thing[0]
-                        gene_data = find_gene_by_pos_gff3(position, chromosome_record, detailed_features, quiet=(verbosity_level==0))
+                        gene_data = find_gene_by_pos_gff3(position, chromosome_record, detailed_features, 
+                                                          nearest_genes_for_intergenic, quiet=(verbosity_level==0))
                         if isinstance(thing, Insertional_mutant):  thing.gene, thing.orientation, thing.gene_feature, _ = gene_data
                         # TODO gene_data now includes distances from gene ends as the fourth thing - use that?
                         else:                                      thing += gene_data
