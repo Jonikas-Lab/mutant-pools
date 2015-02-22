@@ -2002,7 +2002,7 @@ class Insertional_mutant_pool_dataset():
         for mutant in self:
             insertion_data_by_chromosome[mutant.position.chromosome].add(mutant)
             for RISCC_read_data in mutant.RISCC_genome_side_aligned_reads.values():
-                insertion_data_by_chromosome[RISCC_read_data[0].chromosome].add(RISCC_read_data)
+                insertion_data_by_chromosome[RISCC_read_data[0].chromosome].add(tuple(RISCC_read_data))
         self._find_genes_for_list(insertion_data_by_chromosome, genefile, detailed_features, N_run_groups, verbosity_level)
 
     def _find_genes_for_list(self, insertion_data_by_chromosome, genefile, detailed_features=False, 
