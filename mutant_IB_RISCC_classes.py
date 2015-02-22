@@ -1102,8 +1102,8 @@ class Insertional_mutant():
         except AttributeError:  main_pos_fields = [self.position, '?', '?'] 
         main_pos_fields += [self.gene, self.orientation, self.gene_feature, 
                             self.total_read_count, self.perfect_read_count, self.get_main_sequence()[0]]
-        try:                    main_pos_fields.append(self.gene_annotation[0])
-        except AttributeError:  main_pos_fields.append('-')
+        try:                                    main_pos_fields.append(self.gene_annotation[0])
+        except (AttributeError, IndexError):    main_pos_fields.append('-')
         OUTPUT.write('\t'.join([str(x) for x in main_pos_fields]) + '\n')
         ### print lines for each of the RISCC genome-side reads
         # sort the RISCC reads by alignment position - happens automatically, since position is first on the list
