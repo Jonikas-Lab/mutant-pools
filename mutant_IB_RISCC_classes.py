@@ -999,15 +999,23 @@ class Insertional_mutant():
     def RISCC_N_cassette_reads(self):
         return self.RISCC_N_aligned_reads - self.RISCC_N_genomic_reads
 
-    def RISCC_percent_confirming_seqs(self, max_distance=MAX_POSITION_DISTANCE):
+    def RISCC_percent_confirming_seqs(self, max_distance=MAX_POSITION_DISTANCE, round_to_int=True):
         """ % of unique genome-side sequences that confirm the cassette-side position (same chrom/strand, within max_distance).
         """
-        return self.RISCC_N_confirming_seqs(max_distance) / self.RISCC_N_aligned_seqs * 100
+        if not self.RISCC_N_aligned_seqs:   return float('nan')
+        else:                               
+            percent = self.RISCC_N_confirming_seqs(max_distance) / self.RISCC_N_aligned_seqs * 100
+            if round_to_int:    percent = int(round(percent))
+            return percent
 
-    def RISCC_percent_confirming_reads(self, max_distance=MAX_POSITION_DISTANCE):
+    def RISCC_percent_confirming_reads(self, max_distance=MAX_POSITION_DISTANCE, round_to_int=True):
         """ % of genome-side READS that confirm the cassette-side position (same chrom/strand, within max_distance).
         """
-        return self.RISCC_N_confirming_reads(max_distance) / self.RISCC_N_aligned_reads * 100
+        if not self.RISCC_N_aligned_reads:  return float('nan')
+        else:
+            percent = self.RISCC_N_confirming_reads(max_distance) / self.RISCC_N_aligned_reads * 100
+            if round_to_int:    percent = int(round(percent))
+            return percent
 
     @property
     def RISCC_N_genomic_chromosomes(self):
