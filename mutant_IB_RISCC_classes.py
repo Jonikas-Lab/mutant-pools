@@ -2075,7 +2075,7 @@ class Insertional_mutant_pool_dataset():
         # make optional dictionaries containing the extra annotation data
         new_fields = []
         if gff_file_for_gene_names:
-            new_fields.append['transcript_names']
+            new_fields.append('transcript_names')
             genename_dict = defaultdict(set)
             for line in open(gff_file_for_gene_names):
                 if line.startswith('#'):    continue
@@ -2088,7 +2088,7 @@ class Insertional_mutant_pool_dataset():
                 except KeyError:    pass
             genename_dict = defaultdict(set, {key:','.join(vals) for (key,vals) in genename_dict.items()})
         if defline_file:
-            new_fields.append['defline']
+            new_fields.append('defline')
             defline_dict = defaultdict(lambda: '-')
             for line in open(defline_file):
                gene, defline = line.strip().split('\t')
@@ -2097,7 +2097,7 @@ class Insertional_mutant_pool_dataset():
                  raise Exception("multiple deflines for %s!"%gene)
                defline_dict[gene] = defline
         if synonyms_file:
-            new_fields.append['gene_synonyms']
+            new_fields.append('gene_synonyms')
             synonym_dict = defaultdict(set)
             for line in open(synonyms_file):
                fields = line.strip().split()
