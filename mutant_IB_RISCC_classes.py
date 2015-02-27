@@ -2067,14 +2067,57 @@ class Insertional_mutant_pool_dataset():
                 else:                                      thing += gene_data
 
 
-    def _get_gene_annotation_dict(self, annotation_file, if_standard_Phytozome_file=None, custom_header=None, print_info=False):
+    def _get_gene_annotation_dict(self, annotation_file, if_standard_Phytozome_file=None, custom_header=None, 
+                                  gff_file_for_gene_names=None, defline_file=None, synonyms_file=None, print_info=False):
         gene_annotation_dict, gene_annotation_header = parse_gene_annotation_file(annotation_file, 
                                                  standard_Phytozome_file=if_standard_Phytozome_file, header_fields=custom_header, 
                                                  strip_gene_fields_start='.t', verbosity_level=int(print_info))
+        # make optional dictionaries containing the extra annotation data
+        new_fields = []
+        if gff_file_for_gene_names:
+            new_fields.append['transcript_names']
+            genename_dict = defaultdict(set)
+            for line in open(gff_file_for_gene_names):
+                if line.startswith('#'):    continue
+                all_fields = line.strip().split('\t')
+                if all_fields[2] != 'mRNA': continue
+                data = all_fields[8]
+                fields = dict(x.split('=') for x in data.split(';'))
+                gene = fields['Name'].split('.t')[0]
+                try:                genename_dict[gene].add(fields['geneName'])
+                except KeyError:    pass
+            genename_dict = defaultdict(set, {key:','.join(vals) for (key,vals) in genename_dict.items()})
+        if defline_file:
+            new_fields.append['defline']
+            defline_dict = defaultdict(lambda: '-')
+            for line in open(defline_file):
+               gene, defline = line.strip().split('\t')
+               gene = gene.split('.t')[0]
+               if gene in defline_dict: 
+                 raise Exception("multiple deflines for %s!"%gene)
+               defline_dict[gene] = defline
+        if synonyms_file:
+            new_fields.append['gene_synonyms']
+            synonym_dict = defaultdict(set)
+            for line in open(synonyms_file):
+               fields = line.strip().split()
+               fields = [x.split('.t')[0] for x in fields]
+               synonym_dict[fields[0]].update(fields[1:])
+            synonym_dict = defaultdict(set, {key:','.join(vals) for (key,vals) in synonym_dict.items()})
+        # update gene_annotation_dict with the extra fields, if any were added
+        if new_fields:
+            gene_annotation_header = new_fields + gene_annotation_header
+            for (gene,ann) in gene_annotation_dict.items():
+                new_ann = []
+                if gff_file_for_gene_names:     new_ann.append(genename_dict[gene])
+                if defline_file:                new_ann.append(defline_dict[gene])
+                if synonyms_file:               new_ann.append(synonym_dict[gene])
+                gene_annotation_dict[gene] = new_ann + ann
         # store the annotation header in self.summary, for printing
         if gene_annotation_header:  self.gene_annotation_header = gene_annotation_header
         else:                       self.gene_annotation_header = 'GENE_ANNOTATION_DATA'
         return gene_annotation_dict
+        # TODO should probably test this?
 
     @staticmethod
     def _get_annotation_for_gene(gene, gene_annotation_dict):
@@ -2110,7 +2153,9 @@ class Insertional_mutant_pool_dataset():
         """ Add gene annotation to each mutant, based on annotation_file. See parse_gene_annotation_file doc for detail."""
         # add the annotation info to each mutant (or nothing, if gene has no annotation)
         # MAYBE-TODO should I even store gene annotation in each mutant, or just keep a separate per-gene dictionary to save space?
-        gene_annotation_dict = self._get_gene_annotation_dict(annotation_file, if_standard_Phytozome_file, custom_header, print_info)
+        # TODO add the new defline/gene-name/synonyms options to this! _get_gene_annotation_dict has them - add them to add_gene_annotation and to the command-line interface.
+        gene_annotation_dict = self._get_gene_annotation_dict(annotation_file, if_standard_Phytozome_file, custom_header, 
+                                                              print_info=print_info)
         # add the annotation info to each mutant (or nothing, if gene has no annotation) 
         N_annotated = 0
         for mutant in self:
