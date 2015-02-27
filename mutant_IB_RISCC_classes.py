@@ -425,12 +425,12 @@ def find_gene_by_pos_gff3(insertion_pos, chromosome_GFF_record, detailed_feature
      return a 4-tuple of geneID,
       orientation ('sense' if insertion_pos and gene are in the same direction, 'antisense' otherwise), 
       the name of the subfeature (exon/intron/UTR) Insertion_pos is in (or '?' if detailed_features is False),
-      and the distance from the upstream and downstream edge of the gene.
+      and the distance from the 5' and 3' edge of the gene.
      If Insertion_pos is on the edge of two features, subfeature will be 'X/Y'; if it's something more 
       unlikely/complicated, subfeature will be 'X/Y/Z??' and a warning will be printed to STDOUT.
     If multiple genes found, return data like this: "gene1 | gene2", "sense | antisense", "intron | CDS/4'UTR" and print warning.
 
-    If insertion_pos is not in a gene, return ('no_gene_found', '-', '-'), UNLESS nearest_genes_for_intergenic is True,
+    If insertion_pos is not in a gene, return ('no_gene_found', '-', '-', '-'), UNLESS nearest_genes_for_intergenic is True,
      then return a 4-tuple that's not quite the same as above: IDs of nearest upstream and downstream genes, 
       orientation of the insertion site vs the gene (upstream/downstream), 'intergenic' as the feature name, 
       and the distance from the nearest end of each gene - all fields will be ' | '-separated.
@@ -461,12 +461,15 @@ def find_gene_by_pos_gff3(insertion_pos, chromosome_GFF_record, detailed_feature
     ### Pick genes to return - either all the genes that overlap the insertion, OR the closest gene on each side if none overlap
     if not gene_distances:
         nearest_genes = []
-    elif min(zip(*gene_distances)[1]) == 0:
+    elif min(abs(dist) for (gene,dist) in gene_distances) == 0:
         nearest_genes = [(gene,dist) for (gene,dist) in gene_distances if dist==0]
     elif nearest_genes_for_intergenic:
-        nearest_gene_downstream = min(gene_distances, key = lambda (gene,dist): 0 if dist<0 else dist)
-        nearest_gene_upstream =   min(gene_distances, key = lambda (gene,dist): 0 if dist>0 else -dist)
-        nearest_genes = [nearest_gene_upstream, nearest_gene_downstream]
+        # note that sometimes there ARE no genes on one/both sides!
+        nearest_genes = []
+        genes_upstream =   [(gene,dist) for (gene,dist) in gene_distances if dist < 0]
+        genes_downstream = [(gene,dist) for (gene,dist) in gene_distances if dist > 0]
+        if genes_upstream:      nearest_genes.append(max(genes_upstream, key = lambda (gene,dist): dist))
+        if genes_downstream:    nearest_genes.append(min(genes_downstream, key = lambda (gene,dist): dist))
     else:
         nearest_genes = []
 
@@ -490,8 +493,8 @@ def find_gene_by_pos_gff3(insertion_pos, chromosome_GFF_record, detailed_feature
         #  - if insertion is inside gene, give distance to 5' end and 3' end, separated by a comma
         #  - if it's intergenic, just give the distance to the closest side of the gene (already calculated)
         if dist == 0:
-            dist1 = ins_start - gene_start
-            dist2 = gene_end - ins_end
+            dist1 = ins_end - gene_start
+            dist2 = gene_end - ins_start
             if gene.strand==1:  distances = '%s,%s'%(dist1,dist2)
             else:               distances = '%s,%s'%(dist2,dist1)
         else:                   distances = str(abs(dist))
@@ -583,7 +586,7 @@ def find_gene_by_pos_gff3(insertion_pos, chromosome_GFF_record, detailed_feature
                                   +"in gene %s!")%(ins_start, ins_end, inner_feature, gene_ID)) 
         
         # prepend whatever gene-level features (edge etc, or []) were found at the start to the full value
-        full_feature = '/'.join(features_basic+[inner_feature])
+        full_feature = '/'.join(features_basic + ([inner_feature] if inner_feature else []))
         gene_data_list.append([gene_ID, orientation, full_feature, distances])
 
     ### Return appropriate value
@@ -593,12 +596,12 @@ def find_gene_by_pos_gff3(insertion_pos, chromosome_GFF_record, detailed_feature
     # if single gene found, return its info
     elif len(gene_data_list) == 1:
         return gene_data_list[0]
-    # if multiple genes found, return data like this: "gene1 | gene2", "sense | antisense", "intron | CDS/4'UTR" and print warning
+    # if multiple genes found, return data like this: "gene1 & gene2", "sense & antisense", "intron & CDS/4'UTR",
+    #  except that the feature for intergenic insertions should be "intergenic" instead of "intergenic & intergenic".
     else: 
-        if not quiet:
-            print("Warning: Location \"%s\" matched multiple genes! %s"%(insertion_pos, ', '.join(zip(*gene_data_list)[0])))
-        return [MULTIPLE_GENE_JOIN.join(multiple_vals) for multiple_vals in zip(*gene_data_list)]
-    # TODO add unit tests, or write new run-tests (only the old version has them right now)
+        full_data = [MULTIPLE_GENE_JOIN.join(multiple_vals) for multiple_vals in zip(*gene_data_list)]
+        if full_data[2] == MULTIPLE_GENE_JOIN.join(['intergenic']*2):   full_data[2] = 'intergenic'
+        return full_data
 
 
 def find_gene_by_pos_simple(insertion_pos, chromosome_gene_pos_dict, allow_multiple_genes=False):
@@ -2638,6 +2641,69 @@ class Testing_position_functionality(unittest.TestCase):
                 _check_outputs(input_minus,'5prime', 'outward', start, '+', 'C')
                 _check_outputs(input_minus,'3prime', 'inward' , end,   '+', 'C')
                 _check_outputs(input_minus,'3prime', 'outward', start, '-', 'C')
+
+    def test__find_gene_by_pos_gff3(self):
+        with open('test_data/INPUT_gene-data-2_simple.gff3') as GENEFILE:
+            chromosome_records_simple = list(GFF.parse(GENEFILE))
+        assert len(chromosome_records_simple) == 1
+        chr_rec = chromosome_records_simple[0]
+        assert chr_rec.id == 'chrA'
+        # the three last args to find_gene_by_pos_gff3 are detailed_features, nearest_genes_for_intergenic, and quiet.
+        ### insertion in a gene, with/without details - should be the same regardless of nearest_genes_for_intergenic
+        # convenience function to check insertions in genes:
+        # - makes the position (actually multiple ones)
+        # - checks all possible values of side and of nearest_genes_for_intergenic
+        # - checks the version with and without detailed features (auto-generates the expected output without detailed features)
+        def _check_pos_in_gene(min_pos, strand, expected_output, chrom='chrA'):
+            basic_features = 'gene_edge/?' if 'gene_edge' in expected_output[2] else '?'
+            expected_output_basic_features = expected_output[:2] + [basic_features, expected_output[3]]
+            for make_full_pos in (lambda x: '%d-?'%x, lambda x: '?-%d'%(x+1), lambda x: '%s-%s'%(x,x+1)):
+                pos = Insertion_position('chrA', strand, full_position=make_full_pos(min_pos))
+                for either in (True,False):
+                    self.assertEquals(find_gene_by_pos_gff3(pos, chr_rec, True, either, True), expected_output)
+                    self.assertEquals(find_gene_by_pos_gff3(pos, chr_rec, False, either, True), expected_output_basic_features)
+        for (strand, orientation) in [('+', 'sense'), ('-', 'antisense')]:
+            _check_pos_in_gene(100, strand, ['gene1_plus', orientation, "gene_edge/mRNA_edge/5'UTR", '0,600'])
+            _check_pos_in_gene(130, strand, ['gene1_plus', orientation, "5'UTR",                    '30,570'])
+            _check_pos_in_gene(200, strand, ['gene1_plus', orientation, "5'UTR/CDS",                '100,500'])
+            _check_pos_in_gene(230, strand, ['gene1_plus', orientation, "CDS",                      '130,470'])
+            _check_pos_in_gene(300, strand, ['gene1_plus', orientation, "CDS/intron",               '200,400'])
+            _check_pos_in_gene(330, strand, ['gene1_plus', orientation, "intron",                   '230,370'])
+            _check_pos_in_gene(400, strand, ['gene1_plus', orientation, "CDS/intron",               '300,300'])
+            _check_pos_in_gene(500, strand, ['gene1_plus', orientation, "CDS",                      '400,200'])
+            _check_pos_in_gene(600, strand, ['gene1_plus', orientation, "CDS/3'UTR",                '500,100'])
+            _check_pos_in_gene(650, strand, ['gene1_plus', orientation, "3'UTR",                    '550,50'])
+            _check_pos_in_gene(700, strand, ['gene1_plus', orientation, "gene_edge/mRNA_edge/3'UTR", '600,0'])
+        for (strand, orientation) in [('+', 'antisense'), ('-', 'sense')]:
+            _check_pos_in_gene(1100, strand, ['gene2_minus', orientation, "gene_edge/mRNA_edge/CDS", '600,0'])
+            _check_pos_in_gene(1150, strand, ['gene2_minus', orientation, "CDS",                    '550,50'])
+            _check_pos_in_gene(1200, strand, ['gene2_minus', orientation, "CDS/intron",             '500,100'])
+            _check_pos_in_gene(1250, strand, ['gene2_minus', orientation, "intron",                 '450,150'])
+            _check_pos_in_gene(1300, strand, ['gene2_minus', orientation, "CDS/intron",             '400,200'])
+            _check_pos_in_gene(1350, strand, ['gene2_minus', orientation, "CDS",                    '350,250'])
+            _check_pos_in_gene(1400, strand, ['gene2_minus', orientation, "CDS/intron",             '300,300'])
+            _check_pos_in_gene(1450, strand, ['gene2_minus', orientation, "intron",                 '250,350'])
+            _check_pos_in_gene(1500, strand, ['gene2_minus', orientation, "CDS/intron",             '200,400'])
+            _check_pos_in_gene(1600, strand, ['gene2_minus', orientation, "CDS",                    '100,500'])
+            _check_pos_in_gene(1700, strand, ['gene2_minus', orientation, "gene_edge/mRNA_edge/CDS", '0,600'])
+        ### intergenic insertions - before a gene, between, after; with and without printing intergenic info
+        for orientation in '+-':
+          for make_full_pos in (lambda x: '%d-?'%x, lambda x: '?-%d'%(x+1)):
+            for either in (True,False):
+                [pos1, pos2, pos3, pos4] = [Insertion_position('chrA', orientation, full_position=make_full_pos(x)) 
+                                      for x in (50, 99, 1000, 2000)]
+                for pos in (pos1, pos2, pos3, pos4):
+                    self.assertEquals(find_gene_by_pos_gff3(pos, chr_rec, either, False, True),
+                                      [SPECIAL_GENE_CODES.not_found, '-', '-', '-'])
+                self.assertEquals(find_gene_by_pos_gff3(pos1, chr_rec, either, True, True),
+                                  ['gene1_plus', 'upstream', 'intergenic', '50'])
+                self.assertEquals(find_gene_by_pos_gff3(pos2, chr_rec, either, True, True),
+                                  ['gene1_plus', 'upstream', 'intergenic', '1'])
+                self.assertEquals(find_gene_by_pos_gff3(pos3, chr_rec, either, True, True), 
+                                  ['gene1_plus & gene2_minus', 'downstream & downstream', 'intergenic', '300 & 100'])
+                self.assertEquals(find_gene_by_pos_gff3(pos4, chr_rec, either, True, True),
+                                  ['gene2_minus', 'upstream', 'intergenic', '300'])
+        # LATER-TODO add tests for weird cases based on test_data/INPUT_gene-data-1_all-cases.gff3
 
 
 class Testing_Insertional_mutant(unittest.TestCase):
