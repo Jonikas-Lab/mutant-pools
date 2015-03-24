@@ -2149,13 +2149,14 @@ class Insertional_mutant_pool_dataset():
         # TODO update docstring!
         # TODO unit-test!
 
-    def add_gene_annotation(self, annotation_file, if_standard_Phytozome_file=None, custom_header=None, print_info=False):
+    def add_gene_annotation(self, annotation_file, if_standard_Phytozome_file=None, custom_header=None,
+                                  gff_file_for_gene_names=None, defline_file=None, synonyms_file=None, print_info=False):
         """ Add gene annotation to each mutant, based on annotation_file. See parse_gene_annotation_file doc for detail."""
         # add the annotation info to each mutant (or nothing, if gene has no annotation)
         # MAYBE-TODO should I even store gene annotation in each mutant, or just keep a separate per-gene dictionary to save space?
-        # TODO add the new defline/gene-name/synonyms options to this! _get_gene_annotation_dict has them - add them to add_gene_annotation and to the command-line interface.
+        # TODO add the new defline/gene-name/synonyms options to the command-line interface to make it match this!
         gene_annotation_dict = self._get_gene_annotation_dict(annotation_file, if_standard_Phytozome_file, custom_header, 
-                                                              print_info=print_info)
+                                                              gff_file_for_gene_names, defline_file, synonyms_file, print_info=print_info)
         # add the annotation info to each mutant (or nothing, if gene has no annotation) 
         N_annotated = 0
         for mutant in self:
