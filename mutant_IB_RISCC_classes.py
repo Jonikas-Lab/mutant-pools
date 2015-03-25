@@ -1104,9 +1104,9 @@ class Insertional_mutant():
         N_distinct_genome, N_distinct_cassette = self.RISCC_N_distinct_regions(max_distance)
         OUTPUT.write(" * IB %s: %s distinct genomic regions, %s cassette regions, plus %s unaligned/multi-aligned seqs."%(
             self.IB, N_distinct_genome, N_distinct_cassette, self.RISCC_N_unaligned_seqs)
-                     +"Cassette-side position is RISCC-confirmed to %s bp; %s%% of the genome-side reads are in the same region"%(
+                     +" Cassette-side position is RISCC-confirmed to %s bp; %s%% of the genome-side reads are in the same region"%(
                      self.RISCC_max_confirmed_distance(), self.RISCC_percent_confirming_reads(round_to_int=True))
-                     +"(%s are, %s are not).\n"%(self.RISCC_N_confirming_reads(), self.RISCC_N_non_confirming_reads()))
+                     +" (%s are, %s are not).\n"%(self.RISCC_N_confirming_reads(), self.RISCC_N_non_confirming_reads()))
         data_header = "(chrom strand pos gene orientation feature readcount perfect main_seq gene_name)".replace(' ','\t')
         ### print cassette-side position
         OUTPUT.write("Cassette-side_position::: %s\n"%data_header)
