@@ -1100,12 +1100,13 @@ class Insertional_mutant():
         """ Print RISCC detail: overall distinct position counts, cassette-side position, all genome-side reads/positions/counts.
         """
         ### print summary line
-        # TODO is that a useful summary?  Is it confusing that the casette-side read isn't included in the read numbers?
+        # TODO is that a useful summary?  Should we add more?  Maybe add % confirmed etc?
         N_distinct_genome, N_distinct_cassette = self.RISCC_N_distinct_regions(max_distance)
-        OUTPUT.write(" * %s distinct genomic regions (on %s chromosomes; %s unique positions), "%(N_distinct_genome, 
-                                                                 self.RISCC_N_genomic_chromosomes, self.RISCC_N_genomic_seqs)
-                     +"plus %s distinct cassette regions (%s unique positions) and %s unaligned/multi-aligned seqs:\n"%(
-                                                 N_distinct_cassette, self.RISCC_N_cassette_seqs, self.RISCC_N_unaligned_seqs))
+        OUTPUT.write(" * IB %s: %s distinct genomic regions, %s cassette regions, plus %s unaligned/multi-aligned seqs."%(
+            self.IB, N_distinct_genome, N_distinct_cassette, self.RISCC_N_unaligned_seqs)
+                     +"Cassette-side position is RISCC-confirmed to %s bp; %s%% of the genome-side reads are in the same region"%(
+                     self.RISCC_max_confirmed_distance(), self.RISCC_percent_confirming_reads(round_to_int=True))
+                     +"(%s are, %s are not).\n"%(self.RISCC_N_confirming_reads(), self.RISCC_N_non_confirming_reads()))
         data_header = "(chrom strand pos gene orientation feature readcount perfect main_seq gene_name)".replace(' ','\t')
         ### print cassette-side position
         OUTPUT.write("Cassette-side_position::: %s\n"%data_header)
