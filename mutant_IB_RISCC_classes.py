@@ -2064,8 +2064,11 @@ class Insertional_mutant_pool_dataset():
                 print 'Warning: chromosome "%s" not found in genefile data!'%(chromosome)
             for thing in insertion_data_by_chromosome[chromosome]:
                 gene_data = SPECIAL_GENE_CODES.chromosome_not_in_reference,'-','-'
-                if isinstance(thing, Insertional_mutant):  thing.gene, thing.orientation, thing.gene_feature = gene_data
-                else:                                      thing = thing[:3] + gene_data
+                if isinstance(thing, Insertional_mutant):
+                    thing.gene, thing.orientation, thing.gene_feature = gene_data
+                else:
+                    del thing[3:]
+                    thing.extend(gene_data)
 
 
     def _get_gene_annotation_dict(self, annotation_file, if_standard_Phytozome_file=None, custom_header=None, 
