@@ -2052,9 +2052,12 @@ class Insertional_mutant_pool_dataset():
                         else:                                      position = thing[0]
                         gene_data = find_gene_by_pos_gff3(position, chromosome_record, detailed_features, 
                                                           nearest_genes_for_intergenic, quiet=(verbosity_level==0))
-                        if isinstance(thing, Insertional_mutant):  thing.gene, thing.orientation, thing.gene_feature, _ = gene_data
+                        if isinstance(thing, Insertional_mutant):
+                            thing.gene, thing.orientation, thing.gene_feature, _ = gene_data
+                        else:
+                            del thing[3:]
+                            thing.extend(gene_data[:3])
                         # TODO gene_data now includes distances from gene ends as the fourth thing - use that?
-                        else:                                      thing += gene_data
                     if verbosity_level>1:   print "    ...found total %s genes."%(len(chromosome_record.features))
         if verbosity_level>1:   print "    found total %s genes in full genome."%(self.total_genes_in_genome)
 
