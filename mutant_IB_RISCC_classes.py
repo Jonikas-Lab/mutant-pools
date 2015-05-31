@@ -1828,11 +1828,10 @@ class Insertional_mutant_pool_dataset():
                                                      ratio_to_ignore=max_cassette_side_ratio_to_ignore, OUTPUT=REMOVED_MUTANT_FILE)
                 if if_remove:   IBs_to_remove.append(mutant.IB)
             summary_text = ("Removed %s/%s mutants due to different flanking seq positions in one mutant "
-                      +"(if distance >%s and some are within %sx reads of each other - see %s for details.")%(
-                          len(IBs_to_remove), len(self), max_allowed_cassette_side_dist, max_cassette_side_ratio_to_ignore, 
-                          removed_mutant_file)
+                            +"(if distance >%s and some are within %sx reads of each other).")%(
+                              len(IBs_to_remove), len(self), max_allowed_cassette_side_dist, max_cassette_side_ratio_to_ignore)
             REMOVED_MUTANT_FILE.write("SUMMARY: " + summary_text + '\n')
-        if not quiet: print summary_text
+        if not quiet: print summary_text + " - see %s for details."%removed_mutant_file
         for IB in IBs_to_remove:
             self.remove_mutant(IB)
 
