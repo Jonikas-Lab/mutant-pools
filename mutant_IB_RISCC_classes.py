@@ -24,7 +24,7 @@ from BCBio import GFF
 from general_utilities import split_into_N_sets_by_counts, add_dicts_of_ints, sort_lists_inside_dict, invert_listdict_nodups, keybased_defaultdict, value_and_percentages, FAKE_OUTFILE, NaN, nan_func, merge_values_to_unique, pickle, unpickle
 from basic_seq_utilities import SEQ_ENDS, SEQ_STRANDS, SEQ_DIRECTIONS, SEQ_ORIENTATIONS, name_seq_generator_from_fasta_fastq, position_test_contains, position_test_overlap, chromosome_sort_key, get_seq_count_from_collapsed_header
 from deepseq_utilities import check_mutation_count_by_optional_NM_field, get_HTSeq_optional_field, Fake_deepseq_objects
-from parse_annotation_file import parse_gene_annotation_file
+from parse_annotation_file import get_all_gene_annotation
 
 
 # MAYBE-TODO it might be good to split this file into multiple files at some point?  At least Insertion_position/etc.
@@ -2074,58 +2074,6 @@ class Insertional_mutant_pool_dataset():
                     thing.extend(gene_data)
 
 
-    def _get_gene_annotation_dict(self, annotation_file, if_standard_Phytozome_file=None, custom_header=None, 
-                                  gff_file_for_gene_names=None, defline_file=None, synonyms_file=None, print_info=False):
-        gene_annotation_dict, gene_annotation_header = parse_gene_annotation_file(annotation_file, 
-                                                 standard_Phytozome_file=if_standard_Phytozome_file, header_fields=custom_header, 
-                                                 strip_gene_fields_start='.t', verbosity_level=int(print_info))
-        # make optional dictionaries containing the extra annotation data
-        new_fields = []
-        if gff_file_for_gene_names:
-            new_fields.append('transcript_names')
-            genename_dict = defaultdict(set)
-            for line in open(gff_file_for_gene_names):
-                if line.startswith('#'):    continue
-                all_fields = line.strip().split('\t')
-                if all_fields[2] != 'mRNA': continue
-                data = all_fields[8]
-                fields = dict(x.split('=') for x in data.split(';'))
-                gene = fields['Name'].split('.t')[0]
-                try:                genename_dict[gene].add(fields['geneName'])
-                except KeyError:    pass
-            genename_dict = defaultdict(set, {key:','.join(vals) for (key,vals) in genename_dict.items()})
-        if defline_file:
-            new_fields.append('defline')
-            defline_dict = defaultdict(lambda: '-')
-            for line in open(defline_file):
-               gene, defline = line.strip().split('\t')
-               gene = gene.split('.t')[0]
-               if gene in defline_dict: 
-                 raise Exception("multiple deflines for %s!"%gene)
-               defline_dict[gene] = defline
-        if synonyms_file:
-            new_fields.append('gene_synonyms')
-            synonym_dict = defaultdict(set)
-            for line in open(synonyms_file):
-               fields = line.strip().split()
-               fields = [x.split('.t')[0] for x in fields]
-               synonym_dict[fields[0]].update(fields[1:])
-            synonym_dict = defaultdict(set, {key:','.join(vals) for (key,vals) in synonym_dict.items()})
-        # update gene_annotation_dict with the extra fields, if any were added
-        if new_fields:
-            gene_annotation_header = new_fields + gene_annotation_header
-            for (gene,ann) in gene_annotation_dict.items():
-                new_ann = []
-                if gff_file_for_gene_names:     new_ann.append(genename_dict[gene])
-                if defline_file:                new_ann.append(defline_dict[gene])
-                if synonyms_file:               new_ann.append(synonym_dict[gene])
-                gene_annotation_dict[gene] = new_ann + ann
-        # store the annotation header in self.summary, for printing
-        if gene_annotation_header:  self.gene_annotation_header = gene_annotation_header
-        else:                       self.gene_annotation_header = 'GENE_ANNOTATION_DATA'
-        return gene_annotation_dict
-        # TODO should probably test this?
-
     @staticmethod
     def _get_annotation_for_gene(gene, gene_annotation_dict):
         """ Add gene annotation data to mutant.gene_annotation, including multiple-gene cases; return True if annotations found.
@@ -2153,17 +2101,16 @@ class Insertional_mutant_pool_dataset():
                 joint_annotations.append('')
         # MAYBE-TODO do duplicate-removal etc?  But that might just make things confusing - not obvious what goes with which gene.
         return joint_annotations
-        # TODO update docstring!
         # TODO unit-test!
 
-    def add_gene_annotation(self, annotation_file, if_standard_Phytozome_file=None, custom_header=None,
-                                  gff_file_for_gene_names=None, defline_file=None, synonyms_file=None, print_info=False):
-        """ Add gene annotation to each mutant, based on annotation_file. See parse_gene_annotation_file doc for detail."""
+    def add_gene_annotation(self, genome_version, print_info=False):
+        """ Add gene annotation to each mutant, based on multiple annotation_files for that genome version.
+        """
         # add the annotation info to each mutant (or nothing, if gene has no annotation)
-        # MAYBE-TODO should I even store gene annotation in each mutant, or just keep a separate per-gene dictionary to save space?
-        # TODO add the new defline/gene-name/synonyms options to the command-line interface to make it match this!
-        gene_annotation_dict = self._get_gene_annotation_dict(annotation_file, if_standard_Phytozome_file, custom_header, 
-                                                              gff_file_for_gene_names, defline_file, synonyms_file, print_info=print_info)
+        # MAYBE-TODO should I even store gene annotation in each mutant (AND in each genome-side LEAPseq read), or just keep a separate per-gene dictionary to save space?
+        gene_annotation_dict, gene_annotation_header = get_all_gene_annotation(genome_version, print_info)
+        if gene_annotation_header:  self.gene_annotation_header = gene_annotation_header
+        else:                       self.gene_annotation_header = 'GENE_ANNOTATION_DATA'
         # add the annotation info to each mutant (or nothing, if gene has no annotation) 
         N_annotated = 0
         for mutant in self:
@@ -2172,11 +2119,11 @@ class Insertional_mutant_pool_dataset():
             if annotation:          N_annotated += 1
             for RISCC_data in mutant.RISCC_genome_side_aligned_reads.values():
                 annotation = self._get_annotation_for_gene(RISCC_data[3], gene_annotation_dict)
-                RISCC_data += annotation
+                RISCC_data[6:] = annotation
                 if annotation:      N_annotated += 1
         if print_info:          print "Added %s annotations"%N_annotated
         elif not N_annotated:   print "Warning: No gene annotations found!"
-        # LATER-TODO add this to the gene-info run-test case!
+        # LATER-TODO add this to the gene-info run-test case!  But the get_all_gene_annotation method has tests.
 
     # MAYBE-TODO implement mutant-merging or counting adjacent mutants?   See code and unit/run-tests in mutant_analysis_classes.py.
 

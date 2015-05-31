@@ -19,15 +19,14 @@ import general_utilities
 import basic_seq_utilities
 import mutant_IB_RISCC_classes
 
-DEFAULT_NUCLEAR_GENOME_FILE = os.path.expanduser('~/experiments/reference_data/genomes_and_indexes/Creinhardtii_236_notmasked.fa')
-DEFAULT_ALL_GENOME_FILE = os.path.expanduser('~/experiments/reference_data/genomes_and_indexes/Chlre5-nm_chl-mit.fa')
-DEFAULT_GENOME_CASSETTE_FILE = os.path.expanduser('~/experiments/reference_data/genomes_and_indexes/Chlre5-nm_chl-mit_cassette-pMJ013b.fa')
-DEFAULT_GENE_POS_FILE = os.path.expanduser('~/experiments/reference_data/chlamy_annotation/Creinhardtii_236_gene.gff3')
-DEFAULT_GENE_ANNOTATION_FILE = os.path.expanduser('~/experiments/reference_data/chlamy_annotation/Creinhardtii_236_annotation_info.txt')
-
+# various defaults/constants
 STRAND_VAR_VALUES = ('+', '-', 'both', None)
 DEFAULT_BIN_SIZE = 20000
 
+DEFAULT_NUCLEAR_GENOME_FILE = os.path.expanduser('~/experiments/reference_data/genomes_and_indexes/Creinhardtii_281_v5.0.fa')
+DEFAULT_ALL_GENOME_FILE = os.path.expanduser('~/experiments/reference_data/genomes_and_indexes/Chlre5.5-nm_chl-mit.fa')
+DEFAULT_GENOME_CASSETTE_FILE = os.path.expanduser('~/experiments/reference_data/genomes_and_indexes/Chlre5.5-nm_chl-mit_cassette-CIB1.fa')
+DEFAULT_GENE_POS_FILE = os.path.expanduser('~/experiments/reference_data/chlamy_annotation/Creinhardtii_281_v5.5.gene.gff3')
 
 def get_chromosome_lengths(genome_file=None):
     """ Return chromosome:length dictionary based on reading a genome fasta file. """
@@ -67,7 +66,7 @@ def get_mutant_positions_from_dataset(dataset, strand=None):
 
 
 def merge_dataset_files(file_list=[], file_glob_pattern=None):
-    """ Return single mutant dataset from adding all the inpu ones together (input can be filename list or glob pattern).
+    """ Return single mutant dataset from adding all the input ones together (input can be filename list or glob pattern).
     """
     if (file_list and file_glob_pattern) or not (file_list or file_glob_pattern):
         raise Exception("Must provide exactly one of file_list and file_glob_pattern!")

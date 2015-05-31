@@ -21,6 +21,7 @@ import HTSeq
 from general_utilities import write_header_data
 from testing_utilities import run_functional_tests
 import mutant_IB_RISCC_classes
+import mutant_utilities
 
 ######################################################### Main function code ####################################################
 
@@ -68,25 +69,26 @@ def define_option_parser():
                       help="If a cassette-side position isn't within the -D allowed distance, then if it has R times fewer reads "
                           +"than the main position, it is removed; otherwise the entire mutant is removed and a warning is printed. "
                           +"(Default %default).")
+    # TODO run-tests for -U and -D?  -D has basic unit-test with realistic input files.
 
     # gene-finding and gene-annotation options 
-    parser.add_option('-A', '--gene_annotation_folder', default='None', metavar='FOLDER', 
-                      help="Folder containing gene position and annotation files (files should be from Phytozome: "
-                          +"gff file with gene positions, *_annotation_info.txt, maybe *_defline.txt etc) "
-                          +"if None, gene IDs and annotation won't be added (default %default)")
-    # TODO run-tests for -U and -D?  -D has basic unit-test with realistic input files.
-    # MAYBE-TODO change default to be based on an environmental variable?
-    # TODO or would it be better to still give the gene/annotation file names, but ALSO check them against the genome version?
-    # MAYBE-TODO add extra annotation files of some sort? Martin had lots of ideas...
-    parser.add_option('-G', '--genome_version', type='int', default=5, metavar='G', 
+    parser.add_option('-G', '--genome_version', type='float', default=5.5, metavar='G', 
                       help="Which genome version the input files were aligned against - picks the matching gene position "
-                          +"and annotation/etc files from the -A folder (4 for v4.* genome, 5 for v5.*, etc) (default %default)")
-    # TODO pick the correct gene/annotation files out of the folder; make sure it's consistent with the alignment genome!
+                          +"and annotation/etc files (4 for v4.* genome, 5 for v5.3, 5.5 for v5.5) (default %default). "
+                          +"If you don't want to find genes/annotation for the mutants, use 0. ")
     parser.add_option('--detailed_gene_features', action="store_true", default=True,
                       help="Find out what part of the gene (UTR,intron,exon) a mutant hit, based on the -g file "
                           +"(default %default). May take a lot of memory - increase --N_detail_run_groups to fix that.")
     parser.add_option('--no_detailed_gene_features', action="store_false", dest='detailed_gene_features',
                       help="Turns --detailed_gene_features off.")
+    # MAYBE-TODO add extra annotation files of some sort? Martin had lots of ideas...
+    # MAYBE-TODO add option for which folder the annotation files are in?  OR an envirnmental variable?
+    #parser.add_option('-A', '--gene_annotation_folder', default=parse_annotation_file.DEFAULT_GENE_ANNOTATION_FOLDER, 
+    #                  metavar='FOLDER', 
+    #                  help="Folder containing gene position and annotation files (files should be from Phytozome: "
+    #                      +"gff file with gene positions, *_annotation_info.txt, maybe *_defline.txt etc) "
+    #                      +"if None, gene IDs and annotation won't be added (default %default)")
+
     parser.add_option('--N_detail_run_groups', type="int", default=5, metavar='N', 
                       help="How many passes to split reading the detailed_gene_features into (default %default) "
                           +"- may take a lot of memory (and CPU) if read in a single pass; too many passes waste CPU.")
@@ -184,15 +186,18 @@ def main(outfile, options):
     # If we do merging, change the counting below to print the data to MERGEFILE/CASSETTE_MERGEFILE rather than sys.stdout!
 
     ### optionally parse gene position/info/annotation files and look up the genes for each mutant in the data
-    if options.gene_annotation_folder not in (None, 'None', 'NONE', 'none', ''):
-        # TODO find gene gff3 file and any annotation files based on options.gene_annotation_folder and options.genome_version
-        if options.verbosity_level>1: print "adding genes from file %s to mutant data - time %s."%(genefile, time.ctime())
-        all_alignment_data.find_genes_for_mutants(genefile, detailed_features=options.detailed_gene_features, 
-                                                  N_run_groups=options.N_detail_run_groups, verbosity_level=options.verbosity_level)
-        if options.verbosity_level>1: 
-            print "adding gene annotation from file %s - time %s."%(options.gene_annotation_file, time.ctime())
-        all_alignment_data.add_gene_annotation(gene_annotation_file, 
-                   if_standard_Phytozome_file=options.annotation_file_standard_type, print_info=(options.verbosity_level >= 2))
+    if options.genome_version == 0:
+        pass
+    elif options.genome_version == 5.5:
+        genefile = mutant_utilities.DEFAULT_GENE_POS_FILE
+    else:
+        print "Genome version %s not implemented! Not adding gene/annotation data."%options.genome_version
+    if options.verbosity_level>1: print "adding genes from file %s to mutant data - time %s."%(genefile, time.ctime())
+    all_alignment_data.find_genes_for_mutants(genefile, detailed_features=options.detailed_gene_features, 
+                                              N_run_groups=options.N_detail_run_groups, verbosity_level=options.verbosity_level)
+    if options.verbosity_level>1: 
+        print "adding gene annotation from file %s - time %s."%(options.gene_annotation_file, time.ctime())
+    all_alignment_data.add_gene_annotation(options.genome_version, print_info=(options.verbosity_level >= 2))
 
     ### output data to files
     save_dataset_files(all_alignment_data, outfile, options.verbosity_level, True, True, True, 
