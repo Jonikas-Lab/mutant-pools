@@ -193,7 +193,7 @@ def main(outfile, options):
     else:
         print "Genome version %s not implemented! Not adding gene/annotation data."%options.genome_version
     if options.verbosity_level>1: print "adding genes from file %s to mutant data - time %s."%(genefile, time.ctime())
-    all_alignment_data.find_genes_for_mutants(genefile, detailed_features=options.detailed_gene_features, 
+    all_alignment_data.find_genes_for_mutants(options.genome_version, genefile, detailed_features=options.detailed_gene_features, 
                                               N_run_groups=options.N_detail_run_groups, verbosity_level=options.verbosity_level)
     if options.verbosity_level>1: 
         print "adding gene annotation from file %s - time %s."%(options.gene_annotation_file, time.ctime())
