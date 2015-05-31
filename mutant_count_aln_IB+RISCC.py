@@ -14,11 +14,10 @@ USAGE: mutant_count_alignments.py [options] outfile """
 # basic library
 import sys, os, time
 import unittest
-import pickle
 # other packages
 import HTSeq
 # my modules
-from general_utilities import write_header_data
+from general_utilities import write_header_data, pickle
 from testing_utilities import run_functional_tests
 import mutant_IB_RISCC_classes
 import mutant_utilities
@@ -141,8 +140,7 @@ def save_dataset_files(dataset, outfile, verbosity_level=0, print_genome_side_de
                                                                                                           detail_outfile))
     with open(outfile,'w') as OUTFILE:
         dataset.print_data(OUTPUT=OUTFILE, sort_data_by=sort_data_by, header_line=True, header_prefix='')
-    with open(pickled_outfile,'w') as PICKLEFILE:
-        pickle.dump(dataset, PICKLEFILE, 0)
+    pickle(dataset, pickled_outfile, protocol=-1)
     if print_genome_side_details:
         with open(detail_outfile,'w') as OUTFILE:
             dataset.print_detailed_RISCC_data(OUTPUT=OUTFILE, sort_data_by=sort_data_by)
