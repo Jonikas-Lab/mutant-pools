@@ -2348,7 +2348,7 @@ class Insertional_mutant_pool_dataset():
         if header_line:
             header = ['chromosome', 'strand', 'min_position', 'full_position', 'total_reads', 'perfect_reads',
                       'confirmed-dist', 'N-genome-side-conf-reads', 'N-genome-side-nonconf-reads',
-                      'gene', 'orientation', 'feature', 'IB_seq', 'main_cassette_side_seq']
+                      'gene', 'orientation', 'feature', 'gene-end-distances', 'IB_seq', 'main_cassette_side_seq']
             if self.multi_dataset:
                 for dataset_name in self.dataset_order:
                     header += ['reads_in_%s'%dataset_name, 'perfect_in_%s'%dataset_name]
