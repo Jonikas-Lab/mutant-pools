@@ -134,7 +134,7 @@ def get_all_gene_annotation(genome_version, print_info=False):
         gene_annotation_dicts = [parse_gene_annotation_file(filename, content_header_fields, ID_column, content_columns, 
                                                             if_join_all_later_fields, pad_with_empty_fields=True,
                                                             strip_gene_fields_start=".t", genes_start_with=None, 
-                                                            ignore_comments=False, verbosity_level=1) 
+                                                            ignore_comments=False, verbosity_level=print_info) 
                                  for (filename, content_header_fields, ID_column, content_columns, if_join_all_later_fields) 
                                  in gene_annotation_files]
         full_header = sum([content_headers for (_, content_headers, _, _, _) in gene_annotation_files], [])

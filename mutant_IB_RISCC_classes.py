@@ -2120,7 +2120,7 @@ class Insertional_mutant_pool_dataset():
         """
         # add the annotation info to each mutant (or nothing, if gene has no annotation)
         # MAYBE-TODO should I even store gene annotation in each mutant (AND in each genome-side LEAPseq read), or just keep a separate per-gene dictionary to save space?
-        gene_annotation_dict, gene_annotation_header = get_all_gene_annotation(genome_version, print_info)
+        gene_annotation_dict, gene_annotation_header = get_all_gene_annotation(genome_version, print_info=False)
         if gene_annotation_header:  self.gene_annotation_header = gene_annotation_header
         else:                       self.gene_annotation_header = 'GENE_ANNOTATION_DATA'
         # add the annotation info to each mutant (or nothing, if gene has no annotation) 
