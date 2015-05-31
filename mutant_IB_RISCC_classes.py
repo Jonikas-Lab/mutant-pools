@@ -26,6 +26,7 @@ from basic_seq_utilities import SEQ_ENDS, SEQ_STRANDS, SEQ_DIRECTIONS, SEQ_ORIEN
 from deepseq_utilities import check_mutation_count_by_optional_NM_field, get_HTSeq_optional_field, Fake_deepseq_objects
 from parse_annotation_file import get_all_gene_annotation
 
+# TODO TODO TODO add option to get info about adjacent genes for intergenic mutants!  Need to figure out how to structure that...
 
 # MAYBE-TODO it might be good to split this file into multiple files at some point?  At least Insertion_position/etc.
 
@@ -665,8 +666,9 @@ class Insertional_mutant():
        - RISCC_genome_side_aligned_reads - contains "genome-side" reads (not immediately next to the cassette) that were 
                                     uniquely aligned to the genome/cassette. They can help determine the real insertion position 
                                     (vs. junk fragments inserted with cassette).
-            It's a dictionary - position:(position, read_count, seq_read_error_dict, gene, orientation, feature, annotation...)
-                where seq_read_error_dict is a seq:(read_count, N_errors) dict (since multiple seqs can have the same position)
+            It's a dictionary - position:(position, read_count, seq_read_error_dict, gene, orientation, feature, 
+                distances_from_gene_ends, annotation...), where seq_read_error_dict is a seq:(read_count, N_errors) dict 
+                (since multiple seqs can have the same position)
        - RISCC_genome_side_unaligned_reads - same, but contains reads that were unaligned or multiply-aligned, 
                                     so the positions are all unspecified, and sequences are used as keys instead. 
 
@@ -698,6 +700,7 @@ class Insertional_mutant():
         self.gene = SPECIAL_GENE_CODES.not_determined
         self.orientation = '?'
         self.gene_feature = '?'
+        self.gene_distances = '?'
 
     def _set_readcount_related_data_to_zero(self):
         """ Set all readcount-related data to 0/empty."""
@@ -788,7 +791,7 @@ class Insertional_mutant():
                                                                                   pos, seq, count, N_err))
                         return True
 
-    def update_gene_info(self, gene, orientation, gene_feature):
+    def update_gene_info(self, gene, orientation, gene_feature, gene_distances):
         """ Update gene/orientation/feature: if both are the same or one is unknown, keep known; if different, raise error.
         """
         # grab the set of non-special values from own and new data
@@ -802,6 +805,7 @@ class Insertional_mutant():
         if gene_both:           self.gene = gene_both.pop()
         if orientation_both:    self.orientation = orientation_both.pop()
         if feature_both:        self.gene_feature = feature_both.pop()
+        if self.gene == gene:   self.gene_distances = gene_distances
 
     # MAYBE-TODO implement mutant-merging?  If yes, copy join_mutant method from mutant_analysis_classes.py and edit.
     #  If we merge mutants that correspond to two sides of one insertion, they'll have to have multiple IBs! 
@@ -830,11 +834,12 @@ class Insertional_mutant():
     def _copy_non_readcount_data(self, source_mutant):
         """ Copy non-readcount-related data from source_mutant to self (making new copies of all objects). """
         # COPY the position, not just make another name for the same value - I wrote a copy() function for positions
-        self.position     = source_mutant.position.copy() 
+        self.position       = source_mutant.position.copy() 
         # strings are immutable and thus safe to "copy" by adding another name to the same value
-        self.gene         = source_mutant.gene
-        self.orientation  = source_mutant.orientation
-        self.gene_feature = source_mutant.gene_feature
+        self.gene           = source_mutant.gene
+        self.orientation    = source_mutant.orientation
+        self.gene_feature   = source_mutant.gene_feature
+        self.gene_distances = source_mutant.gene_distances
 
     def _copy_readcount_related_data(self, source_mutant):
         """ Copy readcount-related data from source_mutant to self (making new copies of all objects). """
@@ -866,7 +871,7 @@ class Insertional_mutant():
             except KeyError:
                 seq_count_error_dict = {seq: [read_count, N_errors]}
                 self.RISCC_genome_side_aligned_reads[new_position] = [new_position, read_count, seq_count_error_dict, 
-                                                                      SPECIAL_GENE_CODES.not_determined, '?', '?']
+                                                                      SPECIAL_GENE_CODES.not_determined, '?', '?', '?']
         # self.RISCC_genome_side_unaligned_reads is a seq:data dict, since the positions aren't usable as keys
         else:
             try:
@@ -874,7 +879,7 @@ class Insertional_mutant():
                 self.RISCC_genome_side_aligned_reads[seq][2][seq][0] += read_count
             except KeyError:
                 self.RISCC_genome_side_unaligned_reads[seq] = [new_position, read_count, {seq: [read_count, N_errors]}, 
-                                                               SPECIAL_GENE_CODES.not_determined, '?', '?']
+                                                               SPECIAL_GENE_CODES.not_determined, '?', '?', '?']
         # Note: adding gene/annotation info for those is implemented in the dataset methods.
 
     def _if_confirming_read(self, position, max_distance):
@@ -1107,12 +1112,12 @@ class Insertional_mutant():
                      +" Cassette-side position is RISCC-confirmed to %s bp; %s%% of the genome-side reads are in the same region"%(
                      self.RISCC_max_confirmed_distance(), self.RISCC_percent_confirming_reads(round_to_int=True))
                      +" (%s are, %s are not).\n"%(self.RISCC_N_confirming_reads(), self.RISCC_N_non_confirming_reads()))
-        data_header = "(chrom strand pos gene orientation feature readcount perfect main_seq gene_name)".replace(' ','\t')
+        data_header = "(chrom strand pos gene orientation feature distances readcount perfect main_seq gene_name)".replace(' ','\t')
         ### print cassette-side position
         OUTPUT.write("Cassette-side_position::: %s\n"%data_header)
         try:                    main_pos_fields = [self.position.chromosome, self.position.strand, self.position.full_position] 
         except AttributeError:  main_pos_fields = [self.position, '?', '?'] 
-        main_pos_fields += [self.gene, self.orientation, self.gene_feature, 
+        main_pos_fields += [self.gene, self.orientation, self.gene_feature, self.gene_distances, 
                             self.total_read_count, self.perfect_read_count, self.get_main_sequence()[0]]
         try:                                    main_pos_fields.append(self.gene_annotation[0])
         except (AttributeError, IndexError):    main_pos_fields.append('-')
@@ -1125,13 +1130,13 @@ class Insertional_mutant():
             readcount = read_data[1]
             main_seq = min(read_data[2].items(), key = lambda (s, (r,e)): (-r, e))[0]
             perfect_read_count = sum(read_count for (read_count, N_errors) in read_data[2].values() if N_errors==0)
-            fields += read_data[3:6] + [readcount, perfect_read_count, main_seq] 
-            try:                    fields.append(read_data[6])
+            fields += read_data[3:7] + [readcount, perfect_read_count, main_seq] 
+            try:                    fields.append(read_data[7])
             except IndexError:      fields.append('-')
             OUTPUT.write('\t'.join([str(x) for x in fields]) + '\n')
         for (seq, read_data) in sorted(self.RISCC_genome_side_unaligned_reads.items()):
-            fields = [read_data[0], '-', '-'] + read_data[3:6] + [read_data[1], 0, seq] 
-            try:                    fields.append(read_data[6])
+            fields = [read_data[0], '-', '-'] + read_data[3:7] + [read_data[1], 0, seq] 
+            try:                    fields.append(read_data[7])
             except IndexError:      fields.append('-')
             OUTPUT.write('\t'.join([str(x) for x in fields]) + '\n')
 
@@ -1280,7 +1285,8 @@ class Insertional_mutant_multi_dataset(Insertional_mutant):
                 raise MutantError("Can't add mutant2 as dataset to mutant1: the mutant position differs! %s and %s"%(
                                     self.position, other_mutant.position))
             try:
-                self.update_gene_info(other_mutant.gene, other_mutant.orientation, other_mutant.gene_feature)
+                self.update_gene_info(other_mutant.gene, other_mutant.orientation, 
+                                      other_mutant.gene_feature, other_mutant.gene_distances)
             except MutantError:
                 raise MutantError("Can't add mutant2 as dataset to mutant1: the mutant gene data differs!"
                                   +" %s, %s, %s and"%(self.gene, self.orientation, self.gene_feature)
@@ -2056,11 +2062,10 @@ class Insertional_mutant_pool_dataset():
                         if genome_version == 5.5:
                             if gene_data[0].endswith('.v5.5'):  gene_data[0] = gene_data[0][:-len('.v5.5')]
                         if isinstance(thing, Insertional_mutant):
-                            thing.gene, thing.orientation, thing.gene_feature, _ = gene_data
+                            thing.gene, thing.orientation, thing.gene_feature, thing.gene_distances = gene_data
                         else:
-                            del thing[3:]
-                            thing.extend(gene_data[:3])
-                        # TODO gene_data now includes distances from gene ends as the fourth thing - use that?
+                            thing[3:] = gene_data
+                        # TODO gene_data now includes distances from gene ends as the fourth thing - use that!
                     if verbosity_level>1:   print "    ...found total %s genes."%(len(chromosome_record.features))
         if verbosity_level>1:   print "    found total %s genes in full genome."%(self.total_genes_in_genome)
 
@@ -2069,13 +2074,11 @@ class Insertional_mutant_pool_dataset():
             if not is_cassette_chromosome(chromosome):
                 print 'Warning: chromosome "%s" not found in genefile data!'%(chromosome)
             for thing in insertion_data_by_chromosome[chromosome]:
-                gene_data = SPECIAL_GENE_CODES.chromosome_not_in_reference,'-','-'
+                gene_data = (SPECIAL_GENE_CODES.chromosome_not_in_reference,'-','-','-')
                 if isinstance(thing, Insertional_mutant):
-                    thing.gene, thing.orientation, thing.gene_feature = gene_data
+                    thing.gene, thing.orientation, thing.gene_feature, thing.gene_distances = gene_data
                 else:
-                    del thing[3:]
-                    thing.extend(gene_data)
-
+                    thing[3:] = gene_data
 
     @staticmethod
     def _get_annotation_for_gene(gene, gene_annotation_dict):
@@ -2122,7 +2125,7 @@ class Insertional_mutant_pool_dataset():
             if annotation:          N_annotated += 1
             for RISCC_data in mutant.RISCC_genome_side_aligned_reads.values():
                 annotation = self._get_annotation_for_gene(RISCC_data[3], gene_annotation_dict)
-                RISCC_data[6:] = annotation
+                RISCC_data[7:] = annotation
                 if annotation:      N_annotated += 1
         if print_info:          print "Added %s annotations"%N_annotated
         elif not N_annotated:   print "Warning: No gene annotations found!"
@@ -2369,7 +2372,7 @@ class Insertional_mutant_pool_dataset():
             mutant_data += [mutant.total_read_count, mutant.perfect_read_count]
             mutant_data += [mutant.RISCC_max_confirmed_distance(), 
                             mutant.RISCC_N_confirming_seqs(), mutant.RISCC_N_non_confirming_seqs()]
-            mutant_data += [mutant.gene, mutant.orientation, mutant.gene_feature] 
+            mutant_data += [mutant.gene, mutant.orientation, mutant.gene_feature, mutant.gene_distances] 
             mutant_data += [mutant.IB, mutant.get_main_sequence()[0]]
             if self.multi_dataset:
                 for dataset_name in self.dataset_order:
@@ -2738,6 +2741,7 @@ class Testing_Insertional_mutant(unittest.TestCase):
                         assert mutant.gene == SPECIAL_GENE_CODES.not_determined
                         assert mutant.orientation == '?'
                         assert mutant.gene_feature == '?'
+                        assert mutant.gene_distances == '?'
                     # test readcount-related info for all mutants except mutant_multi_dataset
                     for mutant in [mutant_5prime, mutant_3prime, mutant_readcount_only]:
                         assert mutant.total_read_count == 0
@@ -2851,11 +2855,11 @@ class Testing_Insertional_mutant(unittest.TestCase):
     def test__update_gene_info(self):
         mutant = Insertional_mutant(insertion_position=Insertion_position('chr','+',position_before=3))
         assert mutant.gene == SPECIAL_GENE_CODES.not_determined
-        assert mutant.orientation == mutant.gene_feature == '?'
+        assert mutant.orientation == mutant.gene_feature == mutant.gene_distances == '?'
         # updating no-info mutant with no info - no change
         mutant.update_gene_info(SPECIAL_GENE_CODES.not_determined, '?', '?')
         assert mutant.gene == SPECIAL_GENE_CODES.not_determined
-        assert mutant.orientation == mutant.gene_feature == '?'
+        assert mutant.orientation == mutant.gene_feature == mutant.gene_distances == '?'
         # updating no-info mutant with useful info - update goes through
         mutant.update_gene_info('gene1', '+', 'f')
         assert mutant.gene == 'gene1'
