@@ -75,8 +75,11 @@ def define_option_parser():
                       help="Which genome version the input files were aligned against - picks the matching gene position "
                           +"and annotation/etc files (4 for v4.* genome, 5 for v5.3, 5.5 for v5.5) (default %default). "
                           +"If you don't want to find genes/annotation for the mutants, use 0. ")
+    parser.add_option('-y', '--no_genes_for_RISCC', action="store_true", default=False,
+                      help="Don't find gene/feature/annotation info for genome-side RISCC reads (it's slow and takes "
+                          +"a lot of memory) (default %default).")
     parser.add_option('--detailed_gene_features', action="store_true", default=True,
-                      help="Find out what part of the gene (UTR,intron,exon) a mutant hit, based on the -g file "
+                      help="Find out what part of the gene (UTR,intron,exon) a mutant hit, based on the gene file "
                           +"(default %default). May take a lot of memory - increase --N_detail_run_groups to fix that.")
     parser.add_option('--no_detailed_gene_features', action="store_false", dest='detailed_gene_features',
                       help="Turns --detailed_gene_features off.")
@@ -193,10 +196,12 @@ def main(outfile, options):
         print "Genome version %s not implemented! Not adding gene/annotation data."%options.genome_version
     if options.verbosity_level>1: print "adding genes from file %s to mutant data - time %s."%(genefile, time.ctime())
     all_alignment_data.find_genes_for_mutants(options.genome_version, genefile, detailed_features=options.detailed_gene_features, 
+                                              include_RISCC_reads = not options.no_genes_for_RISCC, 
                                               N_run_groups=options.N_detail_run_groups, verbosity_level=options.verbosity_level)
     if options.verbosity_level>1: 
         print "adding gene annotation from file %s - time %s."%(options.gene_annotation_file, time.ctime())
-    all_alignment_data.add_gene_annotation(options.genome_version, print_info=(options.verbosity_level >= 2))
+    all_alignment_data.add_gene_annotation(options.genome_version, include_RISCC_reads = not options.no_genes_for_RISCC, 
+                                           print_info=(options.verbosity_level >= 2))
 
     ### output data to files
     save_dataset_files(all_alignment_data, outfile, options.verbosity_level, True, True, True, 

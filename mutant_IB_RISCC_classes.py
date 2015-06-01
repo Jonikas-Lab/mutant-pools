@@ -681,6 +681,7 @@ class Insertional_mutant():
       - on basic mutants it should always be None (which is the default).
     """
     # MAYBE-TODO add a __slots__ to this to optimize memory usage for when there's tens of thousands of mutants!  But that may cause issues with pickling, etc...
+    # TODO make RISCC_genome_side_aligned_reads values namedtuples or something, if not objects...
 
     def __init__(self, IB=None, insertion_position=SPECIAL_POSITIONS.unknown):
         """ Set self.position based on argument; initialize read/sequence counts to 0 and gene-info to unknown. 
@@ -2008,8 +2009,8 @@ class Insertional_mutant_pool_dataset():
         # TODO really I shouldn't be removing mutants outright, just noting them as removed or something...  In that case should they or should they not show up in "for m in self"?  Probably not - they should have a separate dictionary?
         # TODO should I keep track of removed reads, and print in summary?  MAYBE.
 
-    def find_genes_for_mutants(self, genome_version, genefile, detailed_features=False, nearest_genes_for_intergenic=False, 
-                               N_run_groups=3, verbosity_level=1):
+    def find_genes_for_mutants(self, genome_version, genefile, detailed_features=True, include_RISCC_reads=False, 
+                               nearest_genes_for_intergenic=False, N_run_groups=3, verbosity_level=1):
         """ To each mutant in the dataset, add the gene it's in (look up gene positions for each mutant using genefile).
 
         ALSO add gene data to all the RISCC-genome-side-read mutants inside each mutant!
@@ -2023,13 +2024,14 @@ class Insertional_mutant_pool_dataset():
 
         # Group all the mutants by chromosome, so that I can go over each chromosome in genefile separately
         #   instead of reading in all the data at once (which uses a lot of memory)
-        #  Inclue both the main mutants, AND all the RISCC genome-side read sub-mutants!
+        #  Inclue both the main mutants, AND all the RISCC genome-side read sub-mutants if wanted.
         insertion_data_by_chromosome = defaultdict(list)
         for mutant in self:
             if mutant.position not in SPECIAL_POSITIONS.all_undefined:
                 insertion_data_by_chromosome[mutant.position.chromosome].append(mutant)
-            for RISCC_read_data in mutant.RISCC_genome_side_aligned_reads.values():
-                insertion_data_by_chromosome[RISCC_read_data[0].chromosome].append(RISCC_read_data)
+            if include_RISCC_reads:
+                for RISCC_read_data in mutant.RISCC_genome_side_aligned_reads.values():
+                    insertion_data_by_chromosome[RISCC_read_data[0].chromosome].append(RISCC_read_data)
         self._find_genes_for_list(insertion_data_by_chromosome, genome_version, genefile, 
                                   detailed_features, nearest_genes_for_intergenic, N_run_groups, verbosity_level)
 
@@ -2114,7 +2116,7 @@ class Insertional_mutant_pool_dataset():
         return joint_annotations
         # TODO unit-test!
 
-    def add_gene_annotation(self, genome_version, print_info=False):
+    def add_gene_annotation(self, genome_version, include_RISCC_reads=False, print_info=False):
         """ Add gene annotation to each mutant, based on multiple annotation_files for that genome version.
         """
         # add the annotation info to each mutant (or nothing, if gene has no annotation)
@@ -2128,10 +2130,11 @@ class Insertional_mutant_pool_dataset():
             annotation = self._get_annotation_for_gene(mutant.gene, gene_annotation_dict)
             mutant.gene_annotation = annotation
             if annotation:          N_annotated += 1
-            for RISCC_data in mutant.RISCC_genome_side_aligned_reads.values():
-                annotation = self._get_annotation_for_gene(RISCC_data[3], gene_annotation_dict)
-                RISCC_data[7:] = annotation
-                if annotation:      N_annotated += 1
+            if include_RISCC_reads:
+                for RISCC_data in mutant.RISCC_genome_side_aligned_reads.values():
+                    annotation = self._get_annotation_for_gene(RISCC_data[3], gene_annotation_dict)
+                    RISCC_data[7:] = annotation
+                    if annotation:      N_annotated += 1
         if print_info:          print "Added %s annotations"%N_annotated
         elif not N_annotated:   print "Warning: No gene annotations found!"
         # LATER-TODO add this to the gene-info run-test case!  But the get_all_gene_annotation method has tests.
