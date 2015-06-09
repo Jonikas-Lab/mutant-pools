@@ -126,20 +126,29 @@ def parse_gene_annotation_file(gene_annotation_filename, content_header_fields, 
     return defaultdict(lambda: ['-' for _ in content_columns], data_by_gene)
 
 
-def get_all_gene_annotation(genome_version, print_info=False):
+def get_all_gene_annotation(genome_version=None, gene_annotation_files=None, print_info=False):
     """ Grab all the annotation (depends on genome version); return gene:annotation_list dict and header list.
+
+    Can provide a gene_annotation_files dict instead - in the same format as DEFAULT_GENE_ANNOTATION_FILES_v5p5 here.
     """
-    if genome_version == 5.5:
-        gene_annotation_files = DEFAULT_GENE_ANNOTATION_FILES_v5p5
-        gene_annotation_dicts = [parse_gene_annotation_file(filename, content_header_fields, ID_column, content_columns, 
-                                                            if_join_all_later_fields, pad_with_empty_fields=True,
-                                                            strip_gene_fields_start=".t", genes_start_with=None, 
-                                                            ignore_comments=False, verbosity_level=print_info) 
-                                 for (filename, content_header_fields, ID_column, content_columns, if_join_all_later_fields) 
-                                 in gene_annotation_files]
-        full_header = sum([content_headers for (_, content_headers, _, _, _) in gene_annotation_files], [])
-    else:
-        raise Exception("Genome version %s not implemented right now!"%genome_version)
+    if genome_version is None and gene_annotation_files is None:
+        raise Exception("User has to provide genome_version or gene_annotation_files!")
+    if genome_version is not None and gene_annotation_files is not None:
+        raise Exception("User should not provide both genome_version and gene_annotation_files, just one!")
+    elif gene_annotation_files is None:
+        if genome_version == 5.5:
+            gene_annotation_files = DEFAULT_GENE_ANNOTATION_FILES_v5p5
+        else:
+            raise Exception("Genome version %s not implemented right now!"%genome_version)
+    # MAYBE-TODO add options for strip_gene_fields_start etc
+    gene_annotation_dicts = [parse_gene_annotation_file(filename, content_header_fields, ID_column, content_columns, 
+                                                        if_join_all_later_fields, pad_with_empty_fields=True,
+                                                        strip_gene_fields_start=".t", genes_start_with=None, 
+                                                        ignore_comments=False, verbosity_level=print_info) 
+                             for (filename, content_header_fields, ID_column, content_columns, if_join_all_later_fields) 
+                             in gene_annotation_files]
+    full_header = sum([content_headers for (_, content_headers, _, _, _) in gene_annotation_files], [])
+
     all_gene_IDs = set.union(*[set(d.keys()) for d in gene_annotation_dicts])
     full_annotation_dict = defaultdict(lambda: ['-' for _ in full_header])
     for gene in all_gene_IDs:
@@ -167,8 +176,11 @@ class Testing(unittest.TestCase):
 
     def test__all(self):
         # do it twice just to make sure the results are the same - earlier I had a bug where they weren't!
-        for _ in (1,2):
-            data, header = get_all_gene_annotation(5.5, False)
+        for i in (1,2,3,4):
+            if i < 3:
+                data, header = get_all_gene_annotation(5.5, print_info=False)
+            else:
+                data, header = get_all_gene_annotation(gene_annotation_files=DEFAULT_GENE_ANNOTATION_FILES_v5p5, print_info=False)
             self.assertEquals(header, 'gene_name defline description synonyms PFAM Panther KOG KEGG_ec KEGG_Orthology Gene_Ontology_terms best_arabidopsis_TAIR10_hit_name best_arabidopsis_TAIR10_hit_symbol best_arabidopsis_TAIR10_hit_defline'.split())
             self.assertEquals(len(data), 17741)
             # a gene that doesn't exist
