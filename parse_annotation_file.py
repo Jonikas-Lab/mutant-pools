@@ -8,18 +8,18 @@ import os
 from collections import defaultdict
 
 # Gene annotation file data for v5.5 genome: 
-#   list of (filename, content_headers, ID_column, content_columns, if_join_all_later_fields) tuples:
+#   list of (filename, content_headers, ID_column, content_columns, field_splitter, if_join_all_later_fields) tuples:
 DEFAULT_GENE_ANNOTATION_FILES_v5p5 = [
-    ('Creinhardtii_281_v5.5.geneName.txt', ['gene_name'], 0, [1], False),
-    ('Creinhardtii_281_v5.5.defline.txt', ['defline'], 0, [1], False),
-    ('Creinhardtii_281_v5.5.description.txt', ['description'], 0, [1], False),
-    ('Creinhardtii_281_v5.5.synonym.txt', ['synonyms'], 0, [1], True),
+    ('Creinhardtii_281_v5.5.geneName.txt', ['gene_name'], 0, [1], '\t', False),
+    ('Creinhardtii_281_v5.5.defline.txt', ['defline'], 0, [1], '\t', False),
+    ('Creinhardtii_281_v5.5.description.txt', ['description'], 0, [1], '\t', False),
+    ('Creinhardtii_281_v5.5.synonym.txt', ['synonyms'], 0, [1], '\t', True),
     ('Creinhardtii_281_v5.5.annotation_info.txt', 'PFAM Panther KOG KEGG_ec KEGG_Orthology Gene_Ontology_terms best_arabidopsis_TAIR10_hit_name best_arabidopsis_TAIR10_hit_symbol best_arabidopsis_TAIR10_hit_defline'.split(), 
-     1, [4, 5, 6, 7, 8, 9, 10, 11, 12], False),
+     1, [4, 5, 6, 7, 8, 9, 10, 11, 12], '\t', False),
 ]
 DEFAULT_GENE_ANNOTATION_FOLDER = os.path.expanduser('~/experiments/reference_data/chlamy_annotation')
-DEFAULT_GENE_ANNOTATION_FILES_v5p5 = [(os.path.join(DEFAULT_GENE_ANNOTATION_FOLDER, f), h, i, c, j) 
-                                      for (f, h, i, c, j) in DEFAULT_GENE_ANNOTATION_FILES_v5p5]
+DEFAULT_GENE_ANNOTATION_FILES_v5p5 = [(os.path.join(DEFAULT_GENE_ANNOTATION_FOLDER, f), h, i, c, s, j) 
+                                      for (f, h, i, c, s, j) in DEFAULT_GENE_ANNOTATION_FILES_v5p5]
 
 # LATER-TODO for synonyms files, strip the "t.*" part from the synonym ID columns as well as the gene ID column?
 
@@ -37,13 +37,16 @@ HEADER_FIELDS_v5 = ['Phytozome internal transcript ID',
 
 
 def parse_gene_annotation_file(gene_annotation_filename, content_header_fields, gene_ID_column=0, content_columns=[1], 
-                               if_join_all_later_fields=False, pad_with_empty_fields=True,
+                               if_join_all_later_fields=False, pad_with_empty_fields=True, field_splitter=None, 
                                strip_gene_fields_start=".t", genes_start_with=None, ignore_comments=False, verbosity_level=1):
     """ Parse tab-separated gene annotation file; return gene:annotation_list dictionary.
 
     Use column gene_ID_column to determine gene IDs; optionally shorten the gene name by truncating it starting with the 
      strip_gene_fields_start value if found (if not None) - e.g. if value is '.t', Cre01.g123450.t2.1 would become Cre01.g123450.
     If genes_start_with is not None, make sure all gene IDs start with it.
+
+    If field_splitter is a string (probably '\t'), split fields by that character; if None, split by any number of whitespace chars.
+        (Warning: that will treat multiple tabs as one splitter and thus skip empty fields!)
 
     If pad_with_empty_fields is True, pad shorter lines to the max length. 
     If ignore_comments is True, skip lines starting with #.
@@ -64,7 +67,7 @@ def parse_gene_annotation_file(gene_annotation_filename, content_header_fields, 
     data_by_row = []
     for line in open(gene_annotation_filename):
         if ignore_comments and line[0]=='#':    continue
-        fields = line.strip().split('\t')
+        fields = line.strip().split(field_splitter)
         data_by_row.append(fields)
     if verbosity_level>0:
         print "  Parsed %s lines"%len(data_by_row)
@@ -97,7 +100,8 @@ def parse_gene_annotation_file(gene_annotation_filename, content_header_fields, 
     if len(content_header_fields) != len(content_columns):
         raise Exception("Error: content_header_fields has a different number of fields than content_columns!")
     if max(data_lengths) < max(content_columns):
-        raise Exception("content_columns specifies a column that doesn't exist!")
+        raise Exception("content_columns specifies a column that doesn't exist! File %s; "%gene_annotation_filename
+            +"lines have %s-%s fields, but content_columns wants %s"%(min(data_lengths), max(data_lengths), content_columns))
 
     # MAYBE-TODO remove empty columns (only if all the data lengths match!)
 
@@ -126,7 +130,7 @@ def parse_gene_annotation_file(gene_annotation_filename, content_header_fields, 
     return defaultdict(lambda: ['-' for _ in content_columns], data_by_gene)
 
 
-def get_all_gene_annotation(genome_version=None, gene_annotation_files=None, print_info=False):
+def get_all_gene_annotation(genome_version=None, gene_annotation_files=None, ignore_comments=False, print_info=False):
     """ Grab all the annotation (depends on genome version); return gene:annotation_list dict and header list.
 
     Can provide a gene_annotation_files dict instead - in the same format as DEFAULT_GENE_ANNOTATION_FILES_v5p5 here.
@@ -142,12 +146,12 @@ def get_all_gene_annotation(genome_version=None, gene_annotation_files=None, pri
             raise Exception("Genome version %s not implemented right now!"%genome_version)
     # MAYBE-TODO add options for strip_gene_fields_start etc
     gene_annotation_dicts = [parse_gene_annotation_file(filename, content_header_fields, ID_column, content_columns, 
-                                                        if_join_all_later_fields, pad_with_empty_fields=True,
-                                                        strip_gene_fields_start=".t", genes_start_with=None, 
-                                                        ignore_comments=False, verbosity_level=print_info) 
-                             for (filename, content_header_fields, ID_column, content_columns, if_join_all_later_fields) 
+                                                        if_join_all_later_fields, pad_with_empty_fields=True, 
+                                                        field_splitter=splitter, strip_gene_fields_start=".t", genes_start_with=None,
+                                                        ignore_comments=ignore_comments, verbosity_level=print_info) 
+                             for (filename, content_header_fields, ID_column, content_columns, splitter, if_join_all_later_fields) 
                              in gene_annotation_files]
-    full_header = sum([content_headers for (_, content_headers, _, _, _) in gene_annotation_files], [])
+    full_header = sum([content_headers for (_, content_headers, _, _, _, _) in gene_annotation_files], [])
 
     all_gene_IDs = set.union(*[set(d.keys()) for d in gene_annotation_dicts])
     full_annotation_dict = defaultdict(lambda: ['-' for _ in full_header])
