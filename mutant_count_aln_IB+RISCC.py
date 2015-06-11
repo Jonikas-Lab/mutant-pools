@@ -133,7 +133,8 @@ def main(outfile, options):
                                                                                  options.relative_read_direction)
     ### parse input files and store data - the add_RISCC_alignment_files_to_data function here does pretty much all the work!
     all_alignment_data.add_RISCC_alignment_files_to_data(options.casette_side_reads, options.genome_side_reads, 
-                                                 options.internal_barcode_reads, options.internal_barcode_clusters, 
+                                                 options.internal_barcode_reads, 
+                                                 allowed_IBs = None, IB_cluster_file = options.internal_barcode_clusters, 
                                                  best_genome_side_only = options.best_genome_side_only, 
                                                  ignore_unaligned = options.ignore_unaligned, 
                                                  max_allowed_cassette_side_dist = options.max_allowed_cassette_side_dist, 
