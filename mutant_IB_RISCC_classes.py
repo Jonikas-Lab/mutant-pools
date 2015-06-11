@@ -1728,7 +1728,7 @@ class Insertional_mutant_pool_dataset():
                                           allowed_IBs=None, IB_cluster_file=None, 
                                           best_genome_side_only=False, ignore_unaligned=False, 
                                           max_allowed_cassette_side_dist=1, max_cassette_side_ratio_to_ignore=100, 
-                                          removed_mutant_file='/dev/null', quiet=False):
+                                          skip_checks=False, removed_mutant_file='/dev/null', quiet=False):
         """ Add paired-end RISCC reads to dataset mutants, based on IB clustering.
 
         Input files:
@@ -1831,19 +1831,20 @@ class Insertional_mutant_pool_dataset():
                 # MAYBE-TODO if ignore_unaligned is True, do we still want to keep a count of unaligned seqs somehow?
 
         # check that all mutants have consistent cassette positions; remove ones that don't.
-        IBs_to_remove = []
-        with open(removed_mutant_file, 'w')  as REMOVED_MUTANT_FILE:
-            for mutant in self:
-                if_remove = mutant.decide_and_check_position(max_allowed_cassette_side_dist, 
+        if not skip_checks:
+            IBs_to_remove = []
+            with open(removed_mutant_file, 'w')  as REMOVED_MUTANT_FILE:
+                for mutant in self:
+                    if_remove = mutant.decide_and_check_position(max_allowed_cassette_side_dist, 
                                                      ratio_to_ignore=max_cassette_side_ratio_to_ignore, OUTPUT=REMOVED_MUTANT_FILE)
-                if if_remove:   IBs_to_remove.append(mutant.IB)
-            summary_text = ("Removed %s/%s mutants due to different flanking seq positions in one mutant "
-                            +"(if distance >%s and some are within %sx reads of each other).")%(
-                              len(IBs_to_remove), len(self), max_allowed_cassette_side_dist, max_cassette_side_ratio_to_ignore)
-            REMOVED_MUTANT_FILE.write("SUMMARY: " + summary_text + '\n')
-        if not quiet: print summary_text + " - see %s for details."%removed_mutant_file
-        for IB in IBs_to_remove:
-            self.remove_mutant(IB)
+                    if if_remove:   IBs_to_remove.append(mutant.IB)
+                summary_text = ("Removed %s/%s mutants due to different flanking seq positions in one mutant "
+                                +"(if distance >%s and some are within %sx reads of each other).")%(
+                                  len(IBs_to_remove), len(self), max_allowed_cassette_side_dist, max_cassette_side_ratio_to_ignore)
+                REMOVED_MUTANT_FILE.write("SUMMARY: " + summary_text + '\n')
+            if not quiet: print summary_text + " - see %s for details."%removed_mutant_file
+            for IB in IBs_to_remove:
+                self.remove_mutant(IB)
 
         # TODO do we want to add different read category counts to the summary, or make that stuff properties?
         # MAYBE-TODO it might be good to just generate two separate mutant-sets, normal and cassette, with an option called separate_cassette or something, and print them to separate files - but that's more complicated, and right now I don't have the setup for a single dataset having multiple mutant-sets (although I guess I will have to eventually, for removed mutants etc). Right now I do it in mutant_count_alignments.py, which works but there's a lot of code repetition...
