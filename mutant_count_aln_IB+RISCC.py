@@ -119,35 +119,6 @@ def define_option_parser():
     return parser
 
 # TODO merge this with a similar code bit in mutant_join_datasets.py to minimize code duplication
-def save_dataset_files(dataset, outfile, verbosity_level=0, print_genome_side_details=True, 
-                       count_cassette=True, count_other=True, sort_data_by='position', options="N/A"):
-    """ Print data to file, plus summary, pickle, and optionally detail files; optionally print summary to stdout.
-    
-    The options argument is only used to be printed in the header to make it clear how the file was generated - 
-     it should be the applicable optparse options object if there is one, or a text message otherwise.
-    """
-    # print summary info to stdout if desired
-    if verbosity_level>1: print "\nDATA SUMMARY:"
-    if verbosity_level>0: dataset.print_summary(count_cassette=count_cassette, count_other=count_other)
-    # print full data to outfile
-    if verbosity_level>1: print "printing output - time %s."%time.ctime()
-    outfile_basename = os.path.splitext(outfile)[0]
-    summary_outfile = outfile_basename + '_summary.txt'
-    pickled_outfile = outfile_basename + '.pickle'
-    detail_outfile = outfile_basename + '_detail.txt'
-    with open(summary_outfile,'w') as OUTFILE:
-        write_header_data(OUTFILE,options)      # writes timestamp, generating program/options, folder and computer name, etc
-        OUTFILE.write("### SUMMARY:\n")
-        dataset.print_summary(OUTFILE, count_cassette=count_cassette, count_other=count_other)
-        OUTFILE.write("# Basic mutant data in %s (or pickled in %s); detailed genome-side data in %s.\n"%(outfile, pickled_outfile, 
-                                                                                                          detail_outfile))
-    with open(outfile,'w') as OUTFILE:
-        dataset.print_data(OUTPUT=OUTFILE, sort_data_by=sort_data_by, header_line=True, header_prefix='')
-    pickle(dataset, pickled_outfile, protocol=-1)
-    if print_genome_side_details:
-        with open(detail_outfile,'w') as OUTFILE:
-            dataset.print_detailed_RISCC_data(OUTPUT=OUTFILE, sort_data_by=sort_data_by)
-
 
 def main(outfile, options):
     """ Run the main functionality of the module (see module docstring for more information), excluding testing.
@@ -204,8 +175,8 @@ def main(outfile, options):
                                            print_info=(options.verbosity_level >= 2))
 
     ### output data to files
-    save_dataset_files(all_alignment_data, outfile, options.verbosity_level, True, True, True, 
-                       options.sort_data_key, options)
+    mutant_IB_RISCC_classes.save_dataset_files(all_alignment_data, outfile, options.verbosity_level, True, True, True, 
+                                               options.sort_data_key, options)
     # TODO write some info about all the other files that go with this one (pickle, merging-info, *cassette*)
 
 
