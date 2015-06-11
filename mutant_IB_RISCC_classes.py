@@ -1725,7 +1725,8 @@ class Insertional_mutant_pool_dataset():
     # TODO how should the IB clustering for IB-only datasets be done?  1) Align them to the RISCC cluster centroids, 2) cluster RISCC and IB-only IB seqs all together, 3) cluster each dataset separately and look for matches. TODO
 
     def add_RISCC_alignment_files_to_data(self, cassette_side_flank_aligned_file, genome_side_aligned_file, IB_fastq_file, 
-                                          IB_cluster_file=None, best_genome_side_only=False, ignore_unaligned=False, 
+                                          allowed_IBs=None, IB_cluster_file=None, 
+                                          best_genome_side_only=False, ignore_unaligned=False, 
                                           max_allowed_cassette_side_dist=1, max_cassette_side_ratio_to_ignore=100, 
                                           removed_mutant_file='/dev/null', quiet=False):
         """ Add paired-end RISCC reads to dataset mutants, based on IB clustering.
@@ -1790,11 +1791,19 @@ class Insertional_mutant_pool_dataset():
                                   +"filename is %s"%IB_cluster_file)
             IB_seq_to_centroid = invert_listdict_nodups(IB_centroid_to_seqs)
 
+        # set up IB checks - return True if IB is in allowed_IBs or if no allowed_IBs was given.
+        if allowed_IBs is None:     _IB_check = lambda IB: True
+        else:                       _IB_check = lambda IB: IB in allowed_IBs
+
         for (readname, IB_seq, cassette_side_aln, genome_side_aln) in self._parse_3files_parallel(
                                             IB_fastq_file, cassette_side_flank_aligned_file, genome_side_aligned_file):
             # get the cassette insertion position (as an Insertion_position object)
             # MAYBE-TODO instead of generating cassette_side_position all the time, even with multiple identical reads, 
             #  check if seq is already present in mutant, or something?  To save time.
+
+            # if the IB isn't in the allowed set, skip this read (unless there is no allowed set, then just keep going)
+            if not _IB_check(IB_seq):   continue
+
             cassette_side_position = get_insertion_pos_from_flanking_region_pos(cassette_side_aln, self.summary.cassette_end, 
                                                                     self.summary.relative_read_direction, immutable_position=True)
             if ignore_unaligned and cassette_side_position in SPECIAL_POSITIONS.all_undefined:
