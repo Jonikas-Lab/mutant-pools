@@ -17,7 +17,6 @@ import unittest
 # other packages
 import HTSeq
 # my modules
-from general_utilities import write_header_data, pickle
 from testing_utilities import run_functional_tests
 import mutant_IB_RISCC_classes
 import mutant_utilities
