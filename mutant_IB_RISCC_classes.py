@@ -21,7 +21,7 @@ from numpy import median, round, isnan
 import HTSeq
 from BCBio import GFF
 # my modules
-from general_utilities import split_into_N_sets_by_counts, add_dicts_of_ints, sort_lists_inside_dict, invert_listdict_nodups, keybased_defaultdict, value_and_percentages, FAKE_OUTFILE, NaN, nan_func, merge_values_to_unique, pickle, unpickle
+from general_utilities import split_into_N_sets_by_counts, add_dicts_of_ints, sort_lists_inside_dict, invert_listdict_nodups, keybased_defaultdict, value_and_percentages, FAKE_OUTFILE, NaN, nan_func, merge_values_to_unique, pickle, unpickle, write_header_data
 from basic_seq_utilities import SEQ_ENDS, SEQ_STRANDS, SEQ_DIRECTIONS, SEQ_ORIENTATIONS, name_seq_generator_from_fasta_fastq, position_test_contains, position_test_overlap, chromosome_sort_key, get_seq_count_from_collapsed_header
 from deepseq_utilities import check_mutation_count_by_optional_NM_field, get_HTSeq_optional_field, Fake_deepseq_objects
 from parse_annotation_file import get_all_gene_annotation
@@ -2456,14 +2456,14 @@ def save_dataset_files(dataset, outfile, verbosity_level=0, print_genome_side_de
     pickled_outfile = outfile_basename + '.pickle'
     detail_outfile = outfile_basename + '_detail.txt'
     with open(summary_outfile,'w') as OUTFILE:
-        general_utilities.write_header_data(OUTFILE,options)      # writes timestamp, generating program/options, folder and computer name, etc
+        write_header_data(OUTFILE,options)      # writes timestamp, generating program/options, folder and computer name, etc
         OUTFILE.write("### SUMMARY:\n")
         dataset.print_summary(OUTFILE, count_cassette=count_cassette, count_other=count_other)
         OUTFILE.write("# Basic mutant data in %s (or pickled in %s); detailed genome-side data in %s.\n"%(outfile, pickled_outfile, 
                                                                                                           detail_outfile))
     with open(outfile,'w') as OUTFILE:
         dataset.print_data(OUTPUT=OUTFILE, sort_data_by=sort_data_by, header_line=True, header_prefix='')
-    general_utilities.pickle(dataset, pickled_outfile, protocol=-1)
+    pickle(dataset, pickled_outfile, protocol=-1)
     if print_genome_side_details:
         with open(detail_outfile,'w') as OUTFILE:
             dataset.print_detailed_RISCC_data(OUTPUT=OUTFILE, sort_data_by=sort_data_by)
