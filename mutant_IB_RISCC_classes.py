@@ -1779,13 +1779,15 @@ class Insertional_mutant_pool_dataset():
         if IB_cluster_file is not None:
             if IB_cluster_file.endswith('.pickle'):
                 IB_centroid_to_seqs = unpickle(IB_cluster_file)
-            elif IB_cluster_file.endswith('.py'):
-                # for some reason just doing execfile(IB_cluster_file) doesn't import stuff into local namespace, so using exec
-                exec open(IB_cluster_file).read()
-                try:    
-                    len(IB_centroid_to_seqs)
-                except NameError:
-                    raise MutantError("IB_cluster_file %s didn't define an IB_centroid_to_seqs dictionary!"%IB_cluster_file)
+           # this used to work, but then it stopped! Not sure why.  Anyway it's only needed for tests.
+           # MAYBE-TODO just make this input a dict instead of a file?
+           #elif IB_cluster_file.endswith('.py'):
+           #    # for some reason just doing execfile(IB_cluster_file) doesn't import stuff into local namespace, so using exec
+           #    exec open(IB_cluster_file).read()
+           #    try:    
+           #        len(IB_centroid_to_seqs)
+           #    except NameError:
+           #        raise MutantError("IB_cluster_file %s didn't define an IB_centroid_to_seqs dictionary!"%IB_cluster_file)
             else:
                 raise MutantError("Unknown IB_cluster_file format in add_RISCC_alignment_files_to_data - must be .pickle or .py, "
                                   +"filename is %s"%IB_cluster_file)
@@ -3254,7 +3256,7 @@ class Testing_Insertional_mutant_pool_dataset(unittest.TestCase):
     def test__add_RISCC_alignment_files_to_data(self):
         # testing with IB clustering (.py file and .pickle file)
         infiles = ['test_data/INPUT_RISCC1-alignment-cassette-side.sam', 'test_data/INPUT_RISCC1-alignment-genome-side.sam', 
-                   'test_data/INPUT_RISCC1-IBs.fq', 'test_data/INPUT_RISCC1-IB-clusters.py']
+                   'test_data/INPUT_RISCC1-IBs.fq', None, 'test_data/INPUT_RISCC1-IB-clusters.py']
         dataset = Insertional_mutant_pool_dataset('3prime', 'outward')
         dataset.add_RISCC_alignment_files_to_data(*infiles)
         self._check_RISCC1_outputs(dataset)
