@@ -298,7 +298,7 @@ def replicate_reproducibility_info(dataset1, dataset2, readcount_cutoffs=[1,10,1
 
 
 def insertion_pair_type_distance(pos1, side1, pos2, side2):
-    """ Given two insertion positions and sides (5'/3'), return (type, distance), where type is away/toward/same-facing.
+    """ Given two insertion positions and sides (5'/3'), return (type, distance), where type is inner/outer-cassette or same-dir.
 
     pos1 and pos2 should be Insertion_position instances (from mutant_IB_RISCC_classes or mutant_analysis_classes),
       or they can be (chromosome, strand, min_position) tuples. (Strand must be + or -, chromosome is a string, min_pos is an int.)
@@ -308,20 +308,20 @@ def insertion_pair_type_distance(pos1, side1, pos2, side2):
     Otherwise, the distance will be the distance between the minimum_position property of the two positions, and 
     the type shows how the two flanking sequences would relate to each other, as follows:
 
-    Away-facing would be two flanking seqs in any arrangement like this: 
+    Inner-cassette would be two flanking seqs in any arrangement like this: 
       (| is the cassette position, ----> is the flanking sequence; the distance between the two |s is the distance.)
         <-------|               <-------|                 <-------|           
                 |------>                  |------>                      |------>  
       The first case would be distance 0, like two sides of a perfect cassette insertion (both +strand but different ends, 
         or same end but different strands if it was an opposite-tandem cassette insertion).  The other cases could be
         two sides of a cassette insertion with a genomic deletion.
-    Toward-facing pairs would be any of those (at different distances, high to low):
+    Outer-cassette pairs would be any of those (at different distances, high to low):
                      <-------|             <-------|          <-------|         <-------|            
         |------>                      |------>               |------>                |------>              
-      The minimum distance is 1 - a distance of 0 would be considered away-facing. If the distance is low, those could be 
+    The minimum distance is 1 - a distance of 0 would be considered inner-cassette. If the distance is low, those could be 
       two sides of an insertion cassette with a short duplication; if it's long, it could be two sides of a fragment between
       two insertion cassettes.
-    Same-facing pairs would be any of these (different distances, low to high):
+    Same-direction pairs would be any of these (different distances, low to high):
         |------>               |------>                 |------>              
         |------>                    |------>                         |------>
       These are likely to be independent rather than two sides of the same insertion. They could also possibly be two sides
@@ -339,13 +339,13 @@ def insertion_pair_type_distance(pos1, side1, pos2, side2):
     # figure out the case
     if chrom1 != chrom2:                                    return ('diff-chrom', float('NaN'))
     dist = abs(minpos1 - minpos2)
-    if side1==side2 and strand1==strand2:                   return ('same-facing', dist)
-    if side1!=side2 and strand1!=strand2:                   return ('same-facing', dist)
-    if '5' in side1 and strand1=='+' and minpos1 <= minpos2: return ('away-facing', dist)
-    if '3' in side1 and strand1=='-' and minpos1 <= minpos2: return ('away-facing', dist)
-    if '5' in side2 and strand2=='+' and minpos2 <= minpos1: return ('away-facing', dist)
-    if '3' in side2 and strand2=='-' and minpos2 <= minpos1: return ('away-facing', dist)
-    else:                                                   return ('toward-facing', dist)
+    if side1==side2 and strand1==strand2:                   return ('same-direction', dist)
+    if side1!=side2 and strand1!=strand2:                   return ('same-direction', dist)
+    if '5' in side1 and strand1=='+' and minpos1 <= minpos2: return ('inner-cassette', dist)
+    if '3' in side1 and strand1=='-' and minpos1 <= minpos2: return ('inner-cassette', dist)
+    if '5' in side2 and strand2=='+' and minpos2 <= minpos1: return ('inner-cassette', dist)
+    if '3' in side2 and strand2=='-' and minpos2 <= minpos1: return ('inner-cassette', dist)
+    else:                                                   return ('outer-cassette', dist)
 
 ######### unit-tests
 
@@ -443,28 +443,28 @@ class Testing(unittest.TestCase):
 
     def test__insertion_pair_type_distance(self):
         side0, pos0 = "5'", mutant_IB_RISCC_classes.Insertion_position('chr1', '+', full_position='100-?')
-        assert insertion_pair_type_distance(pos0, side0, pos0, side0) == ('same-facing', 0)
+        assert insertion_pair_type_distance(pos0, side0, pos0, side0) == ('same-direction', 0)
         # other-side cases, same chromosome
         for (side1, strand1) in [("3'", "+"), ("5'", "-")]:
             pos1 = mutant_IB_RISCC_classes.Insertion_position('chr1', strand1, full_position='?-101')
-            assert insertion_pair_type_distance(pos0, side0, pos1, side1) == ('away-facing', 0) 
+            assert insertion_pair_type_distance(pos0, side0, pos1, side1) == ('inner-cassette', 0) 
             pos1 = mutant_IB_RISCC_classes.Insertion_position('chr1', strand1, full_position='?-102')
-            assert insertion_pair_type_distance(pos0, side0, pos1, side1) == ('away-facing', 1) 
+            assert insertion_pair_type_distance(pos0, side0, pos1, side1) == ('inner-cassette', 1) 
             pos1 = mutant_IB_RISCC_classes.Insertion_position('chr1', strand1, full_position='?-301')
-            assert insertion_pair_type_distance(pos0, side0, pos1, side1) == ('away-facing', 200) 
+            assert insertion_pair_type_distance(pos0, side0, pos1, side1) == ('inner-cassette', 200) 
             pos1 = mutant_IB_RISCC_classes.Insertion_position('chr1', strand1, full_position='?-100')
-            assert insertion_pair_type_distance(pos0, side0, pos1, side1) == ('toward-facing', 1) 
+            assert insertion_pair_type_distance(pos0, side0, pos1, side1) == ('outer-cassette', 1) 
             pos1 = mutant_IB_RISCC_classes.Insertion_position('chr1', strand1, full_position='?-50')
-            assert insertion_pair_type_distance(pos0, side0, pos1, side1) == ('toward-facing', 51) 
+            assert insertion_pair_type_distance(pos0, side0, pos1, side1) == ('outer-cassette', 51) 
         for (side1, strand1) in [("3'", "-"), ("5'", "+")]:
             pos1 = mutant_IB_RISCC_classes.Insertion_position('chr1', strand1, full_position='100-?')
-            assert insertion_pair_type_distance(pos0, side0, pos1, side1) == ('same-facing', 0) 
+            assert insertion_pair_type_distance(pos0, side0, pos1, side1) == ('same-direction', 0) 
             pos1 = mutant_IB_RISCC_classes.Insertion_position('chr1', strand1, full_position='101-?')
-            assert insertion_pair_type_distance(pos0, side0, pos1, side1) == ('same-facing', 1) 
+            assert insertion_pair_type_distance(pos0, side0, pos1, side1) == ('same-direction', 1) 
             pos1 = mutant_IB_RISCC_classes.Insertion_position('chr1', strand1, full_position='50-?')
-            assert insertion_pair_type_distance(pos0, side0, pos1, side1) == ('same-facing', 50) 
+            assert insertion_pair_type_distance(pos0, side0, pos1, side1) == ('same-direction', 50) 
             pos1 = mutant_IB_RISCC_classes.Insertion_position('chr1', strand1, full_position='500-?')
-            assert insertion_pair_type_distance(pos0, side0, pos1, side1) == ('same-facing', 400) 
+            assert insertion_pair_type_distance(pos0, side0, pos1, side1) == ('same-direction', 400) 
         for side1 in "5' 3'".split():
             for chrom1 in 'chr2 chromosome_5 insertion_cassette scaffold_88 chloroplast'.split():
                 for strand1 in "+=":
