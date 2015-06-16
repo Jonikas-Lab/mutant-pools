@@ -341,10 +341,10 @@ def insertion_pair_type_distance(pos1, side1, pos2, side2):
     dist = abs(minpos1 - minpos2)
     if side1==side2 and strand1==strand2:                   return ('same-facing', dist)
     if side1!=side2 and strand1!=strand2:                   return ('same-facing', dist)
-    if side1=="5" and strand1=='+' and minpos1 <= minpos2: return ('away-facing', dist)
-    if side1=="3" and strand1=='-' and minpos1 <= minpos2: return ('away-facing', dist)
-    if side2=="5" and strand2=='+' and minpos2 <= minpos1: return ('away-facing', dist)
-    if side2=="3" and strand2=='-' and minpos2 <= minpos1: return ('away-facing', dist)
+    if '5' in side1 and strand1=='+' and minpos1 <= minpos2: return ('away-facing', dist)
+    if '3' in side1 and strand1=='-' and minpos1 <= minpos2: return ('away-facing', dist)
+    if '5' in side2 and strand2=='+' and minpos2 <= minpos1: return ('away-facing', dist)
+    if '3' in side2 and strand2=='-' and minpos2 <= minpos1: return ('away-facing', dist)
     else:                                                   return ('toward-facing', dist)
 
 ######### unit-tests
