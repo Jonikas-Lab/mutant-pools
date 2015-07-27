@@ -230,7 +230,8 @@ class Insertion_position(object):
         try:
             before,after = [cls._parse_single_position(s) for s in full_position_string.split('-')]
         except (ValueError,AttributeError):
-            raise ValueError("The full_position argument must be a string of the form '100-200', '?-200' or '100-?'!")
+            raise ValueError("The full_position argument must be a string of the form '100-200', '?-200' or '100-?'!"
+                             "Got '%s'"%full_position_string)
         if before is None and after is None:
             raise ValueError("At least one section of the full_position argument must be a number!")
         return before,after
@@ -782,6 +783,7 @@ class Insertional_mutant():
             if pos not in SPECIAL_POSITIONS.all_undefined:
                 if not get_position_distance(main_pos, pos, ignore_strand=False) <= max_allowed_dist:
                     if count*ratio_to_ignore <= main_count:
+                        # TODO removing these reads is a problem, because we don't remove the genome-side reads!
                         del self.sequences_counts_positions_errors[seq]
                         self.total_read_count -= count
                         if N_err==0:    self.perfect_read_count -= count
