@@ -12,8 +12,6 @@ import sys, os, time
 import unittest
 import itertools
 from collections import defaultdict, Counter
-import subprocess
-import filecmp
 import pprint
 # other libraries
 # MAYBE-TODO try https://github.com/daler/gffutils instead of bcbio-gff?
@@ -24,7 +22,7 @@ from general_utilities import count_list_values, split_into_N_sets_by_counts, va
 from testing_utilities import run_functional_tests
 from mutant_utilities import DEFAULT_NUCLEAR_GENOME_FILE
 
-# TODO TODO TODO BCBio.GFF currently not working! After upgrading my computer from Xubuntu 12.10 to 14.04, see tmp_testing_GFF.txt code - gives an error.  Reported issue - https://github.com/chapmanb/bcbb/issues/89
+# At once point BCBio.GFF stopped working after upgrading my computer from Xubuntu 12.10 to 14.04, see https://github.com/chapmanb/bcbb/issues/89 for report/fix.
 
 ### Constants
 
