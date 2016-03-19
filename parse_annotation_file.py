@@ -20,6 +20,8 @@ DEFAULT_GENE_ANNOTATION_FILES_v5p5 = [
 DEFAULT_GENE_ANNOTATION_FOLDER = os.path.expanduser('~/experiments/reference_data/chlamy_annotation')
 DEFAULT_GENE_ANNOTATION_FILES_v5p5 = [(os.path.join(DEFAULT_GENE_ANNOTATION_FOLDER, f), h, i, c, s, j) 
                                       for (f, h, i, c, s, j) in DEFAULT_GENE_ANNOTATION_FILES_v5p5]
+DEFAULT_ID_CONVERSION_FILE_v5p5 = os.path.join(DEFAULT_GENE_ANNOTATION_FOLDER, 
+                                               'ChlamydomonasTranscriptNameConversionBetweenReleases.Mch12b.txt')
 
 # LATER-TODO for synonyms files, strip the "t.*" part from the synonym ID columns as well as the gene ID column?
 
@@ -128,6 +130,58 @@ def parse_gene_annotation_file(gene_annotation_filename, content_header_fields, 
     if verbosity_level>0:
         print "  DONE Parsing gene annotation file - found %s genes"%len(data_by_gene)
     return defaultdict(lambda: ['-' for _ in content_columns], data_by_gene)
+
+
+def parse_ID_conversion_file(infile=DEFAULT_ID_CONVERSION_FILE_v5p5, key_header='5.5', val_header=None, 
+                             strip_fields_after = ['.t', '_t'], strip_fields_before = ['|', 'au5.', 'Au9.'], 
+                             blank_val = '--', warn_on_multiples=True):
+    """ Return key_ID:other_ID_list dict and other_ID_header based on infile, or just key_ID:val_ID if val_header is given.
+
+    key_ID is taken from key_header; all the other columns go in the value list, 
+        UNLESS val_header is given, in which case the output will just be key:val with the other columns ignored.
+    From all field values, all characters after each strip_fields_after val and before each strip_fields_before val are removed:
+        so, Cre01.g000550.t1.2 becomes Cre01.g000550, jgi|Chlre4|391833 becomes 391833, au5.g987_t1 becomes g987.
+    This means that sometimes there are multiple lines per stripped ID - those lines are merged, excluding repeats and blank_val,
+        and the results are comma-separated if there are multiple values; 
+        if warn_on_multiples is True, a warning is printed for all multiple-value cases.
+    """
+    # Note that the file is variable-space-separated, not tab-separated!
+    conversion_dict = {}
+    header = []
+    for line in open(infile):
+        if line.startswith('#') and '  ' not in line:   continue        # skip title line
+        if line.startswith('#'):
+            if header:  raise Exception("Found multiple header lines! (start with # and contain tabs)")
+            column_headers = line[1:].strip().split()
+            try:                key_column = column_headers.index(key_header)
+            except ValueError:  raise Exception("key_header %s didn't appear in header!"%key_header)
+            header = column_headers
+            del header[key_column]
+        if not line.startswith('#'):
+            if not header:  raise Exception("Found data line before header line!")
+            fields = line.strip().split()
+            for sep in strip_fields_after:  fields = [x.split(sep)[0] for x in fields]
+            for sep in strip_fields_before: fields = [x.split(sep)[-1] for x in fields]
+            key = fields[key_column]
+            if key == blank_val:    continue
+            del fields[key_column]
+            if key not in conversion_dict:  
+                conversion_dict[key] = fields
+            else:
+                old_fields = [set(x.split(',')) for x in conversion_dict[key]]
+                joint_fields = [','.join((set_o | set([n])) - set([blank_val])) for (set_o, n) in zip(old_fields, fields)]
+                conversion_dict[key] = joint_fields
+                if warn_on_multiples:
+                    for field, curr_header in zip(joint_fields, header):
+                        if ',' in field:
+                            print "Warning: %s %s has multiple %s values! %s"%(key_header, key, curr_header, field)
+    if val_header:
+        try:                val_column = column_headers.index(val_header)
+        except ValueError:  raise Exception("val_header %s didn't appear in header!"%val_header)
+        return {key: vals[val_column] for (key, vals) in conversion_dict.items()}
+    else:
+        return conversion_dict, header
+    # TODO add unit-tests!
 
 
 def get_all_gene_annotation(genome_version=None, gene_annotation_files=None, ignore_comments=False, print_info=False):
