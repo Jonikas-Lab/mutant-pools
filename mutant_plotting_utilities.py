@@ -495,18 +495,20 @@ def plot_hot_cold_spot_overlapping(hc_spot_list, pval_cutoffs, all_chromosomes=N
         else:
             raise Exception("If pval_cutoffs isn't length 2-3, must provide pval_cutoff_colors, no default!")
     if all_chromosomes is None:
-        all_chromosomes = sorted(set(hc_data[0] for hc_data in hc_spot_list))
-        # TODO but they'll be sorted wrong, if numbers are involved!
+        all_chromosomes = set(hc_data[0] for hc_data in hc_spot_list)
     else:
-        all_chromosomes = list(all_chromosomes)
+        all_chromosomes = set(all_chromosomes)
     if chrom_numbers is None:
-        all_chromosomes.sort(key=basic_seq_utilities.chromosome_sort_key)
-        chrom_numbers = {chrom:N for (N,chrom) in enumerate(all_chromosomes)}
+        all_chromosomes_sorted = list(all_chromosomes)
+        all_chromosomes_sorted.sort(key=basic_seq_utilities.chromosome_sort_key)
+        chrom_numbers = {chrom:N for (N,chrom) in enumerate(all_chromosomes_sorted)}
     # plot the lines reverse-sorted by p-value, so the lowest p-values are plotted last and thus are on top.
     if sort_by is None:         sorted_hc_spot_list = list(hc_spot_list)
     elif sort_by=='pvalue':     sorted_hc_spot_list = sorted(hc_spot_list, key=lambda x: x[3], reverse=True)
     elif sort_by=='size':       sorted_hc_spot_list = sorted(hc_spot_list, key=lambda x: x[2]-x[1], reverse=True)
     for (chrom, start, end, pvalue, kind, offset, mcount, expected) in sorted_hc_spot_list:
+        # plot only ones on all_chromosomes
+        if chrom not in all_chromosomes:    continue
         # plot only the lines with a pvalue that matches at least the highest cutoff
         cutoff_matched = _lowest_cutoff_matched(pvalue, pval_cutoffs)
         if cutoff_matched>0:
