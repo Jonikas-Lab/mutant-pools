@@ -9,6 +9,7 @@ from __future__ import division
 import unittest
 import time
 import os
+import sys
 import math
 import random
 import collections
@@ -656,8 +657,9 @@ def get_hot_cold_spot_data(hc_windowsizes_offsets, DATASET, chromosome_lengths, 
 
 def get_hot_cold_spot_list(pvalue_data_window_size_offset_dict, ifcold_data_window_size_offset_dict, 
                            mcount_data_window_size_offset_dict=None, expected_mcount_data_window_size_offset_dict=None,
-                           average_mutants_per_window=None, pval_cutoff=0.05, print_result_counts=True, print_info=True):
-    """ Transform p-value and ifcold info into a list of (chrom, start, end, pvalue, kind, window_offset) tuples with pvalue<=cutoff.
+                           average_mutants_per_window=None, pval_cutoff=0.05, print_result_counts=True, print_info=True, 
+                           OUTFILE=sys.stdout):
+    """ Return list of (chrom, start, end, pvalue, kind, window_offset, found_mutants, expected_mutants) tuples with pvalue<=cutoff.
 
     First three arguments should be window_size:(window_offset:(chromosome:list_of_window_values))) triple nested dictionaries.
       - the p-values should be 0-1, and you should probably get FDR correction done on them first; 
@@ -700,15 +702,16 @@ def get_hot_cold_spot_list(pvalue_data_window_size_offset_dict, ifcold_data_wind
                         end_pos = (N+1)*window_size + window_offset
                         hc_data_list.append((chrom, start_pos, end_pos, pvalue, kind, window_offset, mcount, expected))
             if print_result_counts:
-                print "%s results below adjusted p-value %s for data with %s window and offset %s"%(N_spots_for_window_offset, 
-                                                                  pval_cutoff, format_bp(window_size), format_bp(window_offset))
+                OUTFILE.write(
+                    "%s results below adjusted p-value %s for data with %s window and offset %s\n"%(N_spots_for_window_offset, 
+                                                                  pval_cutoff, format_bp(window_size), format_bp(window_offset)))
     hc_data_list.sort(key=lambda x: (basic_seq_utilities.chromosome_sort_key(x[0]), x[1:]))
     if print_info:
         for N,(chrom, start_pos, end_pos, pvalue, kind, offset, mcount, expected) in enumerate(hc_data_list):
             window_size = end_pos-start_pos
-            print "%s %s-%s (window size %s) - %s, %.3g adj. p-value (%s mutants, expected %.3g, avg %.3g) (#%s)"%(
+            OUTFILE.write("%s %s-%s (window size %s) - %s, %.3g adj. p-value (%s mutants, expected %.3g, avg %.3g) (#%s)\n"%(
                                         chrom, format_bp(start_pos), format_bp(end_pos), format_bp(window_size), kind, 
-                                        pvalue, mcount, expected, average_mutants_per_window[window_size], N)
+                                        pvalue, mcount, expected, average_mutants_per_window[window_size], N))
     return hc_data_list
     # TODO should unit-test this!
 
