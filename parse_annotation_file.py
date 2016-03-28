@@ -23,6 +23,18 @@ DEFAULT_GENE_ANNOTATION_FILES_v5p5 = [(os.path.join(DEFAULT_GENE_ANNOTATION_FOLD
 DEFAULT_ID_CONVERSION_FILE_v5p5 = os.path.join(DEFAULT_GENE_ANNOTATION_FOLDER, 
                                                'ChlamydomonasTranscriptNameConversionBetweenReleases.Mch12b.txt')
 
+DEFAULT_ANNOTATION_DEFINITION_FILES_v5p5 = {
+    'PFAM': ['Pfam-A.clans.tsv'], 
+    'Panther': ['PANTHER9.0_HMM_classifications', 'PANTHER6.1_HMM_classifications', 'PANTHER10.0_HMM_classifications'], 
+    'KOG': ['KOG.tsv'], 
+    'KEGG_ec.tsv': ['KEGG_ec.tsv'], 
+    'KEGG Orthology': ['KEGG_Orthology.tsv'], 
+    'Gene Ontology terms': ['GO.txt']
+}
+DEFAULT_ANNOTATION_DEF_FOLDER = os.path.join(DEFAULT_GENE_ANNOTATION_FOLDER, 'annotation_definitions')
+DEFAULT_ANNOTATION_DEFINITION_FILES_v5p5 = {term: [os.path.join(DEFAULT_ANNOTATION_DEF_FOLDER, f) for f in files] 
+                                            for (term, files) in DEFAULT_ANNOTATION_DEFINITION_FILES_v5p5.items()}
+
 # LATER-TODO for synonyms files, strip the "t.*" part from the synonym ID columns as well as the gene ID column?
 
 # Older deprecated annotation info
@@ -227,6 +239,148 @@ def get_all_gene_annotation(genome_version=None, gene_annotation_files=None, ign
 #       try:                genename_dict[gene].add(fields['geneName'])
 #       except KeyError:    pass
 #   genename_dict = defaultdict(set, {key:','.join(vals) for (key,vals) in genename_dict.items()})
+
+
+def get_term_definitions_from_obo(obo_infile):
+    """ Parse OBO file; for each [Term] section, yield name:val dict with names being id, name, namespace, def, extras.
+    """
+    curr_record = {}
+    in_term = False
+    for line in open(obo_infile):
+        if line.startswith('[Term]'):   in_term = True
+        if in_term: 
+            for field in 'id name namespace def'.split():
+                if line.startswith(field + ': '):   curr_record[field] = line.strip()[len(field + ': '):]
+            if not line.strip():
+                if 'id' not in curr_record: raise Exception("Record lacks ID! %s"%curr_record)
+                if len(curr_record)<2:      raise Exception("Record only has ID! %s"%curr_record['id'])
+                raw_def = curr_record['def']
+                try:                raw_def, raw_extras = raw_def.rsplit('" ', 1)
+                except ValueError:  raise Exception("Can't parse this into def and extras! %s"%raw_def)
+                curr_record['def'] = raw_def.strip().strip('"').replace('\\"', '"')
+                curr_record['extras'] = raw_extras.strip().strip('[]')
+                yield curr_record
+                curr_record = {}
+                in_term = False
+
+
+def simple_format_GO_file(infile, outfile):
+    """ Read obo format GO file and write term definitions to outfile.
+
+    Was used on the files in ~/experiments/reference_data/chlamy_annotation/annotation_definitions
+    """
+    columns = 'id name namespace def extras'.split()
+    with open(outfile, 'w') as OUTFILE:
+        OUTFILE.write('\t'.join(columns) + '\n')
+        for record in get_term_definitions_from_obo(infile):
+            OUTFILE.write('\t'.join(record.get(x,'-') for x in columns) + '\n')
+
+
+def get_all_annotation_definitions(annotation_types_files=DEFAULT_ANNOTATION_DEFINITION_FILES_v5p5):
+    """ Return annotation_type:(term:definition) double dictionary based on types and files in argument. """
+    parsing_functions = {'PFAM': get_PFAM_definitions, 'Panther': get_Panther_definitions,  'KOG': get_KOG_definitions, 
+                         'KEGG_ec.tsv': get_KEGGec_definitions, 'KEGG Orthology': get_KEGGorthology_definitions, 
+                         'Gene Ontology terms': get_GO_definitions }
+    all_annotation = {}
+    for term, files in annotation_types_files.items():
+        # parse all files
+        try:
+            parsing_function = parsing_functions[term]
+        except KeyError:
+            raise Exception("No defined parsing function for %s! There are functions for %s"%(term, ', '.join(parsing_functions)))
+        dictionaries = [parsing_function(f) for f in files]
+        # if there are multiple files, use the later ones to fill in only what was absent in the first
+        final_dict = dictionaries[0]
+        for extra_dict in dictionaries[1:]:
+            for term, definition in extra_dict.items():
+                if term not in final_dict:
+                    final_dict[term] = definition
+        all_annotation[term] = final_dict
+    return all_annotation
+
+
+def get_PFAM_definitions(infile):
+    """ Return term:definition dict based on PFAM term definition file. """
+    definitions = {}
+    for line in open(infile):
+        fields = line[:-1].split('\t')
+        ID = fields[0]
+        if ID in definitions:
+            raise Exception("ID %s shows up twice in file %s!"%(ID, infile))
+        definitions[ID] = fields[4] + (" (%s)"%fields[2] if fields[2] else '')
+    return definitions
+
+
+def get_Panther_definitions(infile):
+    """ Return term:definition dict based on Panther term definition file. """
+    definitions = {}
+    for line in open(infile):
+        fields = line[:-1].split('\t')
+        ID = fields[0]
+        if ID in definitions:
+            raise Exception("ID %s shows up twice in file %s!"%(ID, infile))
+        definitions[ID] = "%s (%s)"%(fields[1], ', '.join(fields[2:]))
+        # MAYBE-TODO include definitions for all the GO terms listed in the fields, too?  But there's LOTS
+    return definitions
+
+
+def get_KOG_definitions(infile):
+    """ Return term:definition dict based on KOG term definition file. """
+    definitions = {}
+    for line in open(infile):
+        if line.startswith('Identifier'):   continue
+        fields = line[:-1].split('\t')
+        ID = fields[0]
+        if ID in definitions:
+            raise Exception("ID %s shows up twice in file %s!"%(ID, infile))
+        definitions[ID] = "%s (namespace %s)"%(fields[1], fields[2])
+    return definitions
+
+
+def get_KEGGec_definitions(infile):
+    """ Return term:definition dict based on KEGG-ec term definition file. """
+    definitions = {}
+    for line in open(infile):
+        if line.startswith('Identifier'):   continue
+        fields = line[:-1].split('\t')
+        ID = fields[0]
+        if ID in definitions:
+            raise Exception("ID %s shows up twice in file %s!"%(ID, infile))
+        if fields[2] in ['', '""']:     definitions[ID] = fields[1]
+        else:                           definitions[ID] = "%s (%s)"%(fields[2], fields[1])
+    # Some definitions are just "Transferred entry: 1.21.3.4" - in those cases grab the real ones!
+    for ID, definition in definitions.items():
+        if definition.startswith('Transferred entry:'):
+            new_IDs = definition.split(': ')[1].replace(' and ', ', ').split(', ')
+            new_definition = "Transferred entries (%s): %s"%(len(new_IDs), ' & '.join(definitions[x] for x in new_IDs))
+    return definitions
+
+
+def get_KEGGorthology_definitions(infile):
+    """ Return term:definition dict based on KEGG-Orthology term definition file. """
+    definitions = {}
+    for line in open(infile):
+        if line.startswith('Namespace'):                continue
+        fields = line[:-1].split('\t')
+        ID = fields[1]
+        if ID[0] != 'K' or ID[1] not in '1234567890':   continue
+        if ID in definitions:
+            raise Exception("ID %s shows up twice in file %s!"%(ID, infile))
+        definitions[ID] = "%s (%s)"%(fields[2], fields[3])
+    return definitions
+
+
+def get_GO_definitions(infile):
+    """ Return term:definition dict based on GO term definition file. """
+    definitions = {}
+    for line in open(infile):
+        if line.startswith('id\tname'):                continue
+        fields = line[:-1].split('\t')
+        ID = fields[0]
+        if ID in definitions:
+            raise Exception("ID %s shows up twice in file %s!"%(ID, infile))
+        definitions[ID] = "%s (%s: %s) [%s]"%(fields[1], fields[2], fields[3], fields[4])
+    return definitions
 
 
 class Testing(unittest.TestCase):
