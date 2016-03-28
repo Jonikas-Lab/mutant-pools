@@ -291,10 +291,17 @@ def get_all_annotation_definitions(annotation_types_files=DEFAULT_ANNOTATION_DEF
         dictionaries = [parsing_function(f) for f in files]
         # if there are multiple files, use the later ones to fill in only what was absent in the first
         final_dict = dictionaries[0]
-        for extra_dict in dictionaries[1:]:
+        if len(files) > 1:
+            print "For %s data, merging multiple files - starting with %s (%s terms)"%(term, os.path.split(files[0])[1], 
+                                                                                       len(final_dict))
+        for (extra_dict, extra_file) in zip(dictionaries[1:], files[1:]):
+            N_added = 0
             for term, definition in extra_dict.items():
                 if term not in final_dict:
+                    N_added += 1
                     final_dict[term] = definition
+            print "  - added %s/%s terms from %s - total %s terms."%(N_added, len(extra_dict), 
+                                                                     os.path.split(extra_file)[1], len(final_dict))
         all_annotation[term] = final_dict
     return all_annotation
 
@@ -308,6 +315,7 @@ def get_PFAM_definitions(infile):
         if ID in definitions:
             raise Exception("ID %s shows up twice in file %s!"%(ID, infile))
         definitions[ID] = fields[4] + (" (%s)"%fields[2] if fields[2] else '')
+    print "Parsed %s file - %s term definitions."%(os.path.split(infile)[1], len(definitions))
     return definitions
 
 
@@ -321,6 +329,7 @@ def get_Panther_definitions(infile):
             raise Exception("ID %s shows up twice in file %s!"%(ID, infile))
         definitions[ID] = "%s (%s)"%(fields[1], ', '.join(fields[2:]))
         # MAYBE-TODO include definitions for all the GO terms listed in the fields, too?  But there's LOTS
+    print "Parsed %s file - %s term definitions."%(os.path.split(infile)[1], len(definitions))
     return definitions
 
 
@@ -334,6 +343,7 @@ def get_KOG_definitions(infile):
         if ID in definitions:
             raise Exception("ID %s shows up twice in file %s!"%(ID, infile))
         definitions[ID] = "%s (namespace %s)"%(fields[1], fields[2])
+    print "Parsed %s file - %s term definitions."%(os.path.split(infile)[1], len(definitions))
     return definitions
 
 
@@ -353,6 +363,7 @@ def get_KEGGec_definitions(infile):
         if definition.startswith('Transferred entry:'):
             new_IDs = definition.split(': ')[1].replace(' and ', ', ').split(', ')
             new_definition = "Transferred entries (%s): %s"%(len(new_IDs), ' & '.join(definitions[x] for x in new_IDs))
+    print "Parsed %s file - %s term definitions."%(os.path.split(infile)[1], len(definitions))
     return definitions
 
 
@@ -367,6 +378,7 @@ def get_KEGGorthology_definitions(infile):
         if ID in definitions:
             raise Exception("ID %s shows up twice in file %s!"%(ID, infile))
         definitions[ID] = "%s (%s)"%(fields[2], fields[3])
+    print "Parsed %s file - %s term definitions."%(os.path.split(infile)[1], len(definitions))
     return definitions
 
 
@@ -380,6 +392,7 @@ def get_GO_definitions(infile):
         if ID in definitions:
             raise Exception("ID %s shows up twice in file %s!"%(ID, infile))
         definitions[ID] = "%s (%s: %s) [%s]"%(fields[1], fields[2], fields[3], fields[4])
+    print "Parsed %s file - %s term definitions."%(os.path.split(infile)[1], len(definitions))
     return definitions
 
 
