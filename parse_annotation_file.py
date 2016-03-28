@@ -27,9 +27,9 @@ DEFAULT_ANNOTATION_DEFINITION_FILES_v5p5 = {
     'PFAM': ['Pfam-A.clans.tsv'], 
     'Panther': ['PANTHER9.0_HMM_classifications', 'PANTHER6.1_HMM_classifications', 'PANTHER10.0_HMM_classifications'], 
     'KOG': ['KOG.tsv'], 
-    'KEGG_ec.tsv': ['KEGG_ec.tsv'], 
-    'KEGG Orthology': ['KEGG_Orthology.tsv'], 
-    'Gene Ontology terms': ['GO.txt']
+    'KEGG_ec': ['KEGG_ec.tsv'], 
+    'KEGG_Orthology': ['KEGG_Orthology.tsv'], 
+    'Gene_Ontology_terms': ['GO.txt']
 }
 DEFAULT_ANNOTATION_DEF_FOLDER = os.path.join(DEFAULT_GENE_ANNOTATION_FOLDER, 'annotation_definitions')
 DEFAULT_ANNOTATION_DEFINITION_FILES_v5p5 = {term: [os.path.join(DEFAULT_ANNOTATION_DEF_FOLDER, f) for f in files] 
@@ -279,8 +279,8 @@ def simple_format_GO_file(infile, outfile):
 def get_all_annotation_definitions(annotation_types_files=DEFAULT_ANNOTATION_DEFINITION_FILES_v5p5):
     """ Return annotation_type:(term:definition) double dictionary based on types and files in argument. """
     parsing_functions = {'PFAM': get_PFAM_definitions, 'Panther': get_Panther_definitions,  'KOG': get_KOG_definitions, 
-                         'KEGG_ec.tsv': get_KEGGec_definitions, 'KEGG Orthology': get_KEGGorthology_definitions, 
-                         'Gene Ontology terms': get_GO_definitions }
+                         'KEGG_ec': get_KEGGec_definitions, 'KEGG_Orthology': get_KEGGorthology_definitions, 
+                         'Gene_Ontology_terms': get_GO_definitions }
     all_annotation = {}
     for term, files in annotation_types_files.items():
         # parse all files
