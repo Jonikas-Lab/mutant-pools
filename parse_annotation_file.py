@@ -282,17 +282,18 @@ def get_all_annotation_definitions(annotation_types_files=DEFAULT_ANNOTATION_DEF
                          'KEGG_ec': get_KEGGec_definitions, 'KEGG_Orthology': get_KEGGorthology_definitions, 
                          'Gene_Ontology_terms': get_GO_definitions }
     all_annotation = {}
-    for term, files in annotation_types_files.items():
+    for annotation_type, files in annotation_types_files.items():
         # parse all files
         try:
-            parsing_function = parsing_functions[term]
+            parsing_function = parsing_functions[annotation_type]
         except KeyError:
-            raise Exception("No defined parsing function for %s! There are functions for %s"%(term, ', '.join(parsing_functions)))
+            raise Exception("No defined parsing function for %s! There are functions for %s"%(annotation_type, 
+                                                                                              ', '.join(parsing_functions)))
         dictionaries = [parsing_function(f) for f in files]
         # if there are multiple files, use the later ones to fill in only what was absent in the first
         final_dict = dictionaries[0]
         if len(files) > 1:
-            print "For %s data, merging multiple files - starting with %s (%s terms)"%(term, os.path.split(files[0])[1], 
+            print "For %s data, merging multiple files - starting with %s (%s terms)"%(annotation_type, os.path.split(files[0])[1], 
                                                                                        len(final_dict))
         for (extra_dict, extra_file) in zip(dictionaries[1:], files[1:]):
             N_added = 0
@@ -302,7 +303,7 @@ def get_all_annotation_definitions(annotation_types_files=DEFAULT_ANNOTATION_DEF
                     final_dict[term] = definition
             print "  - added %s/%s terms from %s - total %s terms."%(N_added, len(extra_dict), 
                                                                      os.path.split(extra_file)[1], len(final_dict))
-        all_annotation[term] = final_dict
+        all_annotation[annotation_type] = final_dict
     return all_annotation
 
 
