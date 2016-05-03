@@ -851,16 +851,16 @@ def expected_mutants_in_window(chromosome, start_pos, end_pos, mappable_position
     mappable_pos_in_window_20bp = observed_mutants_in_window(chromosome, start_pos, end_pos, mappable_positions_20bp)
     mappable_pos_in_window_21bp = observed_mutants_in_window(chromosome, start_pos, end_pos, mappable_positions_21bp)
     mappable_pos_total_20bp = sum(len(chrom_mapp_positions) for chrom,chrom_mapp_positions in mappable_positions_20bp.items() 
-                                  if (_get_chrom_either_strand(chrom) in all_chromosomes or all_chromosomes is None))
+                                  if (all_chromosomes is None or _get_chrom_either_strand(chrom) in all_chromosomes))
     mappable_pos_total_21bp = sum(len(chrom_mapp_positions) for chrom,chrom_mapp_positions in mappable_positions_21bp.items() 
-                                  if (_get_chrom_either_strand(chrom) in all_chromosomes or all_chromosomes is None))
+                                  if (all_chromosomes is None or _get_chrom_either_strand(chrom) in all_chromosomes))
     total_N_20bp = N_mutants * fraction_20bp
     total_N_21bp = N_mutants - total_N_20bp
     expected_N_20bp = total_N_20bp * (mappable_pos_in_window_20bp/mappable_pos_total_20bp)
     expected_N_21bp = total_N_21bp * (mappable_pos_in_window_21bp/mappable_pos_total_21bp)
     return expected_N_20bp+expected_N_21bp
-    # TODO looks like this gives the wrong output???
-    # TODO unit-test
+    # TODO unit-test!  I had some worries about this in the past, but I don't remember what they were.
+
 
 ################################# Simulating random size-N dataset, various options #######################################
 
