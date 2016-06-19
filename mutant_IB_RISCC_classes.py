@@ -1538,11 +1538,13 @@ class Dataset_summary_data():
         return sum(1 for m in self.dataset if m.read_info(self.dataset_name).total_read_count 
                    and m.position not in SPECIAL_POSITIONS.all_undefined and m.position.chromosome==chromosome)
 
-    def merged_gene_feature_counts(self, merge_boundary_features=True, merge_confusing_features=False):
+    def merged_gene_feature_counts(self, merge_multi_splice_variants=True, merge_boundary_features=True, 
+                                   merge_confusing_features=False):
         """ Return (gene_feature,count) list, biologically sorted, optionally with all "boundary" features counted as one.
 
         The source gene feature counts are based on the self.mutant_counts_by_feature dict.
         If merge_confusing_features==True, any locations containing '??' will be listed as '??'.
+        If merge_boundary_features==True, any locations containing '|' and no '??' will be listed as 'multiple_splice_variants'.
         If merge_boundary_features==True, any locations containing '/' and no '??' will be listed as 'boundary'.
         The custom sort order (based on what seems sensible biologically) is: CDS, intron, UTR, other, boundary.
         """
@@ -1550,10 +1552,11 @@ class Dataset_summary_data():
         for feature, count in self.mutant_counts_by_feature.items():
             # note that anything containing '??' AND '/' never gets merged as boundary
             if '??' in feature:
-                if merge_confusing_features:                  merged_feature_count_dict['??'] += count
-                else:                                         merged_feature_count_dict[feature] += count
-            elif '/' in feature and merge_boundary_features:  merged_feature_count_dict['boundary'] += count
-            else:                                             merged_feature_count_dict[feature] += count
+                if merge_confusing_features:                         merged_feature_count_dict['??'] += count
+                else:                                                merged_feature_count_dict[feature] += count
+            elif '|' in feature and merge_multiple_splice_variants:  merged_feature_count_dict['multiple_splice_variants'] += count
+            elif '/' in feature and merge_boundary_features:         merged_feature_count_dict['boundary'] += count
+            else:                                                    merged_feature_count_dict[feature] += count
         return merged_feature_count_dict
 
     @property
@@ -2187,7 +2190,7 @@ class Insertional_mutant_pool_dataset():
         else:                                   return ''
 
     def print_summary(self, OUTPUT=sys.stdout, N_genes_to_print=5, line_prefix='    ', header_prefix=' * ', 
-                      merge_boundary_features=True, count_cassette=True, count_other=True):
+                      merge_multiple_splice_variants=True, merge_boundary_features=True, count_cassette=True, count_other=True):
         """ Print basic summary info about the dataset/s: read and mutant counts and categories, gene numbers, etc.
 
         Prints tab-separated table for multi-datasets-1.
@@ -2303,11 +2306,12 @@ class Insertional_mutant_pool_dataset():
             # custom order for features to make it easier to read: CDS, intron, UTRs, everything else alphabetically after
             # MAYBE-TODO also give print_summary an option for merge_confusing_features arg to merged_gene_feature_counts?
             for feature in self._sort_feature_list(set.union(
-                                *[set(summ.merged_gene_feature_counts(merge_boundary_features)) for summ in summaries])):
+                                *[set(summ.merged_gene_feature_counts(merge_boundary_features, merge_multiple_splice_variants)) 
+                                  for summ in summaries])):
                 DVG.append((line_prefix+"Mutant cassettes in gene feature %s (%% of ones in genes):"%feature, 
                             lambda summ,feature=feature: value_and_percentages(
-                                                        summ.merged_gene_feature_counts(merge_boundary_features)[feature], 
-                                                        [summ.mutants_in_genes]) ))
+                                summ.merged_gene_feature_counts(merge_boundary_features, merge_multiple_splice_variants)[feature], 
+                                [summ.mutants_in_genes]) ))
 
             DVG.append((header_prefix+"Genes containing a mutant (% of all genes):", 
                         lambda summ: value_and_percentages(summ.N_genes_in_dataset, 
