@@ -2858,15 +2858,15 @@ class Testing_Insertional_mutant(unittest.TestCase):
         alnAAT = Fake_HTSeq_aln(seq='AAT', optional_field_data={'NM':0})
         mutant = Insertional_mutant()
         assert mutant.position == SPECIAL_POSITIONS.unknown
-        assert not mutant.decide_and_check_position(quiet=True)
+        assert not mutant.decide_and_check_position()
         assert mutant.position == SPECIAL_POSITIONS.unknown
         mutant.add_read(alnAAA, position0)
-        assert not mutant.decide_and_check_position(quiet=True)
+        assert not mutant.decide_and_check_position()
         assert mutant.position == position0
         # can always add undefined positions
         for curr_position in SPECIAL_POSITIONS.all_undefined:
             mutant.add_read(alnAAT, curr_position, 10)
-            assert not mutant.decide_and_check_position(quiet=True)
+            assert not mutant.decide_and_check_position()
             assert mutant.position == position0
         # adding positions that don't match the first one gives an error
         # (re-making mutant in each iteration here, since each bad position gets added BEFORE being checked)
@@ -2874,34 +2874,34 @@ class Testing_Insertional_mutant(unittest.TestCase):
             mutant = Insertional_mutant()
             mutant.add_read(alnAAA, position0)
             mutant.add_read(alnAAT, curr_position)
-            assert mutant.decide_and_check_position(quiet=True) == True
+            assert mutant.decide_and_check_position() == True
         # but if I allow some distance, position_2bp_away can be okay, 
         #  and the main position switches to that and back depending on read counts.
         for max_allowed_dist in (2, 5, 10):
             mutant = Insertional_mutant()
             mutant.add_read(alnAAA, position0, 2)
             mutant.add_read(alnAAT, position_2bp_away, 1)
-            assert not mutant.decide_and_check_position(max_allowed_dist, quiet=True)
+            assert not mutant.decide_and_check_position(max_allowed_dist)
             assert mutant.position == position0
             mutant.add_read(alnAAT, position_2bp_away, 2)
-            assert not mutant.decide_and_check_position(max_allowed_dist, quiet=True)
+            assert not mutant.decide_and_check_position(max_allowed_dist)
             assert mutant.position == position_2bp_away
             mutant.add_read(alnAAA, position0, 2)
-            assert not mutant.decide_and_check_position(max_allowed_dist, quiet=True)
+            assert not mutant.decide_and_check_position(max_allowed_dist)
             assert mutant.position == position0
-            assert mutant.decide_and_check_position(0, quiet=True) == True
+            assert mutant.decide_and_check_position(0) == True
         for max_allowed_dist in (0, 1):
             mutant = Insertional_mutant()
             mutant.add_read(alnAAA, position0)
             mutant.add_read(alnAAT, position_2bp_away)
-            assert mutant.decide_and_check_position(max_allowed_dist, quiet=True) == True
+            assert mutant.decide_and_check_position(max_allowed_dist) == True
         # you can also make a mutant with a missing position and then add whatever position you want later
         for special_position in SPECIAL_POSITIONS.all_undefined:
             for curr_position in (position0, position_diff_chrom, position_diff_strand, position_10bp_away, position_2bp_away):
                 mutant = Insertional_mutant()
                 mutant.add_read(alnAAA, special_position, 10)
                 mutant.add_read(alnAAT, curr_position, 1)
-                assert not mutant.decide_and_check_position(quiet=True)
+                assert not mutant.decide_and_check_position()
                 assert mutant.position == curr_position
         # TODO add test for ratio_to_ignore=100!
 
@@ -2910,28 +2910,31 @@ class Testing_Insertional_mutant(unittest.TestCase):
         assert mutant.gene == SPECIAL_GENE_CODES.not_determined
         assert mutant.orientation == mutant.gene_feature == mutant.gene_distances == '?'
         # updating no-info mutant with no info - no change
-        mutant.update_gene_info(SPECIAL_GENE_CODES.not_determined, '?', '?')
+        mutant.update_gene_info(SPECIAL_GENE_CODES.not_determined, '?', '?', '?')
         assert mutant.gene == SPECIAL_GENE_CODES.not_determined
         assert mutant.orientation == mutant.gene_feature == mutant.gene_distances == '?'
         # updating no-info mutant with useful info - update goes through
-        mutant.update_gene_info('gene1', '+', 'f')
+        mutant.update_gene_info('gene1', '+', 'f', (10,10))
         assert mutant.gene == 'gene1'
         assert mutant.orientation == '+'
         assert mutant.gene_feature == 'f'
+        assert mutant.gene_distances == (10,10)
         # updating info-containing mutant with no info - no change
-        mutant.update_gene_info(SPECIAL_GENE_CODES.not_determined, '?', '?')
+        mutant.update_gene_info(SPECIAL_GENE_CODES.not_determined, '?', '?', '?')
         assert mutant.gene == 'gene1'
         assert mutant.orientation == '+'
         assert mutant.gene_feature == 'f'
+        assert mutant.gene_distances == (10,10)
         # updating info-containing mutant with same info - no change
-        mutant.update_gene_info('gene1', '+', 'f')
+        mutant.update_gene_info('gene1', '+', 'f', (10,10))
         assert mutant.gene == 'gene1'
         assert mutant.orientation == '+'
         assert mutant.gene_feature == 'f'
+        assert mutant.gene_distances == (10,10)
         # updating info-containig mutant with OTHER info - exception
-        self.assertRaises(MutantError, mutant.update_gene_info, 'gene2', '+', 'f')
-        self.assertRaises(MutantError, mutant.update_gene_info, 'gene1', '-', 'f')
-        self.assertRaises(MutantError, mutant.update_gene_info, 'gene1', '+', 'g')
+        self.assertRaises(MutantError, mutant.update_gene_info, 'gene2', '+', 'f', (10,10))
+        self.assertRaises(MutantError, mutant.update_gene_info, 'gene1', '-', 'f', (10,10))
+        self.assertRaises(MutantError, mutant.update_gene_info, 'gene1', '+', 'g', (10,10))
 
     def test__get_main_sequence(self):
         # single-dataset mutant
