@@ -2080,7 +2080,7 @@ class Insertional_mutant_pool_dataset():
                                                           nearest_genes_for_intergenic, quiet=(verbosity_level==0))
                         # for genome v5.5, have to strip .v5.5 suffix from gene IDs from gff file
                         if genome_version == 5.5:
-                            if gene_data[0].endswith('.v5.5'):  gene_data[0] = gene_data[0][:-len('.v5.5')]
+                            gene_data[0] = gene_data[0].replace('.v5.5', '')
                         if isinstance(thing, Insertional_mutant):
                             thing.gene, thing.orientation, thing.gene_feature, thing.gene_distances = gene_data
                         else:
