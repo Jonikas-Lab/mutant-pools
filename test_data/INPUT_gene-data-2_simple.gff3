@@ -12,3 +12,12 @@ chrA	test	mRNA	1101	1700	.	-	.	ID=PAC:gene2_mRNA;Name=gene2.t1.2;pacid=gene2_mRN
 chrA	test	CDS	1501	1700	.	-	1	ID=PAC:gene2_mRNA.CDS.1;Parent=PAC:gene2_mRNA;pacid=gene2_mRNA;
 chrA	test	CDS	1301	1400	.	-	1	ID=PAC:gene2_mRNA.CDS.2;Parent=PAC:gene2_mRNA;pacid=gene2_mRNA;
 chrA	test	CDS	1101	1200	.	-	1	ID=PAC:gene2_mRNA.CDS.3;Parent=PAC:gene2_mRNA;pacid=gene2_mRNA;
+
+chrB	test	gene	101	700	.	+	.	ID=gene3_multi;Name=gene1_plus;
+chrB	test	mRNA	101	700	.	+	.	ID=PAC:gene3_mRNA1;Name=gene3.t1.1;pacid=gene3_mRNA1;Parent=gene3_multi;
+chrB	test	CDS	101	200	.	+	0	ID=PAC:gene3_mRNA1.CDS.1;Parent=PAC:gene3_mRNA1;pacid=gene3_mRNA1;
+chrB	test	CDS	301	400	.	+	1	ID=PAC:gene3_mRNA1.CDS.2;Parent=PAC:gene3_mRNA1;pacid=gene3_mRNA1;
+chrB	test	CDS	501	700	.	+	1	ID=PAC:gene3_mRNA1.CDS.3;Parent=PAC:gene3_mRNA1;pacid=gene3_mRNA1;
+chrB	test	mRNA	101	700	.	+	.	ID=PAC:gene3_mRNA2;Name=gene3.t2.1;pacid=gene3_mRNA2;Parent=gene3_multi;
+chrB	test	CDS	101	200	.	+	0	ID=PAC:gene3_mRNA2.CDS.1;Parent=PAC:gene3_mRNA2;pacid=gene3_mRNA2;
+chrB	test	CDS	501	700	.	+	1	ID=PAC:gene3_mRNA2.CDS.2;Parent=PAC:gene3_mRNA2;pacid=gene3_mRNA2;
