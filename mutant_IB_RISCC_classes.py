@@ -231,7 +231,7 @@ class Insertion_position(object):
             before,after = [cls._parse_single_position(s) for s in full_position_string.split('-')]
         except (ValueError,AttributeError):
             raise ValueError("The full_position argument must be a string of the form '100-200', '?-200' or '100-?'!"
-                             "Got '%s'"%full_position_string)
+                             "Got '%s'"%(full_position_string,))
         if before is None and after is None:
             raise ValueError("At least one section of the full_position argument must be a number!")
         return before,after
@@ -1779,20 +1779,13 @@ class Insertional_mutant_pool_dataset():
 
         # read the IB cluster file; make a read_seq:centroid_seq dictionary for fast lookup.
         if IB_cluster_file is not None:
-            if IB_cluster_file.endswith('.pickle'):
+            if type(IB_cluster_file) == dict:
+                IB_centroid_to_seqs = IB_cluster_file
+            elif IB_cluster_file.endswith('.pickle'):
                 IB_centroid_to_seqs = unpickle(IB_cluster_file)
-           # this used to work, but then it stopped! Not sure why.  Anyway it's only needed for tests.
-           # MAYBE-TODO just make this input a dict instead of a file?
-           #elif IB_cluster_file.endswith('.py'):
-           #    # for some reason just doing execfile(IB_cluster_file) doesn't import stuff into local namespace, so using exec
-           #    exec open(IB_cluster_file).read()
-           #    try:    
-           #        len(IB_centroid_to_seqs)
-           #    except NameError:
-           #        raise MutantError("IB_cluster_file %s didn't define an IB_centroid_to_seqs dictionary!"%IB_cluster_file)
             else:
-                raise MutantError("Unknown IB_cluster_file format in add_RISCC_alignment_files_to_data - must be .pickle or .py, "
-                                  +"filename is %s"%IB_cluster_file)
+                raise MutantError("Unknown IB_cluster_file format in add_RISCC_alignment_files_to_data - must be .pickle filename "
+                                  +"or a dictionary. Value is %s"%IB_cluster_file)
             IB_seq_to_centroid = invert_listdict_nodups(IB_centroid_to_seqs)
 
         # set up IB checks - return True if IB is in allowed_IBs or if no allowed_IBs was given.
@@ -3005,12 +2998,12 @@ class Testing_Insertional_mutant(unittest.TestCase):
         pos3 = Insertion_position('chr1','-',position_before=0, immutable=True)
         mutant.add_RISCC_read('CAG', pos3)
         assert (len(mutant.RISCC_genome_side_aligned_reads), len(mutant.RISCC_genome_side_unaligned_reads)) == (3, 2)
-        assert [data[0].chromosome for data in mutant.RISCC_genome_side_aligned_reads.values()] == 'chr1 chr2 chr1'.split()
-        assert [data[0].strand for data in mutant.RISCC_genome_side_aligned_reads.values()] == '+ + -'.split()
+        assert sorted(data[0].chromosome for data in mutant.RISCC_genome_side_aligned_reads.values()) == 'chr1 chr1 chr2'.split()
+        assert sorted(data[0].strand for data in mutant.RISCC_genome_side_aligned_reads.values()) == '+ + -'.split()
         assert mutant.RISCC_max_confirmed_distance(1000) == 100
         assert mutant.RISCC_max_confirmed_distance(100) == 100
         assert mutant.RISCC_max_confirmed_distance(10) == 0
-        # same seq can't be added with different defined position, but can be added with unknown - this doesn't work for now
+        # same seq can't be added with different defined position, but can be added with unknown - TODO this doesn't work for now
         #self.assertRaises(MutantError, mutant.add_RISCC_read, 'AAA', pos1)
         #self.assertRaises(MutantError, mutant.add_RISCC_read, 'CAA', pos2)
         #self.assertRaises(MutantError, mutant.add_RISCC_read, 'CAA', pos2)
@@ -3261,20 +3254,19 @@ class Testing_Insertional_mutant_pool_dataset(unittest.TestCase):
     def test__add_RISCC_alignment_files_to_data(self):
         # testing with IB clustering (.py file and .pickle file)
         infiles = ['test_data/INPUT_RISCC1-alignment-cassette-side.sam', 'test_data/INPUT_RISCC1-alignment-genome-side.sam', 
-                   'test_data/INPUT_RISCC1-IBs.fq', None, 'test_data/INPUT_RISCC1-IB-clusters.py']
+                   'test_data/INPUT_RISCC1-IBs.fq', None, {'CCCC': set('CCCC CCCG'.split())} ]
         dataset = Insertional_mutant_pool_dataset('3prime', 'outward')
-        dataset.add_RISCC_alignment_files_to_data(*infiles)
+        dataset.add_RISCC_alignment_files_to_data(*infiles, quiet=True)
         self._check_RISCC1_outputs(dataset)
-        exec open(infiles[-1])
-        picklefile = infiles[-1].replace('.py', '.pickle')
-        pickle(IB_centroid_to_seqs, picklefile)
+        picklefile = 'test_data/INPUT_RISCC1-IB-clusters.pickle'
+        pickle(infiles[-1], picklefile)
         dataset = Insertional_mutant_pool_dataset('3prime', 'outward')
-        dataset.add_RISCC_alignment_files_to_data(*infiles[:-1], IB_cluster_file=picklefile)
+        dataset.add_RISCC_alignment_files_to_data(*infiles[:-1], IB_cluster_file=picklefile, quiet=True)
         self._check_RISCC1_outputs(dataset)
         os.unlink(picklefile)
         # testing without IB clustering
         dataset = Insertional_mutant_pool_dataset('3prime', 'outward')
-        dataset.add_RISCC_alignment_files_to_data(*infiles[:-1])
+        dataset.add_RISCC_alignment_files_to_data(*infiles[:-1], quiet=True)
         assert len(dataset) == 2
         mutant = dataset.get_mutant('CCCC')
         assert mutant.IB == 'CCCC'
