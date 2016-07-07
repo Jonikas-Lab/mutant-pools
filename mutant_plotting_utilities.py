@@ -969,32 +969,61 @@ def insertions_over_gene_length_pvalues(mutant_data_by_orientation, gene_effecti
 
 ### bar-chart of the density of insertions in different gene features, for all genes combined
 
-def _adjust_feature_mutant_counts(feature_mutant_counts, ignore_UTR_introns=2, long_UTR_names=False):
+def _adjust_feature_mutant_counts(feature_mutant_counts, ignore_UTR_introns=2, feature_boundaries=1, overlapping_genes=1, 
+                                  long_UTR_names=False):
     """ Make adjustments to a raw feature mutant count to make it fit desired format for insertion_density_by_feature.
 
     Changes made:
     - change '-' to 'intergenic'
     - add the 'all' category (sum of all other categories - assumes categories are non-overlapping!)
     - add the 'intergenic' category ('all' minus 'gene')
-    - remove the feature-boundary categories (usually below 1%) and the overlapping-gene categories
-        (they'll still be counted in the 'all' and 'gene' categories, just not as separate feature categories)
+
+    For feature-boundary categories: if feature_boundaries is 0, don't count them them except in all/gene categories; 
+     if 1, count it as a randomly chosen of the features it's a boundary of (excepting gene_edge/mRNA_edge); 
+
+    For overlapping-gene cases: if overlapping_genes is 0, don't count them except in all/gene categories; 
+     if 1, count it as the first feature (useful because when looking at feature mappability we take the first of overlapping gnes);
+     if 2, count both features; if 3, count as a randomly chosen one..
 
     If ignore_UTR_introns is 0, just keep "5'UTR_intron" and "3'UTR_intron" counts separate;
      if it's 1, merge them with "5'UTR" and "3'UTR" respectively (which is probably sensible); 
      if 2, merge them both into "intron" (which is how they're annotated in all gff files, so this is useful for 
         comparisons to other data in which I did the parsing in a simple way.)
     """
+    if feature_boundaries not in [0,1]:                 raise Exception("Unknown method feature_boundaries=%s"%feature_boundaries)
+    if overlapping_genes not in [0,1,2,3]:              raise Exception("Unknown method overlapping_genes=%s"%overlapping_genes)
+    if ignore_UTR_introns not in [0,1,2]:               raise Exception("Unknown method ignore_UTR_introns=%s"%ignore_UTR_introns)
     # make a new copy of the input before making any changes
     feature_mutant_counts = dict(feature_mutant_counts)
     # for intergenic, set to 0 if there weren't any (e.g. if the input only counted sense-orientation mutants
-    try:                feature_mutant_counts['intergenic'] = feature_mutant_counts.pop('-')
-    except KeyError:    feature_mutant_counts['intergenic'] = 0
+    if 'intergenic' not in feature_mutant_counts:
+        try:                feature_mutant_counts['intergenic'] = feature_mutant_counts.pop('-')
+        except KeyError:    feature_mutant_counts['intergenic'] = 0
+    # calculate all/gene categories
     feature_mutant_counts['all'] = sum(feature_mutant_counts.values())
     feature_mutant_counts['gene'] = feature_mutant_counts['all'] - feature_mutant_counts['intergenic']
-    # remove the boundary mutants - AFTER getting the all/gene categories, so they're still counted in those!
+    # deal with overlapping genes
     for feature in list(feature_mutant_counts):
-       if '/' in feature:  del feature_mutant_counts[feature]
-       if '&' in feature:  del feature_mutant_counts[feature]
+        if '&' in feature:  
+            features = feature.split(' & ')
+            if overlapping_genes==1:
+                feature_mutant_counts[features[0]] += feature_mutant_counts[feature]
+            elif overlapping_genes==2:
+                for f in features:
+                    feature_mutant_counts[f] += feature_mutant_counts[feature]
+            elif overlapping_genes==3:
+                random.shuffle(features)
+                feature_mutant_counts[features[0]] += feature_mutant_counts[feature]
+            del feature_mutant_counts[feature]
+    # deal with boundary cases (AFTER dealing with overlapping genes, since you can have boundary cases inside those)
+    for feature in list(feature_mutant_counts):
+        if '/' in feature:  
+            if feature_boundaries==1:
+                features = [x for x in feature.split('/') if x not in 'gene_edge mRNA_edge'.split()]
+                random.shuffle(features)
+                feature_mutant_counts[features[0]] += feature_mutant_counts[feature]
+            del feature_mutant_counts[feature]
+    # deal with UTR introns
     if ignore_UTR_introns==1:
         feature_mutant_counts["5'UTR"] += feature_mutant_counts.pop("5'UTR_intron")
         feature_mutant_counts["3'UTR"] += feature_mutant_counts.pop("3'UTR_intron")
