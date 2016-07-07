@@ -818,10 +818,15 @@ class Insertional_mutant():
     #   5'+3', or 5'+5' or 3'+3' in cases with tandem tail-to-tail or head-to-head cassettes, and maybe even more complicated...
 
     @staticmethod
-    def _get_main_sequence_from_data(seqs_to_counts_and_data, N=1):
+    def _get_main_sequence_from_data(seqs_to_counts_and_data, N=1, aligned_only=False):
         """ Return the most common sequence in the given data, and its count (or Nth most common sequence if N is provided). """
         # use key to sort reverse by count but non-reverse by seq
-        sequences_by_count = sorted([(seq,data[0]) for (seq,data) in seqs_to_counts_and_data.items()], 
+        if aligned_only:
+            filtered_data = [(seq, data) for (seq, data) in seqs_to_counts_and_data.items() 
+                             if isinstance(data[1], Insertion_position)]
+        else:
+            filtered_data = seqs_to_counts_and_data.items()
+        sequences_by_count = sorted([(seq,data[0]) for (seq,data) in filtered_data], 
                                     key = lambda (s,c): (-c, s))
         # try returning the Nth sequence and count; return nothing if there are under N sequences.
         try:                return tuple(sequences_by_count[N-1])
@@ -829,13 +834,13 @@ class Insertional_mutant():
         # MAYBE-TODO should probably make that '-' or something instead of '', empty strings are hard to see. 
         #  On the other hand '-' isn't a valid sequence, and '' is...
 
-    def get_main_sequence(self, N=1, dataset_name=None):
+    def get_main_sequence(self, N=1, dataset_name=None, aligned_only=False):
         """ Return the most common sequence in this mutant and its count (or Nth most common sequence if N is provided).
 
         Dataset_name should NEVER be set to non-None, and only present for consistency with the multi-dataset subclass.
         """
         self._ensure_dataset_None(dataset_name)
-        return self._get_main_sequence_from_data(self.sequences_counts_positions_errors, N)
+        return self._get_main_sequence_from_data(self.sequences_counts_positions_errors, N, aligned_only)
 
     def _copy_non_readcount_data(self, source_mutant):
         """ Copy non-readcount-related data from source_mutant to self (making new copies of all objects). """
@@ -1254,7 +1259,7 @@ class Insertional_mutant_multi_dataset(Insertional_mutant):
                 except KeyError:    joint_dict[seq] = [count, pos, err]
         return joint_dict
 
-    def get_main_sequence(self, N=1, dataset_name=None):
+    def get_main_sequence(self, N=1, dataset_name=None, aligned_only=False):
         """ Return the most common sequence in this mutant and its count (or Nth most common sequence if N is provided).
 
         If dataset_name is given, return the most common sequence for just that dataset; 
@@ -1265,7 +1270,7 @@ class Insertional_mutant_multi_dataset(Insertional_mutant):
         else:
             seqs_to_counts_and_data = self.sequences_counts_positions_errors
         # MAYBE-TODO print a warning if different dataset mutants have different main sequences?
-        return Insertional_mutant._get_main_sequence_from_data(seqs_to_counts_and_data, N)
+        return Insertional_mutant._get_main_sequence_from_data(seqs_to_counts_and_data, N, aligned_only)
         # MAYBE-TODO should there be a warning/failure/something if it's a multi-dataset mutant and the user wants
         #  an overall main sequence and only some of the mutants have any sequence data?
 
@@ -2980,6 +2985,14 @@ class Testing_Insertional_mutant(unittest.TestCase):
         assert mutant.get_main_sequence(1, dataset_name='d1') == ('AAA',3)
         assert mutant.get_main_sequence(1, dataset_name='d2') == ('CCC',3)
         assert mutant.get_main_sequence(1) == ('GGG',4)     # GGG is the most common sequence if we add both datasets
+        # unaligned reads - make sure they get skipped correctly with aligned_only=True
+        unaligned = Fake_HTSeq_aln(seq='CAC', unaligned=True)
+        perfect_aln = Fake_HTSeq_aln(seq='AAA', optional_field_data={'NM':0})
+        mutant = Insertional_mutant(insertion_position=position)
+        mutant.add_read(perfect_aln, read_count=1, position=position)
+        mutant.add_read(unaligned, read_count=10)
+        assert mutant.get_main_sequence(aligned_only=False) == ('CAC',10)
+        assert mutant.get_main_sequence(aligned_only=True) == ('AAA',1)
 
     ### RISCC data stuff
 
