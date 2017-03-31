@@ -969,60 +969,84 @@ def insertions_over_gene_length_pvalues(mutant_data_by_orientation, gene_effecti
 
 ### bar-chart of the density of insertions in different gene features, for all genes combined
 
-def _adjust_feature_mutant_counts(feature_mutant_counts, ignore_UTR_introns=2, feature_boundaries=1, overlapping_genes=1, 
-                                  long_UTR_names=False):
+def adjust_feature_mutant_counts(feature_mutant_counts, ignore_UTR_introns=2, feature_boundaries=1, overlapping_genes=1, 
+                                 add_all=False, collapse_splice_variants=True, long_UTR_names=False):
     """ Make adjustments to a raw feature mutant count to make it fit desired format for insertion_density_by_feature.
 
     Changes made:
     - change '-' to 'intergenic'
-    - add the 'all' category (sum of all other categories - assumes categories are non-overlapping!)
+    - if add_all, add the 'all' category (sum of all other categories - assumes categories are non-overlapping!)
     - add the 'intergenic' category ('all' minus 'gene')
+    - if long_UTR_names, change 5'UTR to five_prime_UTR and same for 3'
 
     For feature-boundary categories: if feature_boundaries is 0, don't count them them except in all/gene categories; 
      if 1, count it as a randomly chosen of the features it's a boundary of (excepting gene_edge/mRNA_edge); 
 
     For overlapping-gene cases: if overlapping_genes is 0, don't count them except in all/gene categories; 
      if 1, count it as the first feature (useful because when looking at feature mappability we take the first of overlapping gnes);
-     if 2, count both features; if 3, count as a randomly chosen one..
+     if 2, count both features; 
+     if 3, count as a randomly chosen one,
+     if 4, count as 'multiple'
+     if 5, look at the features - if all the same, count as that feature, otherwise 'multiple'
+
+    For multiple splice variants: if collapse_splice_variants is True, count as 'multiple'.
+        (if they're the same feature, they would already be collapsed to one, so no need to worry about that)
 
     If ignore_UTR_introns is 0, just keep "5'UTR_intron" and "3'UTR_intron" counts separate;
-     if it's 1, merge them with "5'UTR" and "3'UTR" respectively (which is probably sensible); 
+     if 1, merge them with "5'UTR" and "3'UTR" respectively (which is probably sensible); 
      if 2, merge them both into "intron" (which is how they're annotated in all gff files, so this is useful for 
         comparisons to other data in which I did the parsing in a simple way.)
     """
     if feature_boundaries not in [0,1]:                 raise Exception("Unknown method feature_boundaries=%s"%feature_boundaries)
-    if overlapping_genes not in [0,1,2,3]:              raise Exception("Unknown method overlapping_genes=%s"%overlapping_genes)
+    if overlapping_genes not in [0,1,2,3,4,5]:          raise Exception("Unknown method overlapping_genes=%s"%overlapping_genes)
     if ignore_UTR_introns not in [0,1,2]:               raise Exception("Unknown method ignore_UTR_introns=%s"%ignore_UTR_introns)
+    if feature_boundaries==1 and not collapse_splice_variants:
+        raise Exception("Can't deal with feature boundaries without dealing with splice variants, since one can contain the other!")
     # make a new copy of the input before making any changes
     feature_mutant_counts = dict(feature_mutant_counts)
     # for intergenic, set to 0 if there weren't any (e.g. if the input only counted sense-orientation mutants
     if 'intergenic' not in feature_mutant_counts:
         try:                feature_mutant_counts['intergenic'] = feature_mutant_counts.pop('-')
         except KeyError:    feature_mutant_counts['intergenic'] = 0
-    # calculate all/gene categories
-    feature_mutant_counts['all'] = sum(feature_mutant_counts.values())
-    feature_mutant_counts['gene'] = feature_mutant_counts['all'] - feature_mutant_counts['intergenic']
+    # calculate all/gene categories, add 'multiple' if needed
+    all_features = sum(feature_mutant_counts.values())
+    feature_mutant_counts['gene'] = all_features - feature_mutant_counts['intergenic']
+    if add_all:
+        feature_mutant_counts['all'] = all_features
+    if overlapping_genes in [4,5] or collapse_splice_variants:
+        feature_mutant_counts['multiple'] = 0
     # deal with overlapping genes
     for feature in list(feature_mutant_counts):
         if '&' in feature:  
             features = feature.split(' & ')
             if overlapping_genes==1:
-                feature_mutant_counts[features[0]] += feature_mutant_counts[feature]
+                feature_mutant_counts[features[0]] += feature_mutant_counts.pop(feature)
             elif overlapping_genes==2:
                 for f in features:
-                    feature_mutant_counts[f] += feature_mutant_counts[feature]
+                    feature_mutant_counts[f] += feature_mutant_counts.pop(feature)
             elif overlapping_genes==3:
                 random.shuffle(features)
-                feature_mutant_counts[features[0]] += feature_mutant_counts[feature]
-            del feature_mutant_counts[feature]
-    # deal with boundary cases (AFTER dealing with overlapping genes, since you can have boundary cases inside those)
+                feature_mutant_counts[features[0]] += feature_mutant_counts.pop(feature)
+            elif overlapping_genes==4:
+                feature_mutant_counts['multiple'] += feature_mutant_counts.pop(feature)
+            elif overlapping_genes==5:
+                if len(set(features)) == 1:
+                    feature_mutant_counts[features[0]] += feature_mutant_counts.pop(feature)
+                else:
+                    feature_mutant_counts['multiple'] += feature_mutant_counts.pop(feature)
+    # splice variants should be counted as 'multiple' if desired - AFTER overlapping genes, since you can have them inside
+    for feature in list(feature_mutant_counts):
+        if collapse_splice_variants and '|' in feature:
+            feature_mutant_counts['multiple'] += feature_mutant_counts.pop(feature)
+    # deal with feature boundary cases (AFTER dealing with overlapping genes and splice variants, since they can be inside both)
     for feature in list(feature_mutant_counts):
         if '/' in feature:  
             if feature_boundaries==1:
                 features = [x for x in feature.split('/') if x not in 'gene_edge mRNA_edge'.split()]
                 random.shuffle(features)
-                feature_mutant_counts[features[0]] += feature_mutant_counts[feature]
-            del feature_mutant_counts[feature]
+                feature_mutant_counts[features[0]] += feature_mutant_counts.pop(feature)
+            else: 
+                del feature_mutant_counts[feature]
     # deal with UTR introns
     if ignore_UTR_introns==1:
         feature_mutant_counts["5'UTR"] += feature_mutant_counts.pop("5'UTR_intron")
@@ -1033,6 +1057,8 @@ def _adjust_feature_mutant_counts(feature_mutant_counts, ignore_UTR_introns=2, f
         feature_mutant_counts["five_prime_UTR"] = feature_mutant_counts.pop("5'UTR")
         feature_mutant_counts["three_prime_UTR"] = feature_mutant_counts.pop("3'UTR")
     return feature_mutant_counts
+    # TODO unit-tests!
+
 
 def insertion_density_by_feature(dataset, feature_lengths, relative_to=None, add_line=False, exclude_multiple=False, 
                                  separate_sense_antisense=True, show_both_for_all=True, feature_length_type=''):
@@ -1071,8 +1097,8 @@ def insertion_density_by_feature(dataset, feature_lengths, relative_to=None, add
     ### if not separating sense and antisense, just get the feature counts and densities and plot them as a single set of bars
     if not separate_sense_antisense:
         # get feature mutant counts - most of the categories match feature_lengths, fix some details to get the right format: 
-        feature_mutant_counts = _adjust_feature_mutant_counts(collections.Counter(m.gene_feature for m in dataset), 
-                                                              ignore_UTR_introns=2, long_UTR_names=True)
+        feature_mutant_counts = adjust_feature_mutant_counts(collections.Counter(m.gene_feature for m in dataset), 
+                                                             ignore_UTR_introns=2, long_UTR_names=True)
         ### plot the mutants/length ratios
         feature_mutant_densities = [feature_mutant_counts[f]/feature_lengths[f] for f in features_order]
         mplt.bar(range(len(features_order)), feature_mutant_densities, align='center', edgecolor='none')
@@ -1080,14 +1106,14 @@ def insertion_density_by_feature(dataset, feature_lengths, relative_to=None, add
     ###  but some can't (all, intergenic), so there will be 3 sets of bars to plot: sense, antisense, and both
     else:
         # get full feature counts by orientation and for both orientations
-        feature_mutant_counts_both =      _adjust_feature_mutant_counts(collections.Counter(m.gene_feature for m in dataset), 
-                                                                        ignore_UTR_introns=2, long_UTR_names=True)
-        feature_mutant_counts_sense =     _adjust_feature_mutant_counts(collections.Counter(m.gene_feature for m in dataset 
-                                                                                            if m.orientation=='sense'), 
-                                                                        ignore_UTR_introns=2, long_UTR_names=True)
-        feature_mutant_counts_antisense = _adjust_feature_mutant_counts(collections.Counter(m.gene_feature for m in dataset 
-                                                                                            if m.orientation=='antisense'), 
-                                                                        ignore_UTR_introns=2, long_UTR_names=True)
+        feature_mutant_counts_both =      adjust_feature_mutant_counts(collections.Counter(m.gene_feature for m in dataset), 
+                                                                       ignore_UTR_introns=2, long_UTR_names=True)
+        feature_mutant_counts_sense =     adjust_feature_mutant_counts(collections.Counter(m.gene_feature for m in dataset 
+                                                                                           if m.orientation=='sense'), 
+                                                                       ignore_UTR_introns=2, long_UTR_names=True)
+        feature_mutant_counts_antisense = adjust_feature_mutant_counts(collections.Counter(m.gene_feature for m in dataset 
+                                                                                           if m.orientation=='antisense'), 
+                                                                       ignore_UTR_introns=2, long_UTR_names=True)
         # which features should be split by orientation and which shouldn't
         no_orientation_features = set("all intergenic".split())
         orientation_features = set(features_order) - no_orientation_features
@@ -1158,8 +1184,8 @@ def _get_nice_feature_counts_data(dataset):
     # calculate probability of a mutant falling into each feature vs full genome, based on bin effective lengths
     feature_probabilities = {feature: feature_lengths[feature]/feature_lengths['all'] for feature in feature_lengths}
     # get full feature counts by orientation and for both orientations
-    feature_mutant_counts = _adjust_feature_mutant_counts(collections.Counter(m.gene_feature for m in dataset), 
-                                                           ignore_UTR_introns=2, long_UTR_names=True)
+    feature_mutant_counts = adjust_feature_mutant_counts(collections.Counter(m.gene_feature for m in dataset), 
+                                                         ignore_UTR_introns=2, long_UTR_names=True)
     return features_order, feature_mutant_counts
 
 def insertion_density_by_feature_pvalues(dataset, feature_lengths, feature_length_type=''):
@@ -1184,14 +1210,14 @@ def insertion_density_by_feature_pvalues(dataset, feature_lengths, feature_lengt
     # calculate probability of a mutant falling into each feature vs full genome, based on bin effective lengths
     feature_probabilities = {feature: feature_lengths[feature]/feature_lengths['all'] for feature in feature_lengths}
     # get full feature counts by orientation and for both orientations
-    feature_mutant_counts_both =      _adjust_feature_mutant_counts(collections.Counter(m.gene_feature for m in dataset), 
-                                                                    ignore_UTR_introns=2, long_UTR_names=True)
-    feature_mutant_counts_sense =     _adjust_feature_mutant_counts(collections.Counter(m.gene_feature for m in dataset 
-                                                                                        if m.orientation=='sense'),
-                                                                    ignore_UTR_introns=2, long_UTR_names=True)
-    feature_mutant_counts_antisense = _adjust_feature_mutant_counts(collections.Counter(m.gene_feature for m in dataset 
-                                                                                        if m.orientation=='antisense'),
-                                                                    ignore_UTR_introns=2, long_UTR_names=True)
+    feature_mutant_counts_both =      adjust_feature_mutant_counts(collections.Counter(m.gene_feature for m in dataset), 
+                                                                   ignore_UTR_introns=2, long_UTR_names=True)
+    feature_mutant_counts_sense =     adjust_feature_mutant_counts(collections.Counter(m.gene_feature for m in dataset 
+                                                                                       if m.orientation=='sense'),
+                                                                   ignore_UTR_introns=2, long_UTR_names=True)
+    feature_mutant_counts_antisense = adjust_feature_mutant_counts(collections.Counter(m.gene_feature for m in dataset 
+                                                                                       if m.orientation=='antisense'),
+                                                                   ignore_UTR_introns=2, long_UTR_names=True)
     # for sense/antisense counts, get rid of features orientation doesn't apply to
     orientation_features = set(features_order) - set("all intergenic".split())
     feature_mutant_counts_sense = general_utilities.filter_dict_by_keys(feature_mutant_counts_sense, orientation_features)
@@ -1238,8 +1264,8 @@ def insertion_density_by_feature_pvalues_all_pairs(dataset, feature_lengths, fea
     features_printable = "all intergenic gene exon intron 5'UTR 3'UTR"
     features_order = features_printable.replace("5'", "five_prime_").replace("3'", "three_prime_").replace('exon','CDS').split()
     # get full feature counts by orientation and for both orientations
-    feature_mutant_counts = _adjust_feature_mutant_counts(collections.Counter(m.gene_feature for m in dataset), 
-                                                          ignore_UTR_introns=2, long_UTR_names=True)
+    feature_mutant_counts = adjust_feature_mutant_counts(collections.Counter(m.gene_feature for m in dataset), 
+                                                         ignore_UTR_introns=2, long_UTR_names=True)
     features = sorted(feature_mutant_counts.keys())
     all_feature_pairs = list(itertools.combinations(sorted(set(feature_mutant_counts.keys()) - set(['all'])), 2))
     all_pvalues_1 = []
@@ -1271,10 +1297,10 @@ def insertion_density_by_feature_pvalues_compare_datasets(dataset1, dataset2, su
     features_printable = "all intergenic gene exon intron 5'UTR 3'UTR"
     features_order = features_printable.replace("5'", "five_prime_").replace("3'", "three_prime_").replace('exon','CDS').split()
     # get full feature counts
-    feature_mutant_counts_1 = _adjust_feature_mutant_counts(collections.Counter(m.gene_feature for m in dataset1), 
-                                                            ignore_UTR_introns=2, long_UTR_names=True)
-    feature_mutant_counts_2 = _adjust_feature_mutant_counts(collections.Counter(m.gene_feature for m in dataset2), 
-                                                            ignore_UTR_introns=2, long_UTR_names=True)
+    feature_mutant_counts_1 = adjust_feature_mutant_counts(collections.Counter(m.gene_feature for m in dataset1), 
+                                                           ignore_UTR_introns=2, long_UTR_names=True)
+    feature_mutant_counts_2 = adjust_feature_mutant_counts(collections.Counter(m.gene_feature for m in dataset2), 
+                                                           ignore_UTR_introns=2, long_UTR_names=True)
     assert set(feature_mutant_counts_1.keys()) == set(feature_mutant_counts_2.keys())
     features = sorted(feature_mutant_counts_1.keys())
     # subtract dataset2 from dataset1 if needed
