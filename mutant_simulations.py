@@ -874,6 +874,58 @@ def get_hot_cold_spot_list(pvalue_data_window_size_offset_dict, ifcold_data_wind
     # TODO should unit-test this!
 
 
+def filter_hot_cold_spot_list(hc_significant_list, filter_by='effect_size', outfile=None):
+    """ Filter overlapping sets of hot/coldspots.
+
+    Because we're doing hot/coldspot analysis for multiple window sizes, we get multiple overlapping spots in many areas.
+    Those need to be filtered out to the "best" one, or else a 10bp hotspot with a ton of insertions will also show up as 
+        a 1Mb hotspot and all sizes in between, etc.
+    The idea of this filtering is: if spot A completely contains spot B or vice versa, only keep one of them. 
+
+    The two methods currently implemented (in the filter_by parameter) are:
+        - pvalue - pick the one with the lower pvalue
+        - effect_size - pick the one with the higher effect size, i.e. the higher observed:expected ratio (or lower for coldspots).
+
+    The hc_significant_list is the output of mutant_simulations.get_hot_cold_spot_list.
+    """
+    if filter_by == 'pvalue':
+        hc_tmp_list = [tuple(x) for x in hc_significant_list]
+        hc_tmp_list.sort(key = lambda x: x[3])
+    elif filter_by == 'effect_size':
+        hc_tmp_list_hot = sorted([tuple(x) for x in hc_significant_list if x[4]=='hotspot'], key = lambda x: x[7]/x[6])
+        hc_tmp_list_cold = sorted([tuple(x) for x in hc_significant_list if x[4]=='coldspot'], key = lambda x: x[6]/x[7])
+        hc_tmp_list = hc_tmp_list_hot + hc_tmp_list_cold
+    else:
+        raise Exception("Unknown filtering method %s!"%filter_by)
+    hc_filtered_list = []
+    while hc_tmp_list:
+        curr_best = hc_tmp_list[0]
+        del hc_tmp_list[0]
+        hc_filtered_list.append(curr_best)
+        new_hc_tmp_list = []
+        for x in hc_tmp_list:
+            if x[0] == curr_best[0] and x[4] == curr_best[4]:
+                if x[1] <= curr_best[1] and x[2] >= curr_best[2]:     continue
+                if x[1] >= curr_best[1] and x[2] <= curr_best[2]:     continue
+            new_hc_tmp_list.append(x)
+        hc_tmp_list = new_hc_tmp_list
+    print "%s spots filtered down to %s (%s hot, %s cold)"%(len(hc_significant_list), len(hc_filtered_list), 
+        sum(1 for x in hc_filtered_list if x[4]=='hotspot'), sum(1 for x in hc_filtered_list if x[4]=='coldspot'))
+    print "number by max pvalue: " + ", ".join("%s: %s"%(p, sum(1 for x in hc_filtered_list if x[3]<p)) 
+        for p in (0.01, 1e-4, 1e-6, 1e-10, 1e-20, 1e-50, 1e-100, 1e-200, 1e-400))
+    print "number by size: " + ", ".join("%s: %s"%(basic_seq_utilities.format_base_distance(s), n) 
+        for (s, n) in sorted(collections.Counter(x[2]-x[1] for x in hc_filtered_list).items()))
+    if outfile:
+        format_bp = lambda x: basic_seq_utilities.format_base_distance(x, False)
+        with open(outfile, 'w') as OUTFILE:
+          for N,(chrom, start_pos, end_pos, pvalue, kind, offset, mcount, expected) in enumerate(hc_filtered_list):
+            window_size = end_pos-start_pos
+            OUTFILE.write("%s %s-%s (window size %s) - %s, %.3g adj. p-value (%s mutants, expected %.3g) (#%s)\n"%(
+                                        chrom, format_bp(start_pos), format_bp(end_pos), format_bp(window_size), kind, 
+                                        pvalue, mcount, expected, N))
+    return hc_filtered_list
+
+
 def observed_mutants_in_window(chromosome, start_pos, end_pos, dataset):
     """ Return the number of mutants in dataset that are on chromosome between start and end (inclusive). 
 
