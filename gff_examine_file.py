@@ -143,6 +143,7 @@ def get_feature_start_end(feature_record):
     """
     return (feature_record.location.start.position+1, feature_record.location.end.position)
 
+
 def get_gene_start_end_excluding_UTRs(gene_record, return_longest_if_multiple=False):
     """ Get the start of the first CDS feature and the end of the last one, (as numbers, 1-based, end-inclusive).
 
@@ -212,6 +213,30 @@ def gene_lengths(genefile, exclude_UTRs=False, ignore_strange_cases=False):
         # gene_positions returns 1-based end-inclusive positions, so add 1 to get length (since a 1bp gene is 1-1)
         gene_lengths[gene_ID] = end_pos - start_pos + 1
     return gene_lengths
+
+
+def gene_coding_exon_positions(genefile, ignore_strange_cases=False):
+    """ Find list of positions of all coding exons for each gene.
+    
+    Return a gene_ID:coding_exons dict, where coding_exons is a list of (start_pos, end_pos) tuples. Based on GFF input file. 
+    The positions are 1-based, end-inclusive. 
+
+    If a gene doesn't have an mRNA or has multiple RNAs, raise an exception, 
+        unless ignore_strange_cases is True, then just don't include those cases in the output.
+    """
+    # MAYBE-TODO add options for all features?  If needed.
+    # MAYBE-TODO add option to deal with multiple-splice-variant cases?  But they might just make the data too messy.
+    gene_feature_positions = {}
+    with open(os.path.expanduser(genefile)) as GENEFILE:
+        for chromosome_record in GFF.parse(GENEFILE, limit_info={}):
+            for gene_record in chromosome_record.features:
+                if len(gene_record.sub_features) != 1:  
+                    if ignore_strange_cases:    continue
+                    else:                       raise NoRNAError("Gene %s has no mRNA or multiple mRNAs!"%gene_record.id)
+                features = gene_record.sub_features[0].sub_features
+                CDS_positions = sorted(get_feature_start_end(feature) for feature in features if feature.type=='CDS')
+                gene_feature_positions[gene_record.id] = CDS_positions
+    return gene_feature_positions
 
 
 def feature_total_lengths(genefile, ignore_multiple_splice_variants=False, genome_fasta_file=DEFAULT_NUCLEAR_GENOME_FILE):
