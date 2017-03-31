@@ -143,7 +143,7 @@ def get_feature_start_end(feature_record):
     """
     return (feature_record.location.start.position+1, feature_record.location.end.position)
 
-def get_gene_start_end_excluding_UTRs(gene_record):
+def get_gene_start_end_excluding_UTRs(gene_record, return_longest_if_multiple=False):
     """ Get the start of the first CDS feature and the end of the last one, (as numbers, 1-based, end-inclusive).
 
     If gene has no mRNAs or more than one, raise exception.
@@ -152,16 +152,21 @@ def get_gene_start_end_excluding_UTRs(gene_record):
     """
     if len(gene_record.sub_features) == 0:  
         raise NoRNAError("Gene %s has no RNA - can't determine CDS start/end!"%gene_record.id)
-    if len(gene_record.sub_features) > 1:   
+    if len(gene_record.sub_features) > 1 and not return_longest_if_multiple:   
         raise MultipleRNAError("Gene %s has multiple RNAs - can't determine single CDS start/end!"%gene_record.id)
-    features = gene_record.sub_features[0].sub_features
-    CDS_positions = [get_feature_start_end(feature) for feature in features if feature.type=='CDS']
-    CDS_starts, CDS_ends = zip(*CDS_positions)
+    CDS_starts, CDS_ends = [], []
+    for mRNA in gene_record.sub_features:
+        features = mRNA.sub_features
+        CDS_positions = [get_feature_start_end(feature) for feature in features if feature.type=='CDS']
+        curr_CDS_starts, curr_CDS_ends = zip(*CDS_positions)
+        CDS_starts += curr_CDS_starts
+        CDS_ends += curr_CDS_ends
     return min(CDS_starts), max(CDS_ends)
     # TODO unit-test!
 
 
-def gene_positions(genefile, include_chromosome=True, include_strand=True, coding_only=False, ignore_strange_cases=False):
+def gene_positions(genefile, include_chromosome=True, include_strand=True, coding_only=False, 
+                   return_longest_if_multiple=False, ignore_strange_cases=False):
     """ Return a gene_ID:(chromosome, strand, start_pos, end_pos) dictionary based on GFF input file. 
     
     The positions are 1-based, end-inclusive. 
@@ -185,7 +190,7 @@ def gene_positions(genefile, include_chromosome=True, include_strand=True, codin
                 if not coding_only:
                     full_pos_info += get_feature_start_end(gene_record)
                 else:
-                    try:    start_end = get_gene_start_end_excluding_UTRs(gene_record)
+                    try:    start_end = get_gene_start_end_excluding_UTRs(gene_record, return_longest_if_multiple)
                     except (NoRNAError, MultipleRNAError):
                         if ignore_strange_cases:    continue
                         else:                       raise
