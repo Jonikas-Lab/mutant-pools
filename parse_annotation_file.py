@@ -276,6 +276,18 @@ def simple_format_GO_file(infile, outfile):
             OUTFILE.write('\t'.join(record.get(x,'-') for x in columns) + '\n')
 
 
+def GO_relationship_tree(infile):
+    """ Read obo format GO file, grab the relationships (X is a subset of Y) to get the full tree.
+
+    Was used on go-basic.obo file in ~/experiments/reference_data/chlamy_annotation/annotation_definitions.
+
+    Generated using http://pythonhosted.org/Orange-Bioinformatics/reference/ontology.html
+    Other resources on GO parsing: http://blog.nextgenetics.net/?e=6, https://pypi.python.org/pypi/goatools
+    """
+    import Orange.bio.ontology
+    return Orange.bio.ontology.OBOOntology(infile)
+
+
 def get_all_annotation_definitions(annotation_types_files=DEFAULT_ANNOTATION_DEFINITION_FILES_v5p5):
     """ Return annotation_type:(term:definition) double dictionary based on types and files in argument. """
     parsing_functions = {'PFAM': get_PFAM_definitions, 'Panther': get_Panther_definitions,  'KOG': get_KOG_definitions, 
