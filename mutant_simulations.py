@@ -995,7 +995,7 @@ def weighted_random_choice_single(values, weights, sum_of_weights=None):
             return values[i]
     # LATER-TODO move this to general_utilities?
 
-def weighted_random_choice_multi(values, weights, N=10):
+def weighted_random_choice_multi_list(values, weights, N=10):
     """ Given a list of values and weights, pick N random values, with probability=weight for each value.  """
     sum_of_weights = sum(weights)
     results = []
@@ -1005,7 +1005,21 @@ def weighted_random_choice_multi(values, weights, N=10):
             rnd -= w
             if rnd < 0:
                 results.append(values[i])
-                continue
+                break
+    return results
+    # LATER-TODO move this to general_utilities?
+
+def weighted_random_choice_multi_counter(values, weights, N=10):
+    """ Given a list of values and weights, pick N random values, with probability=weight for each value.  """
+    sum_of_weights = sum(weights)
+    results = collections.Counter()
+    for _ in range(N):
+        rnd = random.random() * sum_of_weights 
+        for i, w in enumerate(weights):
+            rnd -= w
+            if rnd < 0:
+                results[values[i]] += 1
+                break
     return results
     # LATER-TODO move this to general_utilities?
 
@@ -1065,18 +1079,18 @@ def simulate_dataset_from_mappability(N_mutants, fraction_20bp, mappable_positio
     # TODO how would I test this sensibly??  Complicated... But I did run it, visualize the results, and compare to a real dataset, and it looked all right.  (../1211_positions_Ru-screen1-for-paper/positions_over_chromosomes/*simulated*)
 
 
-def simulate_genelist_from_mappability(N_mutants, gene_mappable_lengths, intergenic_mappable_length):
+def simulate_genelist_from_mappability(N_mutants, gene_mappable_lengths, intergenic_mappable_length, return_list=False):
     """ Return gene list from simulating inserting N mutants into the genome randomly, based on gene/intergenic mappable lengths.
     
     Gene_mappable_lengths should be a gene:mappable_length dict; intergenic_mappable_length should be a number.
     They will be used as weights in a weighted random choice for each new mutant insertion (so the probability of each mutant
      ending up in a gene or intergenic region will be proportional to the gene/intergenic mappable lengths).
 
-    Output will be just a list of the gene names for each simulated mutant.
-     output will include duplicates, i.e. if there are two mutants in a gene, the gene will show up twice on the list; 
-     for intergenic mutants, mutant_analysis_classes.SPECIAL_GENE_CODES.not_found will be used; 
-     output will be in no particular order;  output can be used as input to gene_counts_for_mutant_subsets.
-    Note: the output should be the same as from running simulate_dataset_from_mappability and then find_genes_for_simulated, 
+    If return_list is False, output will be a dictionary giving the count of simulated mutants for each gene name.
+    Otherwise output will be a list of the gene names for each simulated mutant (with duplicates, in random order),
+     which can be used as input to gene_counts_for_mutant_subsets.
+    For intergenic mutants, mutant_analysis_classes.SPECIAL_GENE_CODES.not_found will be used; 
+    Note: the list output should be the same as from running simulate_dataset_from_mappability and then find_genes_for_simulated, 
      but should be a lot faster.
     """
     # make gene ID and length lists to use as weighted_random_choice_multi arguments; also pre-calculate sum_of_lengths
@@ -1086,8 +1100,8 @@ def simulate_genelist_from_mappability(N_mutants, gene_mappable_lengths, interge
     gene_IDs = (mutant_analysis_classes.SPECIAL_GENE_CODES.not_found,) + gene_IDs
     mapp_lengths = (intergenic_mappable_length,) + mapp_lengths
     # use simple weighed random choice to choose a gene N times
-    simulated_genelist = weighted_random_choice_multi(gene_IDs, mapp_lengths, N_mutants)
-    return simulated_genelist
+    if return_list:     return weighted_random_choice_multi_list(gene_IDs, mapp_lengths, N_mutants)
+    else:               return weighted_random_choice_multi_counter(gene_IDs, mapp_lengths, N_mutants)
     # TODO unit-test!
     # TODO this gives different results than simulate_dataset_from_mappability - search for it in 1211_positions_Ru-screen1-for-paper/notes.txt for more info. I ended up not using it - if I want to use it, I should figure out what's wrong and fix it!          Is it because I'm treating 20 and 21bp flanking regions equally when really I shouldn't be?
 
