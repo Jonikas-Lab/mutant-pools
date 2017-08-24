@@ -1174,6 +1174,70 @@ def find_genes_for_simulated(sim_dataset, genefile=mutant_utilities.DEFAULT_GENE
     return gene_list
 
 
+def full_screen_simulation(N_mutants, mapped_ins_per_mutant, fraction_correct_ins_mapping, fraction_additional_unmappable_ins,  
+                           gene_lengths, non_gene_length, relative_gene_insertion_density, 
+                           fraction_genes_phenotype, fraction_phenotypes_detected, fraction_nonphenotypes_detected, 
+                           ignore_genes_with_N=0, FDR_cutoffs=[0.3, 0.1, 0.05, 0.01]):
+    # make genes into integer IDs to save memory, and decrease their effective length if needed
+    gene_lengths = [non_gene_length] + [x*relative_gene_insertion_density for x in gene_lengths.values()]
+    gene_IDs = range(len(gene_lengths))
+    # randomly pick which genes should cause the phenotype
+    phenotype_genes = {n for n in gene_IDs[1:] if random.random() < fraction_genes_phenotype}
+    # generate mutants, their mapped genes and phenotypes.
+    #  - variable number of insertions per mutant (Poisson distribution based on average mapped PLUS additional unmappable ins #)
+    #  - mark which ones are mapped correctly, incorrectly, or unmappable
+    #  - each mapped (correctly or incorrectly) insertion is in a gene or intergenic
+    #  - add all genes (mapped correctly or not) to the mutant's gene list
+    #  - for each correctly mapped insertion, check if gene should have a phenotype - if yes, mutant has phenotype with X probability
+    #  - for each incorrectly mapped and unmappable insertion, mutant has phenotype with Y probability
+    mutant_data = []
+    category_chances = [fraction_correct_ins_mapping, 1-fraction_correct_ins_mapping, fraction_additional_unmappable_ins]
+    for m in range(N_mutants):
+        genes, phenotype = set(), False
+        total_ins_prob = 1+fraction_additional_unmappable_ins
+        avg_N_insertions = mapped_ins_per_mutant*total_ins_prob
+        N_insertions = numpy.random.poisson(avg_N_insertions)
+        for i in range(N_insertions):
+            x = weighted_random_choice_single([0,1,2], category_chances)
+            if x < 2:
+                gene = weighted_random_choice_single(gene_IDs, gene_lengths)
+                if gene:    genes.add(gene)
+            if x == 0:
+                if gene in phenotype_genes:
+                    if random.random() < fraction_phenotypes_detected:      phenotype = True
+                else:
+                    if random.random() < fraction_nonphenotypes_detected:   phenotype = True
+            else:
+                if random.random() < fraction_genes_phenotype:
+                    if random.random() < fraction_phenotypes_detected:      phenotype = True
+                else:
+                    if random.random() < fraction_nonphenotypes_detected:   phenotype = True
+        mutant_data.append((genes, phenotype))
+    # calculate total number of mutants with/without phenotype, and for each gene
+    total_phenotype, total_non = sum(1 for (g,p) in mutant_data if p), sum(1 for (g,p) in mutant_data if not p)
+    gene_phenotype_non = collections.defaultdict(lambda: [0, 0])
+    for (genes, phenotype) in mutant_data:
+        for gene in genes:
+            gene_phenotype_non[gene][1-phenotype] += 1
+    # do screen statistics as usual: Fisher's exact test, FDR-correction (optionally ignoring genes with <=N mutants)
+    gene_pvals = {}
+    for (gene, [phen, non]) in gene_phenotype_non.items():
+        gene_pvals[gene] = scipy.stats.fisher_exact([[phen, non], [total_phenotype-phen, total_non-non]], 'greater')[1]
+    genes_filtered, pvals_filtered = [], []
+    for (gene, pval) in gene_pvals.items():
+        if sum(gene_phenotype_non[gene]) > ignore_genes_with_N:
+            genes_filtered.append(gene)
+            pvals_filtered.append(pval)
+    FDR_pvals = statistics_utilities.FDR_adjust_pvalues(pvals_filtered)
+    gene_FDR_pvals = dict(zip(genes_filtered, FDR_pvals))
+    # with each FDR pval cutoff: what % of genes with phenotype were detected?  What % of the detected genes were false positives?
+    cutoff_statistics = {}
+    for cutoff in FDR_cutoffs:
+        genes_detected = {g for (g,FDR) in gene_FDR_pvals.items() if FDR<cutoff}
+        cutoff_statistics[cutoff] = (len(genes_detected), len(phenotype_genes), len(phenotype_genes & genes_detected))
+    return cutoff_statistics
+
+
 ################################# Randomly chosen subsets of real dataset #######################################
 
 ### number of genes with 1+/2+/etc mutants vs number of mutants (randomly chosen mutant subsets)
