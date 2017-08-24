@@ -988,7 +988,7 @@ def weighted_random_choice_single(values, weights, sum_of_weights=None):
     """ Given a list of values and weights, pick a random value, with probability=weight for each value. """
     if sum_of_weights is None:
         sum_of_weights = sum(weights)
-    rnd = random.random() * sum_of_weights 
+    rnd = random.uniform(0,sum_of_weights)
     for i, w in enumerate(weights):
         rnd -= w
         if rnd < 0:
@@ -1000,7 +1000,7 @@ def weighted_random_choice_multi_list(values, weights, N=10):
     sum_of_weights = sum(weights)
     results = []
     for _ in range(N):
-        rnd = random.random() * sum_of_weights 
+        rnd = random.uniform(0,sum_of_weights)
         for i, w in enumerate(weights):
             rnd -= w
             if rnd < 0:
@@ -1014,7 +1014,7 @@ def weighted_random_choice_multi_counter(values, weights, N=10):
     sum_of_weights = sum(weights)
     results = collections.Counter()
     for _ in range(N):
-        rnd = random.random() * sum_of_weights 
+        rnd = random.uniform(0,sum_of_weights)
         for i, w in enumerate(weights):
             rnd -= w
             if rnd < 0:
