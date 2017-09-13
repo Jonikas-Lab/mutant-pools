@@ -1182,8 +1182,11 @@ def full_screen_simulation(N_mutants, mapped_ins_per_mutant, fraction_correct_in
     # make genes into integer IDs to save memory, and decrease their effective length if needed
     gene_lengths = [non_gene_length] + [x*relative_gene_insertion_density for x in gene_lengths.values()]
     gene_IDs = range(len(gene_lengths))
-    # randomly pick which genes should cause the phenotype
-    phenotype_genes = {n for n in gene_IDs[1:] if random.random() < fraction_genes_phenotype}
+    # randomly pick which genes should cause the phenotype, but keep the number always the same
+    N_phenotype_genes = int(round((len(gene_lengths)-1) * fraction_genes_phenotype))
+    genes_scrambled = gene_IDs[1:]
+    random.shuffle(genes_scrambled)
+    phenotype_genes = set(genes_scrambled[:N_phenotype_genes])
     # generate mutants, their mapped genes and phenotypes.
     #  - variable number of insertions per mutant (Poisson distribution based on average mapped PLUS additional unmappable ins #)
     #  - mark which ones are mapped correctly, incorrectly, or unmappable
@@ -1235,7 +1238,9 @@ def full_screen_simulation(N_mutants, mapped_ins_per_mutant, fraction_correct_in
     cutoff_statistics = {}
     for cutoff in FDR_cutoffs:
         genes_detected = {g for (g,FDR) in gene_FDR_pvals.items() if FDR<cutoff}
-        cutoff_statistics[cutoff] = (len(genes_detected), len(phenotype_genes), len(phenotype_genes & genes_detected))
+        if genes_detected:  FDR_average = sum(FDR for (g,FDR) in gene_FDR_pvals.items() if FDR<cutoff)/len(genes_detected)
+        else:               FDR_average = float('nan')
+        cutoff_statistics[cutoff] = (len(genes_detected), len(phenotype_genes), len(phenotype_genes & genes_detected), FDR_average)
     return cutoff_statistics
 
 
