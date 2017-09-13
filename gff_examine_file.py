@@ -32,6 +32,7 @@ GFF_strands = {1:'+', -1:'-'}
 
 class NoRNAError(Exception):        pass
 class MultipleRNAError(Exception):  pass
+class NoCDSError(Exception):  pass
 
 def check_for_overlapping_genes(sequence_record):
     """ Given a GFF sequence record (from BCBio.GFF parser), return list of tuples of IDs of overlapping genes.  
@@ -159,6 +160,8 @@ def get_gene_start_end_excluding_UTRs(gene_record, return_longest_if_multiple=Fa
     for mRNA in gene_record.sub_features:
         features = mRNA.sub_features
         CDS_positions = [get_feature_start_end(feature) for feature in features if feature.type=='CDS']
+        if not CDS_positions:
+            raise NoCDSError("Gene %s has no CDS - can't determine CDS start/end!"%gene_record.id)
         curr_CDS_starts, curr_CDS_ends = zip(*CDS_positions)
         CDS_starts += curr_CDS_starts
         CDS_ends += curr_CDS_ends
@@ -176,6 +179,7 @@ def gene_positions(genefile, include_chromosome=True, include_strand=True, codin
     If coding_only is True, the start/end positions are the start and end of the first and last exon (i.e. excluding the UTRs). 
      In that case, if  a gene doesn't have an mRNA with exons, or has multiple mRNAs, raise an Exception, 
       unless ignore_strange_cases is True, then just don't include it in the output.
+    If coding_only is "5'UTR", same but only for the last exon (so include 5'UTR)
     """
     gene_positions = {}
     with open(os.path.expanduser(genefile)) as GENEFILE:
@@ -192,10 +196,13 @@ def gene_positions(genefile, include_chromosome=True, include_strand=True, codin
                     full_pos_info += get_feature_start_end(gene_record)
                 else:
                     try:    start_end = get_gene_start_end_excluding_UTRs(gene_record, return_longest_if_multiple)
-                    except (NoRNAError, MultipleRNAError):
+                    except (NoRNAError, MultipleRNAError, NoCDSError):
                         if ignore_strange_cases:    continue
                         else:                       raise
-                    full_pos_info += start_end
+                    if coding_only == "5'UTR":  
+                        if gene_record.strand == '1':   full_pos_info += (gene_record.location.start.position+1, start_end[1])
+                        else:                           full_pos_info += (start_end[0], gene_record.location.end.position)
+                    else:                               full_pos_info += start_end
                 gene_positions[gene_record.id] = full_pos_info
     return gene_positions
 
@@ -411,8 +418,14 @@ class Testing_(unittest.TestCase):
         output = gene_lengths('test_data/INPUT_gene-data-1_all-cases.gff3')
         assert len(output) == 28
         assert output['test.geneA0_proper_plus'] == output['test.geneA1_proper_minus'] == 700
-        assert output['test.geneB5_only_exon'] == 100
+        assert output['test.geneB3_only_5UTR'] == output['test.geneB4_only_3UTR'] == output['test.geneB5_only_exon'] == 100
         assert output['test.geneD8a_bad_overlapping_genes'] == 400
+        output = gene_lengths('test_data/INPUT_gene-data-1_all-cases.gff3', exclude_UTRs=True, ignore_strange_cases=True)
+        assert output['test.geneA0_proper_plus'] == output['test.geneA1_proper_minus'] == 500
+        assert output['test.geneB5_only_exon'] == 100
+        output = gene_lengths('test_data/INPUT_gene-data-1_all-cases.gff3', exclude_UTRs="5'UTR", ignore_strange_cases=True)
+        assert output['test.geneA0_proper_plus'] == output['test.geneA1_proper_minus'] == 600
+        assert output['test.geneB5_only_exon'] == 100
 
     # TODO unit-test the other non-main functions!
 
