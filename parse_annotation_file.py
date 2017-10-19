@@ -20,6 +20,7 @@ DEFAULT_GENE_ANNOTATION_FILES_v5p5 = [
 DEFAULT_GENE_ANNOTATION_FOLDER = os.path.expanduser('~/experiments/reference_data/chlamy_annotation')
 DEFAULT_GENE_ANNOTATION_FILES_v5p5 = [(os.path.join(DEFAULT_GENE_ANNOTATION_FOLDER, f), h, i, c, s, j) 
                                       for (f, h, i, c, s, j) in DEFAULT_GENE_ANNOTATION_FILES_v5p5]
+DEFAULT_GENE_POS_FILE_v5p5 = os.path.join(DEFAULT_GENE_ANNOTATION_FOLDER, 'Creinhardtii_281_v5.5.gene.gff3')
 DEFAULT_ID_CONVERSION_FILE_v5p5 = os.path.join(DEFAULT_GENE_ANNOTATION_FOLDER, 
                                                'ChlamydomonasTranscriptNameConversionBetweenReleases.Mch12b.txt')
 
@@ -196,10 +197,60 @@ def parse_ID_conversion_file(infile=DEFAULT_ID_CONVERSION_FILE_v5p5, key_header=
     # TODO add unit-tests!
 
 
-def get_all_gene_annotation(genome_version=None, gene_annotation_files=None, ignore_comments=False, print_info=False):
+def get_gene_names_from_gff3(gff3_file):
+    """ Get gene names from the 'name' field of a gff3 file - returns gene:set_of_names dictionary. """
+    genename_dict = defaultdict(set)
+    for line in open(gff3_file):
+        if line.startswith('#'):    continue
+        all_fields = line.strip().split('\t')
+        if all_fields[2] != 'mRNA': continue
+        data = all_fields[8]
+        fields = dict(x.split('=') for x in data.split(';'))
+        gene = fields['Name'].split('.t')[0]
+        try:                genename_dict[gene].add(fields['geneName'])
+        except KeyError:    pass
+    return genename_dict
+
+
+def add_new_names_to_name_dict(gene_name_dict, extra_names):
+    """ Given a gene:names dict and gene:extra_names dict, add extra names to original ones, with weird formatting.
+    
+    Names is a single-element list containing a comma-separated string or '-' for none, and extra_names is a set.  
+    Convert the string to a set (empty if '-'), add new set, convert back to string and stick inside a one-element list.
+    """
+    for (gene,names) in extra_names.items():
+        old_names = gene_name_dict[gene]
+        if len(old_names) > 1:
+            raise Exception("Gene names list for %s has more than one element! \"%s\" = unexpected format."%(gene,names))
+        old_names = set(old_names[0].split(','))
+        new_names = (old_names - set('-')) | names
+        gene_name_dict[gene] = [','.join(new_names)]
+
+
+def adjust_gene_names_from_synonyms(synonym_dict, gene_name_dict, if_gene_ID = lambda x: x.count('.')):
+    """ Given a gene:synonyms and gene:names dict, find things that look like gene names in synonyms and add them to gene names.
+    
+    Use if_gene_ID function to decide whether something is a gene ID or a name.
+    Don't modify synonyms (leave the gene names in there), just add extra data to names.
+    The synonyms and names are single-element lists containing one string, which might be comma-separated. 
+     Convert name strings to sets and back to strings-inside-a-list to remove duplicates.
+    """
+    additional_names = defaultdict(set)
+    for (gene,synonyms) in synonym_dict.items():
+        for synonym in synonyms:
+            for s in synonym.split(','):
+                if not if_gene_ID(s): additional_names[gene].add(s)
+    add_new_names_to_name_dict(gene_name_dict, additional_names)
+
+
+def get_all_gene_annotation(genome_version=None, gene_annotation_files=None, add_extra_names=True, ignore_comments=False, 
+                            print_info=False):
     """ Grab all the annotation (depends on genome version); return gene:annotation_list dict and header list.
 
-    Can provide a gene_annotation_files dict instead - in the same format as DEFAULT_GENE_ANNOTATION_FILES_v5p5 here.
+    Can provide a gene_annotation_files dict instead of genome version - same format as DEFAULT_GENE_ANNOTATION_FILES_v5p5 here.
+
+    ignore_comments and print_info are just passed on to parse_gene_annotation_file.
+    If add_extra_names is True, grab gene names from matching gff3 file and from the synonyms file in addition to gene name file.
     """
     if genome_version is None and gene_annotation_files is None:
         raise Exception("User has to provide genome_version or gene_annotation_files!")
@@ -218,27 +269,21 @@ def get_all_gene_annotation(genome_version=None, gene_annotation_files=None, ign
                              for (filename, content_header_fields, ID_column, content_columns, splitter, if_join_all_later_fields) 
                              in gene_annotation_files]
     full_header = sum([content_headers for (_, content_headers, _, _, _, _) in gene_annotation_files], [])
-
+    # for some reason in v5.5 files some gene names (e.g. CAH3) are in synonyms/gff3 files but not in the genename file - add those
+    if add_extra_names:
+        gene_name_dict = [d for (d,x) in zip(gene_annotation_dicts,gene_annotation_files) if x[1][0]=='gene_name'][0]
+        synonym_dict   = [d for (d,x) in zip(gene_annotation_dicts,gene_annotation_files) if x[1][0]=='synonyms'][0]
+        adjust_gene_names_from_synonyms(synonym_dict, gene_name_dict)
+        if genome_version == 5.5:
+            extra_gene_names = get_gene_names_from_gff3(DEFAULT_GENE_POS_FILE_v5p5)
+            add_new_names_to_name_dict(gene_name_dict, extra_gene_names)
+        else:
+            print "No gff3 file specified for genome version %s - can't use it to get extra gene names."%genome_version
     all_gene_IDs = set.union(*[set(d.keys()) for d in gene_annotation_dicts])
     full_annotation_dict = defaultdict(lambda: ['-' for _ in full_header])
     for gene in all_gene_IDs:
         full_annotation_dict[gene] = sum([d[gene] for d in gene_annotation_dicts], [])
     return full_annotation_dict, full_header
-
-
-### Bit of old code to get gene names from gff3 file (no longer necessary with v5.5 genome, which has a tab-sep geneName file):
-#   new_fields.append('transcript_names')
-#   genename_dict = defaultdict(set)
-#   for line in open(gff_file_for_gene_names):
-#       if line.startswith('#'):    continue
-#       all_fields = line.strip().split('\t')
-#       if all_fields[2] != 'mRNA': continue
-#       data = all_fields[8]
-#       fields = dict(x.split('=') for x in data.split(';'))
-#       gene = fields['Name'].split('.t')[0]
-#       try:                genename_dict[gene].add(fields['geneName'])
-#       except KeyError:    pass
-#   genename_dict = defaultdict(set, {key:','.join(vals) for (key,vals) in genename_dict.items()})
 
 
 def get_term_definitions_from_obo(obo_infile):
