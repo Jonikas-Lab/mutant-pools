@@ -13,6 +13,7 @@ import sys
 import math
 import random
 import collections
+import itertools
 # other packages
 import numpy
 import scipy
@@ -1243,6 +1244,74 @@ def full_screen_simulation(N_mutants, mapped_ins_per_mutant, fraction_correct_in
         else:               FDR_average = float('nan')
         cutoff_statistics[cutoff] = (len(genes_detected), len(phenotype_genes), len(phenotype_genes & genes_detected), FDR_average)
     return cutoff_statistics
+
+
+def simulate_mutant_characteristics(N_mutants, mapped_ins_per_mutant, fraction_correct_ins_mapping,       
+                                    fraction_additional_unmappable_ins,
+                                    fraction_genes_phenotype, fraction_phenotypes_detected, fraction_nonphenotypes_detected, 
+                                    gene_lengths, non_gene_length, relative_gene_insertion_density):
+    # TODO docstring!
+    # TODO refactor this with above - lots of duplicated code.
+    gene_lengths = [non_gene_length] + [x*relative_gene_insertion_density for x in gene_lengths.values()]
+    gene_IDs = range(len(gene_lengths))
+    # randomly pick which genes should cause the phenotype, but keep the number always the same
+    N_phenotype_genes = int(round((len(gene_lengths)-1) * fraction_genes_phenotype))
+    genes_scrambled = gene_IDs[1:]
+    random.shuffle(genes_scrambled)
+    phenotype_genes = set(genes_scrambled[:N_phenotype_genes])
+    mutant_data = []
+    category_chances = [fraction_correct_ins_mapping, 1-fraction_correct_ins_mapping, fraction_additional_unmappable_ins]
+    for m in range(N_mutants):
+        genes, phenotype = set(), 0
+        total_ins_prob = 1+fraction_additional_unmappable_ins
+        avg_N_insertions = mapped_ins_per_mutant*total_ins_prob
+        N_insertions = numpy.random.poisson(avg_N_insertions)
+        for i in range(N_insertions):
+            x = weighted_random_choice_single([0,1,2], category_chances)
+            if x < 2:
+                gene = weighted_random_choice_single(gene_IDs, gene_lengths)
+                if gene:    genes.add(gene)
+            if x == 0:
+                if gene in phenotype_genes:
+                    if random.random() < fraction_phenotypes_detected:      phenotype += 1
+                else:
+                    if random.random() < fraction_nonphenotypes_detected:   phenotype += 1
+            else:
+                if random.random() < fraction_genes_phenotype:
+                    if random.random() < fraction_phenotypes_detected:      phenotype += 1
+                else:
+                    if random.random() < fraction_nonphenotypes_detected:   phenotype += 1
+        mutant_data.append((genes, phenotype))
+    # calculate total number of mutants with/without phenotype, and for each gene
+    total_phenotype, total_non = sum(1 for (g,p) in mutant_data if p), sum(1 for (g,p) in mutant_data if not p)
+    gene_phenotype_non = collections.defaultdict(lambda: [0, 0])
+    return mutant_data
+
+
+def double_mutant_simulated_counts(N_mutants, ins_per_mutant, gene_lengths, non_gene_length, relative_gene_insertion_density): 
+    """ Simulate a specified random insertional mutant library, and count the % of gene pairs covered with 1/2/3/5+ alleles"""
+    # make genes into integer IDs to save memory, and decrease their effective length if needed
+    gene_lengths = [non_gene_length] + [x*relative_gene_insertion_density for x in gene_lengths.values()]
+    gene_IDs = range(len(gene_lengths))
+    # generate mutants with Poisson-distributed insertions -> list of genes per mutant
+    mutant_data = []
+    for m in range(N_mutants):
+        genes = set()
+        N_insertions = numpy.random.poisson(ins_per_mutant)
+        for i in range(N_insertions):
+            gene = weighted_random_choice_single(gene_IDs, gene_lengths)
+            if gene:    genes.add(gene)
+        mutant_data.append(genes)
+    # calculate total number of mutants with each gene pair
+    double_mutant_counts = collections.defaultdict(int)
+    for genes in mutant_data:
+        for pair in itertools.combinations(sorted(genes), 2):
+            double_mutant_counts[pair] += 1
+    N_total_pairs = (len(gene_lengths)**2 - len(gene_lengths))/2
+    for N_alleles in (1, 2, 3, 5):
+        N_curr_pairs = sum(1 for n in double_mutant_counts.values() if n>= N_alleles)
+        print "%s gene pairs with %s+ alleles"%(general_utilities.value_and_percentages(N_curr_pairs, [N_total_pairs]), N_alleles)
+    return double_mutant_counts
 
 
 ################################# Randomly chosen subsets of real dataset #######################################
