@@ -19,6 +19,7 @@ from BCBio import GFF
 from Bio import SeqIO
 # my modules
 from general_utilities import count_list_values, split_into_N_sets_by_counts, value_and_percentages, add_to_dict_no_replacement
+import basic_seq_utilities
 from testing_utilities import run_functional_tests
 from mutant_utilities import DEFAULT_NUCLEAR_GENOME_FILE
 
@@ -246,6 +247,67 @@ def gene_coding_exon_positions(genefile, ignore_strange_cases=False):
     return gene_feature_positions
 
 
+def gene_spliced_seq(genefile, seqfile, feature=None):
+    """ Return spliced sequence (no introns, but still including UTRs) for each transcript, as a transcriptname:seq dict
+
+    Sequence is reverse-complemented if gene is on the - strand.
+    If feature isn't None, only return that feature sequence (five_prime_UTR, three_prime_UTR, or CDS).
+   ."""
+    genome_seq = dict(basic_seq_utilities.parse_fasta(seqfile))
+    spliced_seqs = {}
+    with open(os.path.expanduser(genefile)) as GENEFILE:
+        for chromosome_record in GFF.parse(GENEFILE, limit_info={}):
+            for gene_record in chromosome_record.features:
+                for transcript in gene_record.sub_features:
+                    # sort the features by position, otherwise they'll be in the opposite order sometimes and give scrambled sequence
+                    features = sorted([f for f in transcript.sub_features if f.type==feature or feature is None], 
+                                      key = lambda f: f.location.start.position)
+                    spliced_seq = ''.join(genome_seq[chromosome_record.id][f.location.start.position:f.location.end.position]
+                                          for f in features)
+                    # reverse-complement sequence if -strand
+                    if transcript.strand == -1:
+                        spliced_seq = basic_seq_utilities.reverse_complement(spliced_seq)
+                    spliced_seqs[transcript.qualifiers['Name'][0]] = spliced_seq
+    return spliced_seqs
+    # TODO unit-test!  Tested casually on real data and seems to have worked, though.
+
+
+def gene_intron5UTR_lengths(genefile, include_between_UTR_and_CDS=True):
+    """ Return the total length of introns inside the 5'UTR, as a transcriptname:length dict.
+    """
+    intron_lengths = {}
+    with open(os.path.expanduser(genefile)) as GENEFILE:
+        for chromosome_record in GFF.parse(GENEFILE, limit_info={}):
+            for gene_record in chromosome_record.features:
+                for transcript in gene_record.sub_features:
+                    # sort the features by position, otherwise they'll be in the opposite order sometimes and give scrambled sequence
+                    if not include_between_UTR_and_CDS:
+                        UTRs = sorted([f for f in transcript.sub_features if f.type=='five_prime_UTR'], 
+                                          key = lambda f: f.location.start.position)
+                    # if we want to include the intron between 5'UTR and CDS (sometimes there is one), 
+                    #   grab all sorted features, see which side the 5'UTR is on, and from that side take all 5'UTRs plus one CDS.
+                    else:
+                        features = sorted([f for f in transcript.sub_features], key = lambda f: f.location.start.position)
+                        N_UTRs = sum(1 for f in features if f.type=='five_prime_UTR')
+                        if N_UTRs == 0:
+                            UTR_intron_len = 0
+                        else:
+                            if features[0].type=='five_prime_UTR':
+                                UTRs = features[:N_UTRs+1]
+                                if not [f.type for f in UTRs] == ['five_prime_UTR']*N_UTRs + ['CDS']:
+                                    print [f.type for f in UTRs], ['five_prime_UTR']*N_UTRs + ['CDS']
+                                    raise Exception("Weird gene structure! %s"%transcript.qualifiers['Name'][0])
+                            else:
+                                UTRs = features[-N_UTRs-1:]
+                                if not [f.type for f in UTRs] == ['CDS'] + ['five_prime_UTR']*N_UTRs:
+                                    print [f.type for f in UTRs], ['CDS'] + ['five_prime_UTR']*N_UTRs
+                                    raise Exception("Weird gene structure! %s"%transcript.qualifiers['Name'][0])
+                    UTR_intron_len = sum(u2.location.start.position - u1.location.end.position for (u1, u2) in zip(UTRs, UTRs[1:]))
+                    intron_lengths[transcript.qualifiers['Name'][0]] = UTR_intron_len
+    return intron_lengths
+    # TODO unit-test!  Tested casually on real data and seems to have worked, though.
+
+
 def feature_total_lengths(genefile, ignore_multiple_splice_variants=False, genome_fasta_file=DEFAULT_NUCLEAR_GENOME_FILE):
     """ Return a dict containing the total lengths of all genes, exons, introns, 5' and 3' UTRs, and intergenic spaces. 
 
@@ -293,6 +355,22 @@ def feature_total_lengths(genefile, ignore_multiple_splice_variants=False, genom
     feature_total_lengths['intergenic'] = total_genome_length - feature_total_lengths['gene']
     return dict(feature_total_lengths)
 
+
+def gene_feature_positions(genefile, feature=None):
+    """ Return transcriptname:feature_start_end_list for features matching feature (or all features if None)
+    """
+    feature_positions = {}
+    with open(os.path.expanduser(genefile)) as GENEFILE:
+        for chromosome_record in GFF.parse(GENEFILE, limit_info={}):
+            for gene_record in chromosome_record.features:
+                for transcript in gene_record.sub_features:
+                    # sort the features by position, otherwise they'll be in the opposite order sometimes and give scrambled sequence
+                    features = sorted([(f.location.start.position, f.location.end.position) 
+                                       for f in transcript.sub_features if f.type==feature or feature is None]) 
+                    feature_positions[transcript.qualifiers['Name'][0]] = features
+    return feature_positions
+
+# TODO I could probably make all those functions simpler and then write a decorator that applies the chromosome record boilerplate?
 
 ### Functions for parsing JGI GFF2-format file 
 
