@@ -347,6 +347,21 @@ def insertion_pair_type_distance(pos1, side1, pos2, side2):
     if '3' in side2 and strand2=='-' and minpos2 <= minpos1: return ('inner-cassette', dist)
     else:                                                   return ('outer-cassette', dist)
 
+
+def if_right_feature(feature_string, wanted_features=['CDS', 'intron']):
+    """ Return True if any part of feature string is in wanted_features (parts can be separated by &, |, /).
+    """
+    feature_set = set(feature_string.replace(' & ', '/').replace('|', '/').split('/'))
+    return bool(feature_set & set(wanted_features))
+
+
+def strip_version(gene_name, version='v5.5'):
+    """ Return gene_name without the version ending (e.g. '.v5.5').
+    """
+    if gene_name.endswith('.'+version):     return gene_name[:-len('.'+version)]
+    else:                                   return gene_name
+
+
 ######### unit-tests
 
 class Testing(unittest.TestCase):
