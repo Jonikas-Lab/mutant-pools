@@ -58,6 +58,8 @@ def define_option_parser():
               help="Only mutants in these gene features will be included in the analysis (default %default)")
     parser.add_option('-c', '--max_conf', type='int', default=4, metavar='C',
               help="Only mutants with mapping confidence from 1 to C will be included in the analysis (default %default)")
+    parser.add_option('-F', '--full_library', action='store_true', default=False,
+              help="The screen was done on the full library (default: rearray)")
     parser.add_option('-a', '--min_alleles_for_FDR', type='int', default=1, metavar='A',
               help="Only genes with at least A qualified alleles are included in FDR correction (default %default)")
     return parser
@@ -104,14 +106,16 @@ def _raw_screen_data_per_gene(library_data_by_IB, screen_data, features, max_con
     return screen_lines_per_gene
 
 
-def _filter_IBs_per_gene(screen_lines_per_gene, library_data_by_IB):
+def _filter_IBs_per_gene(screen_lines_per_gene, library_data_by_IB, if_full_library=False):
     """ Filter lists of screen data for each gene to remove multiple ones in the same mutant (keep the highest-control-readcount one)
     """
+    if if_full_library:     get_mutant_ID = lambda x: (x.plate, x.well)
+    else:                   get_mutant_ID = lambda x: x.mutant_ID
     IBs_per_gene_filtered = {}
     for gene,screen_lines in screen_lines_per_gene.items():
         screen_lines_by_mutant = collections.defaultdict(list)
         for (IB,data) in screen_lines:
-            screen_lines_by_mutant[library_data_by_IB[IB].mutant_ID].append((IB,data))
+            screen_lines_by_mutant[get_mutant_ID(library_data_by_IB[IB])].append((IB,data))
         filtered_IBs = set()
         for line_set in screen_lines_by_mutant.values():
             line_set.sort(key = lambda x: x[1][2])
@@ -153,7 +157,7 @@ def _gene_statistics(gene_bin_counts, min_alleles_for_FDR=1):
     return gene_stats_data
 
 
-def gene_full_analysis(screen_sample_data, screen_control_data, library_data_by_IB, 
+def gene_full_analysis(screen_sample_data, screen_control_data, library_data_by_IB, if_full_library, 
                        phenotype_thresholds, min_reads, features, max_conf, min_alleles_for_FDR=1, min_reads_2=0):
     """ Do the basit statistical analysis as described in module docstring.
 
@@ -179,7 +183,7 @@ def gene_full_analysis(screen_sample_data, screen_control_data, library_data_by_
                                                screen_control_data, screen_control_data_norm)] for IB in all_IBs}
     binned_IBs_by_phenotype = _bin_IBs_by_phenotype(screen_data, phenotype_thresholds, min_reads, min_reads_2)
     screen_lines_per_gene = _raw_screen_data_per_gene(library_data_by_IB, screen_data, features, max_conf)
-    IBs_per_gene_filtered = _filter_IBs_per_gene(screen_lines_per_gene, library_data_by_IB)
+    IBs_per_gene_filtered = _filter_IBs_per_gene(screen_lines_per_gene, library_data_by_IB, if_full_library)
     gene_bin_counts = _get_gene_bin_counts(IBs_per_gene_filtered, binned_IBs_by_phenotype)
     gene_stats_data = _gene_statistics(gene_bin_counts, min_alleles_for_FDR)
     print "number of hit genes by FDR cutoff: ", {x: sum(1 for d in gene_stats_data.values() if d[-1] <= x) 
@@ -216,13 +220,19 @@ def main(args, options):
                                                                  sum(screen_control_data[x] for x in overlap_IBs))
     # LATER-TODO add options for library folder/filenames
     lib_folder = os.path.expanduser('~/experiments/arrayed_library/basic_library_data/')
-    REARRAY_table_header = general_utilities.unpickle(lib_folder+'large-lib_rearray_header.pickle')
-    global Mutant   # for some reason this has to be global or else the thing fails
-    Mutant = collections.namedtuple('Mutant', REARRAY_table_header)
-    REARRAY_table = general_utilities.unpickle(lib_folder+'large-lib_rearray.pickle')
-    library_data_by_IB = {x.IB: x for x in REARRAY_table}
+    if options.full_library:
+        library_table_header = general_utilities.unpickle(lib_folder+'large-lib_full_header.pickle')
+        global Mutant5   # for some reason this has to be global or else the thing fails
+        Mutant5 = collections.namedtuple('Mutant5', library_table_header)
+        library_table = general_utilities.unpickle(lib_folder+'large-lib_full.pickle')
+    else:
+        library_table_header = general_utilities.unpickle(lib_folder+'large-lib_rearray_header.pickle')
+        global Mutant   # for some reason this has to be global or else the thing fails
+        Mutant = collections.namedtuple('Mutant', library_table_header)
+        library_table = general_utilities.unpickle(lib_folder+'large-lib_rearray.pickle')
+    library_data_by_IB = {x.IB: x for x in library_table}
     # run basic pipeline, pickle output to outfile
-    gene_stats_data = gene_full_analysis(screen_sample_data, screen_control_data, library_data_by_IB, 
+    gene_stats_data = gene_full_analysis(screen_sample_data, screen_control_data, library_data_by_IB, options.full_library, 
                                          phenotype_thresholds=[float(x) for x in options.phenotype_thresholds.split(',')], 
                                          min_reads=options.min_reads, features=options.features.split(','), 
                                          max_conf=options.max_conf, min_alleles_for_FDR=options.min_alleles_for_FDR,
