@@ -81,7 +81,7 @@ def normalize_readcounts_multi(sample_dict, norm_total=1e6):
     return {sample: normalize_readcounts_single(IB_counts, norm_total) for (sample, IB_counts) in sample_dict.items()}
 
 
-def _bin_IBs_by_phenotype(screen_data, phenotype_thresholds, min_readcount, min_readcount_2=0):
+def bin_IBs_by_phenotype(screen_data, phenotype_thresholds, min_readcount, min_readcount_2=0):
     phenotype_thresholds = [0] + sorted(phenotype_thresholds) + [float('inf')]
     print "phenotype thresholds: ", phenotype_thresholds
     binned_IBs = [set(IB for IB,data in screen_data.items() if data[2] >= min_readcount and data[0] >= min_readcount_2
@@ -91,7 +91,7 @@ def _bin_IBs_by_phenotype(screen_data, phenotype_thresholds, min_readcount, min_
     return binned_IBs
 
 
-def _raw_screen_data_per_gene(library_data_by_IB, screen_data, features, max_conf):
+def raw_screen_data_per_gene(library_data_by_IB, screen_data, features, max_conf):
     """ Make a list of screen per-IB data lines for each gene, filtering by feature and confidence
     """
     screen_lines_per_gene = collections.defaultdict(list)
@@ -106,7 +106,7 @@ def _raw_screen_data_per_gene(library_data_by_IB, screen_data, features, max_con
     return screen_lines_per_gene
 
 
-def _filter_IBs_per_gene(screen_lines_per_gene, library_data_by_IB, if_full_library=False):
+def filter_IBs_per_gene(screen_lines_per_gene, library_data_by_IB, if_full_library=False):
     """ Filter lists of screen data for each gene to remove multiple ones in the same mutant (keep the highest-control-readcount one)
     """
     if if_full_library:     get_mutant_ID = lambda x: (x.plate, x.well)
@@ -126,7 +126,7 @@ def _filter_IBs_per_gene(screen_lines_per_gene, library_data_by_IB, if_full_libr
     return IBs_per_gene_filtered
 
 
-def _get_gene_bin_counts(IBs_per_gene_filtered, binned_IBs_by_phenotype):
+def get_gene_bin_counts(IBs_per_gene_filtered, binned_IBs_by_phenotype):
     """ Get counts of alleles in each hit/nonhit bin for each gene
 
     Genes with no alleles in any bins aren't included.
@@ -139,7 +139,7 @@ def _get_gene_bin_counts(IBs_per_gene_filtered, binned_IBs_by_phenotype):
     return gene_bin_counts
 
 
-def _gene_statistics(gene_bin_counts, min_alleles_for_FDR=1):
+def gene_statistics(gene_bin_counts, min_alleles_for_FDR=1):
     """ Calculate a p-value (using Fisher's exact test) and FDR (BH method) for each gene compared to all alleles
     """
     bin_totals = [sum(x) for x in zip(*gene_bin_counts.values())]
@@ -181,11 +181,11 @@ def gene_full_analysis(screen_sample_data, screen_control_data, library_data_by_
     all_IBs = set(screen_sample_data.keys()) | set(screen_control_data.keys())
     screen_data = {IB: [x.get(IB, 0) for x in (screen_sample_data, screen_sample_data_norm, 
                                                screen_control_data, screen_control_data_norm)] for IB in all_IBs}
-    binned_IBs_by_phenotype = _bin_IBs_by_phenotype(screen_data, phenotype_thresholds, min_reads, min_reads_2)
-    screen_lines_per_gene = _raw_screen_data_per_gene(library_data_by_IB, screen_data, features, max_conf)
-    IBs_per_gene_filtered = _filter_IBs_per_gene(screen_lines_per_gene, library_data_by_IB, if_full_library)
-    gene_bin_counts = _get_gene_bin_counts(IBs_per_gene_filtered, binned_IBs_by_phenotype)
-    gene_stats_data = _gene_statistics(gene_bin_counts, min_alleles_for_FDR)
+    binned_IBs_by_phenotype = bin_IBs_by_phenotype(screen_data, phenotype_thresholds, min_reads, min_reads_2)
+    screen_lines_per_gene = raw_screen_data_per_gene(library_data_by_IB, screen_data, features, max_conf)
+    IBs_per_gene_filtered = filter_IBs_per_gene(screen_lines_per_gene, library_data_by_IB, if_full_library)
+    gene_bin_counts = get_gene_bin_counts(IBs_per_gene_filtered, binned_IBs_by_phenotype)
+    gene_stats_data = gene_statistics(gene_bin_counts, min_alleles_for_FDR)
     print "number of hit genes by FDR cutoff: ", {x: sum(1 for d in gene_stats_data.values() if d[-1] <= x) 
                                                   for x in (0.3, 0.1, 0.05, 0.01, 0.001)}
     print "top 5 hit genes (with FDRs): ", ' '.join(["%s (%.2g)"%(g,d[-1]) for (g,d) in sorted(gene_stats_data.items(), 
