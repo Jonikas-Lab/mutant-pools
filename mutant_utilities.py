@@ -353,6 +353,19 @@ def if_right_feature(feature_string, wanted_features=['CDS', 'intron']):
     """
     feature_set = set(feature_string.replace(' & ', '/').replace('|', '/').split('/'))
     return bool(feature_set & set(wanted_features))
+    # TODO unit-test
+
+
+def best_feature(feature_string, feature_order="CDS intron 5'UTR 5'UTR_intron 3'UTR 3'UTR_intron".split()):
+    """ Return the earliest feature in feature_order that is one of the &|/-separated parts of feature_string.
+
+    Raise exception of none of feature_order were found.
+    """
+    for f in feature_order:
+        if if_right_feature(feature_string, [f]):
+            return f
+    raise Exception("Feature string \"%s\" contains none of the listed features! %s"%(feature_string, feature_order))
+    # TODO unit-test
 
 
 def strip_version(gene_name, version='v5.5'):
