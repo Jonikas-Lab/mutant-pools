@@ -2,12 +2,14 @@
 
 """
 Basic analysis pipeline for pooled mutant screens, resulting in p-values for each gene based on allele numbers and phenotypes: 
-    - normalize IB readcounts, calculate ratios between samples for each IB, 
-    - sort mutants into bins based on the ratios (non-hits, weak/medium/strong hits) with filtering based on a raw readcount minimum
+    - filter IBs by minimum control readcount; calculate sample:control phenotype ratios for each IB, 
+    - sort mutants into bins based on the ratios and cutoffs (non-hits, weak/medium/strong hits)
     - for each gene, do a Fisher's exact test comparing the numbers of mutants in this gene in each bin to all mutants, 
         optionally filtering by gene feature and confidence level
     - do FDR-correction on the resulting p-values, optionally excluding genes with <N alleles
-Currently this module contains functions to do all these things, but each function has to be separately run in the interactive python shell (see ../../1802_Moshe+Frieder_new-screens/notes.txt for examples - the functions were first used there).
+
+Input file should be a python pickle file containing a {sample_name:{IB:(raw_readcount, normalized_readcount)}} dictionary.
+Output file is also a python pickle file.
 
 The code is largely based on a simpler analysis of earlier screen data done for Xiaobo in ../../../arrayed_library/1603_large-lib_figures-1/notes.txt section "### do statistics to find potential gene hits"; the more complex analysis method (with multiple thresholds for Fisher's exact test) is based on the analysis Robert did for the large-scale screen paper (2018?) - see code in ../../1802_Moshe+Frieder_new-screens/Robert_pipeline, although his code isn't very readable for me and I didn't use it.
 
@@ -29,7 +31,6 @@ import general_utilities
 import mutant_utilities
 import mutant_IB_RISCC_classes
 import statistics_utilities
-
 
 def define_option_parser():
     """ Populates and returns an optparse option parser object, with __doc__ as the usage string."""
@@ -54,38 +55,32 @@ def define_option_parser():
               help="Minimum raw control reads to include IB in analysis (default %default).")
     parser.add_option('-x', '--min_reads_2', type='int', default='0', metavar='M', 
               help="Minimum raw SAMPLE reads to include IB in analysis - rarely needed! (default %default).")
-    parser.add_option('-f', '--features', type='string', default="CDS,intron,5'UTR,5'UTR_intron", metavar='F,F',
-              help="Only mutants in these gene features will be included in the analysis (default %default)")
     parser.add_option('-c', '--max_conf', type='int', default=4, metavar='C',
               help="Only mutants with mapping confidence from 1 to C will be included in the analysis (default %default)")
-    parser.add_option('-F', '--full_library', action='store_true', default=False,
-              help="The screen was done on the full library (default: rearray)")
+    parser.add_option('-f', '--features', type='string', default="CDS,intron,5'UTR,5'UTR_intron", metavar='F,F',
+              help="Only mutants in these gene features will be included in the analysis (default %default)")
     parser.add_option('-a', '--min_alleles_for_FDR', type='int', default=1, metavar='A',
               help="Only genes with at least A qualified alleles are included in FDR correction (default %default)")
+    parser.add_option('-F', '--full_library', action='store_true', default=False,
+              help="The screen was done on the full library (default: rearray)")
     return parser
 
 
 ########################################### Basic pipeline #################################################
 
 
-def normalize_readcounts_single(sample_dict, norm_total=1e6):
-    """ Given an IB:count dict, return matching one with normalized counts to a total of norm_total.
+def filter_IBs_by_min_readcount(screen_data, min_readcount, min_readcount_2=0):
+    """ Modifies screen_data to remove any IBs below the min readcounts.
     """
-    total = sum(sample_dict.values())
-    return {IB: (count/total*norm_total) for (IB,count) in sample_dict.items()} 
+    for (IB,data) in screen_data.items():
+        if data[2] < min_readcount or data[0] < min_readcount_2:
+            del screen_data[IB]
 
 
-def normalize_readcounts_multi(sample_dict, norm_total=1e6):
-    """ Given a {sample:{IB:count}} dict, return matching one with normalized counts for each sample to a total of norm_total.
-    """
-    return {sample: normalize_readcounts_single(IB_counts, norm_total) for (sample, IB_counts) in sample_dict.items()}
-
-
-def bin_IBs_by_phenotype(screen_data, phenotype_thresholds, min_readcount, min_readcount_2=0):
+def bin_IBs_by_phenotype(screen_data, phenotype_thresholds):
     phenotype_thresholds = [0] + sorted(phenotype_thresholds) + [float('inf')]
-    print "phenotype thresholds: ", phenotype_thresholds
-    binned_IBs = [set(IB for IB,data in screen_data.items() if data[2] >= min_readcount and data[0] >= min_readcount_2
-                      and low <= data[1]/data[3] < high) 
+    print "phenotype thresholds: ", phenotype_thresholds[1:-1]
+    binned_IBs = [set(IB for IB,data in screen_data.items() if low <= data[1]/data[3] < high) 
                   for (low, high) in zip(phenotype_thresholds, phenotype_thresholds[1:])]
     print "numbers of IBs in each phenotype bin: ", [len(x) for x in binned_IBs]
     return binned_IBs
@@ -121,8 +116,6 @@ def filter_IBs_per_gene(screen_lines_per_gene, library_data_by_IB, if_full_libra
             line_set.sort(key = lambda x: x[1][2])
             filtered_IBs.add(line_set[-1][0])
         IBs_per_gene_filtered[gene] = filtered_IBs
-    print "top 10 numbers of filtered alleles per gene: ", dict(collections.Counter(len(x) 
-                                                                for x in IBs_per_gene_filtered.values()).most_common(10))
     return IBs_per_gene_filtered
 
 
@@ -157,12 +150,22 @@ def gene_statistics(gene_bin_counts, min_alleles_for_FDR=1):
     return gene_stats_data
 
 
+def print_mutant_read_numbers(screen_data, header='Samples'):
+    sumF = lambda x: general_utilities.format_number(sum(x), 0, 1)
+    lenF = lambda x: general_utilities.format_number(len(x), 0, 1)
+    overlap_IBs = set(IB for IB,x in screen_data.items() if x[0] and x[2])
+    print "%s: %s %s mutants (%s reads);  Control %s %s (%s);  Overlap %s (%s/%s)"%(header,
+       options.sample_key,  sumF(1 for x in screen_data.values() if x[0]), sumF(x[0] for x in screen_data.values()),
+       options.control_key, sumF(1 for x in screen_data.values() if x[2]), sumF(x[2] for x in screen_data.values()),
+       lenF(overlap_IBs), sumF(screen_data[x][0]  for x in overlap_IBs), sumF(screen_data[x][2] for x in overlap_IBs))
+
+
 def gene_full_analysis(screen_sample_data, screen_control_data, library_data_by_IB, if_full_library, 
                        phenotype_thresholds, min_reads, features, max_conf, min_alleles_for_FDR=1, min_reads_2=0):
     """ Do the basit statistical analysis as described in module docstring.
 
     Inputs:
-     - screen_sample_data and screen_control_data - IB:raw_readcount dictionaries for the sample and control
+     - screen_sample_data and screen_control_data - IB:(raw_readcount, normalized_readcount) dictionaries for the sample and control
      - library_data_by_IB - IB:insertion_namedtuple dict derived from the standard library rearray file
      - phenotype_thresholds - list of sample/control normalized ratio thresholds by which mutants will be binned
      - min_reads - the minimum number of reads in the control, below which mutants won't be included in the analysis to avoid noise
@@ -176,21 +179,24 @@ def gene_full_analysis(screen_sample_data, screen_control_data, library_data_by_
 
     Output: gene:[binned_allele_counts, pval, FDR] dictionary.
     """
-    screen_sample_data_norm = normalize_readcounts_single(screen_sample_data)
-    screen_control_data_norm = normalize_readcounts_single(screen_control_data)
-    all_IBs = set(screen_sample_data.keys()) | set(screen_control_data.keys())
-    screen_data = {IB: [x.get(IB, 0) for x in (screen_sample_data, screen_sample_data_norm, 
-                                               screen_control_data, screen_control_data_norm)] for IB in all_IBs}
-    binned_IBs_by_phenotype = bin_IBs_by_phenotype(screen_data, phenotype_thresholds, min_reads, min_reads_2)
+    all_IBs =     set(IB for IB,x in screen_sample_data.items() if x[0]) | set(IB for IB,x in screen_control_data.items() if x[0])
+    screen_data = {IB: screen_sample_data.get(IB, (0,0)) + screen_control_data.get(IB, (0,0)) for IB in all_IBs}
+    print_mutant_read_numbers(screen_data)
+    filter_IBs_by_min_readcount(screen_data, min_reads, min_reads_2)
+    print_mutant_read_numbers(screen_data, 'Filtered (min %s control reads)'%min_reads)
+    binned_IBs_by_phenotype = bin_IBs_by_phenotype(screen_data, phenotype_thresholds)
     screen_lines_per_gene = raw_screen_data_per_gene(library_data_by_IB, screen_data, features, max_conf)
     IBs_per_gene_filtered = filter_IBs_per_gene(screen_lines_per_gene, library_data_by_IB, if_full_library)
     gene_bin_counts = get_gene_bin_counts(IBs_per_gene_filtered, binned_IBs_by_phenotype)
     gene_stats_data = gene_statistics(gene_bin_counts, min_alleles_for_FDR)
-    print "number of hit genes by FDR cutoff: ", {x: sum(1 for d in gene_stats_data.values() if d[-1] <= x) 
-                                                  for x in (0.3, 0.1, 0.05, 0.01, 0.001)}
-    print "top 5 hit genes (with FDRs): ", ' '.join(["%s (%.2g)"%(g,d[-1]) for (g,d) in sorted(gene_stats_data.items(), 
+    # TODO print something nice like how many genes that have a phenotype allele have 1:0, 1:1, etc
+    print "Alleles per gene (top 5, filtered): ", dict(collections.Counter(len(x) 
+                                                                for x in IBs_per_gene_filtered.values()).most_common(5))
+    print "number of hit genes by FDR cutoff:  " + ', '.join("%s: %s"%(x, sum(1 for d in gene_stats_data.values() if d[-1] <= x))
+                                                              for x in (0.001, 0.01, 0.05, 0.1, 0.3, 0.5)
+    print "top 5 hit genes (with FDRs): ", ', '.join(["%s (%.2g)"%(g,d[-1]) for (g,d) in sorted(gene_stats_data.items(), 
                                                    key = lambda (g,d): d[-1] if not scipy.isnan(d[-1]) else 2) if d[-1] < 1] [:5])
-    # MAYBE-TODO add annotation to get gene names?
+    # TODO add annotation to get gene names!  Useful, and if I end up making an output file I'll want it anyway
     return gene_stats_data
     # TODO test!
 
@@ -212,12 +218,7 @@ def main(args, options):
     screen_all_data = general_utilities.unpickle(infile)
     screen_sample_data = screen_all_data[options.sample_key]
     screen_control_data = screen_all_data[options.control_key]
-    overlap_IBs = set(IB for (IB,x) in screen_sample_data.items() if x) & set(IB for (IB,x) in screen_control_data.items() if x)
-    print "Sample %s: %s mutants, %s reads;  Control %s: %s mutants, %s reads"%(
-            options.sample_key,  sum(x for x in screen_sample_data.values() if x),  sum(screen_sample_data.values()), 
-            options.control_key, sum(x for x in screen_control_data.values() if x), sum(screen_control_data.values())) 
-    print "  Overlap %s mutants, %s/%s reads"%(len(overlap_IBs), sum(screen_sample_data[x]  for x in overlap_IBs), 
-                                                                 sum(screen_control_data[x] for x in overlap_IBs))
+    # TODO should I be printing the total numbers or the ones filtered by min readcount?  Does it even matter?
     # LATER-TODO add options for library folder/filenames
     lib_folder = os.path.expanduser('~/experiments/arrayed_library/basic_library_data/')
     if options.full_library:
@@ -241,6 +242,19 @@ def main(args, options):
 
 
 ########################################### Additional analysis/display/plotting #################################################
+
+def normalize_readcounts_single(sample_dict, norm_total=1e6):
+    """ Given an IB:count dict, return matching one with normalized counts to a total of norm_total.
+    """
+    total = sum(sample_dict.values())
+    return {IB: (count/total*norm_total) for (IB,count) in sample_dict.items()} 
+
+
+def normalize_readcounts_multi(sample_dict, norm_total=1e6):
+    """ Given a {sample:{IB:count}} dict, return matching one with normalized counts for each sample to a total of norm_total.
+    """
+    return {sample: normalize_readcounts_single(IB_counts, norm_total) for (sample, IB_counts) in sample_dict.items()}
+
 
 ### Notes and old interactive code for stuff I might want to implement later
     """
@@ -539,7 +553,6 @@ def do_test_run():
     return run_functional_tests(test_runs, define_option_parser(), main, test_folder, 
                                 argument_converter=argument_converter, append_to_outfilenames='.txt') 
     # LATER-TODO add run-tests!
-
 
 
 if __name__=='__main__':
