@@ -1288,6 +1288,26 @@ def simulate_mutant_characteristics(N_mutants, mapped_ins_per_mutant, fraction_c
     return mutant_data
 
 
+def simulate_gene_coverage(N_mutants, mapped_ins_per_mutant, fraction_correct_ins_mapping,       
+                           fraction_additional_unmappable_ins,
+                           gene_lengths, non_gene_length, relative_gene_insertion_density):
+    """ Calculate and return the number of mutants per gene; print fraction of genes with 1+/2+/3+ mutants. """
+    # get mutant data - setting all phenotype stuff to 0/1 because we don't care about the phenotypes
+    mutant_data = simulate_mutant_characteristics(N_mutants, mapped_ins_per_mutant, fraction_correct_ins_mapping,       
+                                    fraction_additional_unmappable_ins, 1, 1, 0, 
+                                    gene_lengths, non_gene_length, relative_gene_insertion_density)
+    # calculate number of mutants in each gene, and overall counts/fractions of genes with each mutant#
+    mutants_per_gene = collections.Counter()
+    for genes,phenotype in mutant_data:
+        for gene in genes:
+            mutants_per_gene[gene] += 1
+    Ngenes = len(gene_lengths)
+    coverage_numbers = collections.Counter(mutants_per_gene.values())
+    coverage_fractions = {N: sum(x for n,x in coverage_numbers.items() if n>=N)/Ngenes for N in (1,2,3)}
+    print coverage_fractions
+    return mutants_per_gene
+
+
 def double_mutant_simulated_counts(N_mutants, ins_per_mutant, gene_lengths, non_gene_length, relative_gene_insertion_density): 
     """ Simulate a specified random insertional mutant library, and count the % of gene pairs covered with 1/2/3/5+ alleles"""
     # make genes into integer IDs to save memory, and decrease their effective length if needed
