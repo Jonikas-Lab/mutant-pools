@@ -49,8 +49,11 @@ def define_option_parser():
       help="Name of the sample in the infile dictionary (required) - put quotes around it if it has spaces or weird characters.")
     parser.add_option('-C', '--control_key', type='string', default='', metavar='"Sample 2"', 
       help="Name of the control in the infile dictionary (required) - put quotes around it if it has spaces or weird characters.")
-    parser.add_option('-p', '--phenotype_thresholds', type='string', default='0.1,10', metavar='X,Y', 
-              help="List of sample/control ratio thresholds for bins, comma-separated, no spaces, lowest first (default %default).")
+    parser.add_option('-p', '--phenotype_thresholds', type='string', default='10', metavar='X,Y', 
+              help="List of sample/control ratio thresholds for bins, comma-separated, no spaces, lowest first (default %default)."
+                  +"The real thresholds used will be made symmetrical, i.e. '10' -> '0.1,10' etc, unless -P is used.")
+    parser.add_option('-P', '--asymmetric_thresholds', action='store_true', default=False,
+              help="Only look for slower-growing and not faster-growing mutants (default: symmetric)")
     parser.add_option('-m', '--min_reads', type='int', default='50', metavar='M', 
               help="Minimum raw control reads to include IB in analysis (default %default).")
     parser.add_option('-x', '--min_reads_2', type='int', default='0', metavar='M', 
@@ -78,8 +81,6 @@ def filter_IBs_by_min_readcount(screen_data, min_readcount, min_readcount_2=0):
 
 
 def bin_IBs_by_phenotype(screen_data, phenotype_thresholds):
-    phenotype_thresholds = [0] + sorted(phenotype_thresholds) + [float('inf')]
-    print "phenotype thresholds: ", phenotype_thresholds[1:-1]
     binned_IBs = [set(IB for IB,data in screen_data.items() if low <= data[1]/data[3] < high) 
                   for (low, high) in zip(phenotype_thresholds, phenotype_thresholds[1:])]
     print "numbers of IBs in each phenotype bin: ", [len(x) for x in binned_IBs]
@@ -93,11 +94,13 @@ def raw_screen_data_per_gene(library_data_by_IB, screen_data, features, max_conf
     for IB in screen_data.keys():
         x = library_data_by_IB[IB]
         if x.gene not in mutant_IB_RISCC_classes.SPECIAL_GENE_CODES.all_codes and x.feature != 'intergenic':
-          if x.confidence_level <= max_conf:
-            for (gene,feature) in zip(x.gene.split(' & '), x.feature.split(' & ')):
-              if features is None or mutant_utilities.if_right_feature(feature, features):
-                gene = mutant_utilities.strip_version(gene)
-                screen_lines_per_gene[mutant_utilities.strip_version(gene)].append((IB,screen_data[IB]))
+            if x.confidence_level <= max_conf:
+                # remember some positions are in multiple genes joined by &, same for features
+                for (gene,feature) in zip(x.gene.split(' & '), x.feature.split(' & ')):
+                    # if_right_feature deals with the /- and |-split features
+                    if features is None or mutant_utilities.if_right_feature(feature, features):
+                        gene = mutant_utilities.strip_version(gene)
+                        screen_lines_per_gene[mutant_utilities.strip_version(gene)].append((IB,screen_data[IB]))
     return screen_lines_per_gene
 
 
@@ -160,8 +163,66 @@ def print_mutant_read_numbers(screen_data, header='Samples'):
        lenF(overlap_IBs), sumF(screen_data[x][0]  for x in overlap_IBs), sumF(screen_data[x][2] for x in overlap_IBs))
 
 
-def gene_full_analysis(screen_sample_data, screen_control_data, library_data_by_IB, if_full_library, 
-                       phenotype_thresholds, min_reads, features, max_conf, min_alleles_for_FDR=1, min_reads_2=0):
+def print_ratio_counts(gene_bin_counts, wt_bins = .9):
+    """ Print how many genes have wt:phenotype allele ratios of 1:0, 1:1, etc.
+    
+    Simplify the bins into just two bins (wt-like and phenotype, with both faster-growing and slower-growing counted as phenotype):
+        if wt_bins is an odd integer, use X middle bins as wt; 
+        if it's a float<1, use enough many middle bins as wt to have wt be at least X fraction of all counts. 
+    """
+    # simplify bins with the middle N bins counted as wt and the rest as phenotype
+    if (wt_bins >= 1 and (wt_bins-1) % 2) or wt_bins < 0.3:
+        raise Exception("wt_bins must be either an odd integer (number of central bins) "
+                        +"or a float 0.3-0.99 (pick central bins to cover at least that fraction of mutants)")
+    # if wt_bins defined by fraction of mutant, figure out how many are needed
+    if wt_bins < 1:
+        bin_totals = [sum(x) for x in zip(*gene_bin_counts.values())]
+        total = sum(bin_totals)
+        N_bins = len(bin_totals)
+        for tmp in range(1, len(bin_totals), 2):
+            wt_low  = int((N_bins-tmp)/2)
+            wt_high = int((N_bins+tmp)/2)
+            if sum(bin_totals[wt_low:wt_high])/total >= wt_bins:
+                wt_bins = tmp
+                break
+        else: 
+            print "(Couldn't find wt-like bins covering %s of the mutants; instead using %s/%s covering %s.)"%(
+                wt_bins, N_bins-2, N_bins, sum(bin_totals[1:-1])/total)
+            wt_bins = N_bins-2
+    else:
+        N_bins = len(gene_bin_counts.values()[0])
+        wt_low  = int((N_bins-wt_bins)/2)
+        wt_high = int((N_bins+wt_bins)/2)
+    # convert all-bin counts to just wt,phenotype bin counts for each gene (as a list, since gene names aren't needed)
+    bin_counts_simplified = [(sum(bin_counts[wt_low:wt_high]), sum(bin_counts[:wt_low]) + sum(bin_counts[wt_high:]))
+                                                                             for bin_counts in gene_bin_counts.values()]
+    # Count genes in different categories - should all be mutually exclusive and cover everything
+    inf = float('inf')
+    print_data = []
+    total_between_all_cases = 0 
+    for (name, min_wt, max_wt, min_ph, max_ph) in [('0:3+',  0, 0,   3, inf),
+                                                   ('0:2',   0, 0,   2, 2),
+                                                   ('0:1',   0, 0,   1, 1),
+                                                   ('1:3+',  1, 1,   3, inf),
+                                                   ('1:2',   1, 1,   2, 2),
+                                                   ('1:1',   1, 1,   1, 1),
+                                                   ('2+:2+', 2, inf, 2, inf),
+                                                   ('2+:1',  2, inf, 1, 1),
+                                                   ('1:0',   1, 1,   0, 0),
+                                                   ('2+:0',  2, inf, 0, 0)]:
+        N = sum(1 for wt,ph in bin_counts_simplified if min_wt<=wt<=max_wt and min_ph<=ph<=max_ph)
+        print_data.append("%s: %s"%(name, N))
+        total_between_all_cases += N
+    print "Genes by wt:phenotype allele counts: " + ', '.join(print_data)
+    # make sure that the categories are mutually exclusive and cover everything, i.e. category total = gene total
+    if not total_between_all_cases == len(gene_bin_counts):
+        raise Exception("Something is wrong with bin counts! %s != %s (%s)"
+                        %(total_between_all_cases, len(gene_bin_counts), len(bin_counts_simplified)))
+    # TODO should probably unit-test all this!
+
+
+def gene_full_analysis(screen_sample_data, screen_control_data, library_data_by_IB, phenotype_thresholds, min_reads, 
+                       features, max_conf, min_alleles_for_FDR=1, asymmetric_thresholds=False, min_reads_2=0, if_full_library=False):
     """ Do the basit statistical analysis as described in module docstring.
 
     Inputs:
@@ -179,6 +240,13 @@ def gene_full_analysis(screen_sample_data, screen_control_data, library_data_by_
 
     Output: gene:[binned_allele_counts, pval, FDR] dictionary.
     """
+    if min(phenotype_thresholds) <= 1:
+        raise Exception("All thresholds should be >1! Symmetrical <1 ones will be added automatically. (%s)"%phenotype_thresholds)
+    if asymmetric_thresholds:
+        phenotype_thresholds = [0] + sorted(phenotype_thresholds) + [float('inf')]
+    else:
+        phenotype_thresholds = [0] + [1/x for x in sorted(phenotype_thresholds)] + sorted(phenotype_thresholds) + [float('inf')]
+    print "phenotype thresholds: ", phenotype_thresholds[1:-1]
     all_IBs =     set(IB for IB,x in screen_sample_data.items() if x[0]) | set(IB for IB,x in screen_control_data.items() if x[0])
     screen_data = {IB: screen_sample_data.get(IB, (0,0)) + screen_control_data.get(IB, (0,0)) for IB in all_IBs}
     print_mutant_read_numbers(screen_data)
@@ -189,14 +257,16 @@ def gene_full_analysis(screen_sample_data, screen_control_data, library_data_by_
     IBs_per_gene_filtered = filter_IBs_per_gene(screen_lines_per_gene, library_data_by_IB, if_full_library)
     gene_bin_counts = get_gene_bin_counts(IBs_per_gene_filtered, binned_IBs_by_phenotype)
     gene_stats_data = gene_statistics(gene_bin_counts, min_alleles_for_FDR)
-    # TODO print something nice like how many genes that have a phenotype allele have 1:0, 1:1, etc
     print "Alleles per gene (top 5, filtered): ", dict(collections.Counter(len(x) 
                                                                 for x in IBs_per_gene_filtered.values()).most_common(5))
+    print_ratio_counts(gene_bin_counts)
     print "number of hit genes by FDR cutoff:  " + ', '.join("%s: %s"%(x, sum(1 for d in gene_stats_data.values() if d[-1] <= x))
-                                                              for x in (0.001, 0.01, 0.05, 0.1, 0.3, 0.5)
+                                                              for x in (0.001, 0.01, 0.05, 0.1, 0.3, 0.5))
     print "top 5 hit genes (with FDRs): ", ', '.join(["%s (%.2g)"%(g,d[-1]) for (g,d) in sorted(gene_stats_data.items(), 
                                                    key = lambda (g,d): d[-1] if not scipy.isnan(d[-1]) else 2) if d[-1] < 1] [:5])
+    # TODO print bin numbers for each hit gene
     # TODO add annotation to get gene names!  Useful, and if I end up making an output file I'll want it anyway
+    # TODO put in checks to make sure the hits are enriched in the phenotype bins overall (on one side or the other but preferably not both, if two-sided), rather than depleted in the phenotype bins or other weirdness
     return gene_stats_data
     # TODO test!
 
@@ -218,7 +288,6 @@ def main(args, options):
     screen_all_data = general_utilities.unpickle(infile)
     screen_sample_data = screen_all_data[options.sample_key]
     screen_control_data = screen_all_data[options.control_key]
-    # TODO should I be printing the total numbers or the ones filtered by min readcount?  Does it even matter?
     # LATER-TODO add options for library folder/filenames
     lib_folder = os.path.expanduser('~/experiments/arrayed_library/basic_library_data/')
     if options.full_library:
@@ -233,11 +302,11 @@ def main(args, options):
         library_table = general_utilities.unpickle(lib_folder+'large-lib_rearray.pickle')
     library_data_by_IB = {x.IB: x for x in library_table}
     # run basic pipeline, pickle output to outfile
-    gene_stats_data = gene_full_analysis(screen_sample_data, screen_control_data, library_data_by_IB, options.full_library, 
-                                         phenotype_thresholds=[float(x) for x in options.phenotype_thresholds.split(',')], 
-                                         min_reads=options.min_reads, features=options.features.split(','), 
-                                         max_conf=options.max_conf, min_alleles_for_FDR=options.min_alleles_for_FDR,
-                                         min_reads_2=options.min_reads_2)
+    phenotype_thresholds = [float(x) for x in options.phenotype_thresholds.split(',')]
+    gene_stats_data = gene_full_analysis(screen_sample_data, screen_control_data, library_data_by_IB, phenotype_thresholds, 
+                                         options.min_reads, options.features.split(','), 
+                                         options.max_conf, options.min_alleles_for_FDR, 
+                                         options.asymmetric_thresholds, options.min_reads_2, options.full_library)
     general_utilities.pickle(gene_stats_data, outfile)
 
 
