@@ -52,9 +52,9 @@ def define_option_parser():
       help="Name of the control in the infile dictionary (required) - put quotes around it if it has spaces or weird characters.")
     parser.add_option('-p', '--phenotype_thresholds', type='string', default='10', metavar='X,Y', 
               help="List of sample/control ratio thresholds for bins, comma-separated, no spaces, lowest first (default %default)."
-                  +"The real thresholds used will be made symmetrical, i.e. '10' -> '0.1,10' etc, unless -P is used.")
-    parser.add_option('-P', '--asymmetric_thresholds', action='store_true', default=False,
-              help="Only look for slower-growing and not faster-growing mutants (default: symmetric)")
+                  +"The real thresholds used will be made two-sided, i.e. '10' -> '0.1,10' etc, unless -P is used.")
+    parser.add_option('-P', '--one_sided_thresholds', action='store_true', default=False,
+              help="Only look for slower-growing and not faster-growing mutants (default: two-sided)")
     parser.add_option('-m', '--min_reads', type='int', default='50', metavar='M', 
               help="Minimum raw control reads to include IB in analysis (default %default).")
     parser.add_option('-x', '--min_reads_2', type='int', default='0', metavar='M', 
@@ -167,22 +167,22 @@ def print_mutant_read_numbers(screen_data, header='Samples'):
        lenF(overlap_IBs), sumF(screen_data[x][0]  for x in overlap_IBs), sumF(screen_data[x][2] for x in overlap_IBs))
 
 
-def print_ratio_counts(gene_bin_counts, wt_bins = .95, asymmetric_thresholds=False):
+def print_ratio_counts(gene_bin_counts, wt_bins = .95, one_sided_thresholds=False):
     """ Print how many genes have wt:phenotype allele ratios of 1:0, 1:1, etc.
     
     Simplify the bins into just two bins (wt-like and phenotype, with both faster-growing and slower-growing counted as phenotype):
-        if wt_bins is an integer, use the first X bins as wt (if asymmetric_thresholds is True),
-            or X*2-1 middle bins as wt (if asymmetric_thresholds is False); 
+        if wt_bins is an integer, use the first X bins as wt (if one_sided_thresholds is True),
+            or X*2-1 middle bins as wt (if one_sided_thresholds is False); 
         if it's a float<1, use enough many middle bins as wt to have wt be at least X fraction of all counts. 
     """
     # simplify bins with the middle N bins counted as wt and the rest as phenotype
     if (wt_bins >= 1 and (wt_bins-1) % 2) or wt_bins < 0.3:
         raise Exception("wt_bins must be either an odd integer (number of central bins) "
                         +"or a float 0.3-0.99 (pick central bins to cover at least that fraction of mutants)")
-    # first, if thresholds were symmetric (wt in the middle), "fold" them in half to get a symmetric version
+    # first, if thresholds were two-sided (wt in the middle), "fold" them in half to get a two-sided version
     N_bins = len(gene_bin_counts.values()[0])
     middle_bin = int((N_bins-1)/2)
-    if asymmetric_thresholds:
+    if one_sided_thresholds:
         gene_bin_counts_sym = {}
         for g,b in gene_bin_counts.items():
             sym = [b[middle_bin]] + [b[i]+b[-i-1] for i in range(middle_bin)]
@@ -228,20 +228,20 @@ def print_ratio_counts(gene_bin_counts, wt_bins = .95, asymmetric_thresholds=Fal
     # TODO should probably unit-test all this!
 
 
-def check_proper_enrichments(gene_stats_data, asymmetric_thresholds=False, FDR_cutoff=0.3, ratio_difference=2):
+def check_proper_enrichments(gene_stats_data, one_sided_thresholds=False, FDR_cutoff=0.3, ratio_difference=2):
     """ Check to make sure the hits are enriched in the phenotype bins overall.
 
     Rather than e.g. depleted in the phenotype bin compared to wt, or enriched in one phenotype bin and depleted in another.
 
-    For symmetric cases (where we're looking at both better-growing and worse-growing phenotypes), 
+    For two-sided cases (where we're looking at both better-growing and worse-growing phenotypes), 
         check that one side has enrichment, and also check that BOTH sides don't have enrichment, because that would be weird.
 
     Only do this check for genes with FDR<cutoff.  
     Consider something enriched if it's ratio_difference times larger than wt.  (Not super clear what this value should be...)
     """
-    # Just doing symmetric and asymmetric separately, since in the symmetric case we want to check both sides separately
+    # Just doing two-sided and one-sided separately, since in the two-sided case we want to check both sides separately
     #   AND also make sure that we don't have enrichment on both sides.
-    if asymmetric_thresholds:
+    if one_sided_thresholds:
         bin_counts_simplified = {gene:(sum(d[0][0]), sum(d[0][1:])) for (gene,d) in gene_stats_data.items()}
         bin_totals = [sum(x) for x in zip(*bin_counts_simplified.values())]
         for gene, bin_counts in bin_counts_simplified.items():
@@ -276,12 +276,11 @@ def check_proper_enrichments(gene_stats_data, asymmetric_thresholds=False, FDR_c
                                                           ':'.join(str(x) for x in gene_stats_data[gene][0]), 
                                                           ':'.join(str(x) for x in bin_counts), 
                                                           ':'.join('%.2f'%x for x in ratios))
-        # TODO should probably change ALL wording to make "asymmetric" into "one-sided" for clarity
     # TODO unit-test!
 
 
 def gene_full_analysis(screen_sample_data, screen_control_data, library_data_by_IB, phenotype_thresholds, min_reads, 
-                       features, max_conf, min_alleles_for_FDR=1, asymmetric_thresholds=False, min_reads_2=0, if_full_library=False):
+                       features, max_conf, min_alleles_for_FDR=1, one_sided_thresholds=False, min_reads_2=0, if_full_library=False):
     """ Do the basit statistical analysis as described in module docstring.
 
     Inputs:
@@ -299,12 +298,13 @@ def gene_full_analysis(screen_sample_data, screen_control_data, library_data_by_
 
     Output: gene:[binned_allele_counts, pval, FDR] dictionary.
     """
-    if min(phenotype_thresholds) <= 1:
-        raise Exception("All thresholds should be >1! Symmetrical <1 ones will be added automatically. (%s)"%phenotype_thresholds)
-    if asymmetric_thresholds:
+    if min(phenotype_thresholds) <= 1 <= max(phenotype_thresholds):
+        raise Exception("All thresholds should be >1 or all <1! (current values are %s). "%phenotype_thresholds
+                        +"Symmetrical ones will be added automatically to make the test two-sided if one_sided_thresholds is False.")
+    if one_sided_thresholds:
         phenotype_thresholds = [0] + sorted(phenotype_thresholds) + [float('inf')]
     else:
-        phenotype_thresholds = [0] + [1/x for x in sorted(phenotype_thresholds)] + sorted(phenotype_thresholds) + [float('inf')]
+        phenotype_thresholds = sorted([0] + [1/x for x in phenotype_thresholds] + phenotype_thresholds + [float('inf')])
     print "phenotype thresholds: ", phenotype_thresholds[1:-1]
     all_IBs =     set(IB for IB,x in screen_sample_data.items() if x[0]) | set(IB for IB,x in screen_control_data.items() if x[0])
     screen_data = {IB: screen_sample_data.get(IB, (0,0)) + screen_control_data.get(IB, (0,0)) for IB in all_IBs}
@@ -318,8 +318,8 @@ def gene_full_analysis(screen_sample_data, screen_control_data, library_data_by_
     gene_stats_data = gene_statistics(gene_bin_counts, min_alleles_for_FDR)
     print "Alleles per gene (top 5, filtered): ", dict(collections.Counter(len(x) 
                                                                 for x in IBs_per_gene_filtered.values()).most_common(5))
-    print_ratio_counts(gene_bin_counts, .95, asymmetric_thresholds)
-    check_proper_enrichments(gene_stats_data, asymmetric_thresholds=False)
+    print_ratio_counts(gene_bin_counts, .95, one_sided_thresholds)
+    check_proper_enrichments(gene_stats_data, one_sided_thresholds=False)
     print "number of hit genes by FDR cutoff:  " + ', '.join("%s: %s"%(x, sum(1 for d in gene_stats_data.values() if d[-1] <= x))
                                                               for x in (0.001, 0.01, 0.05, 0.1, 0.3, 0.5))
     # sort the genes by FDR, then pval (FDR is NaN if <N alleles, so categorize those same as FDR=1, I guess)
@@ -366,7 +366,7 @@ def main(args, options):
     gene_stats_data = gene_full_analysis(screen_sample_data, screen_control_data, library_data_by_IB, phenotype_thresholds, 
                                          options.min_reads, options.features.split(','), 
                                          options.max_conf, options.min_alleles_for_FDR, 
-                                         options.asymmetric_thresholds, options.min_reads_2, options.full_library)
+                                         options.one_sided_thresholds, options.min_reads_2, options.full_library)
     # TODO write output file
     # TODO make scatterplot with the readcount/cutoff lines drawn?
     general_utilities.pickle(gene_stats_data, outfile)
