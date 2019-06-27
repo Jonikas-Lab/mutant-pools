@@ -50,7 +50,7 @@ def define_option_parser():
       help="Name of the sample in the infile dictionary (required) - put quotes around it if it has spaces or weird characters.")
     parser.add_option('-C', '--control_key', type='string', default='', metavar='"Sample 2"', 
       help="Name of the control in the infile dictionary (required) - put quotes around it if it has spaces or weird characters.")
-    parser.add_option('-p', '--phenotype_thresholds', type='string', default='10', metavar='X,Y', 
+    parser.add_option('-p', '--phenotype_thresholds', type='string', default='0.0625,0.125,0.25,0.5', metavar='X,Y', 
               help="List of sample/control ratio thresholds for bins, comma-separated, no spaces, lowest first (default %default)."
                   +"The real thresholds used will be made two-sided, i.e. '10' -> '0.1,10' etc, unless -P is used.")
     parser.add_option('-P', '--one_sided_thresholds', action='store_true', default=False,
@@ -82,8 +82,8 @@ def filter_IBs_by_min_readcount(screen_data, min_readcount, min_readcount_2=0):
 
 
 def bin_IBs_by_phenotype(screen_data, phenotype_thresholds):
-    binned_IBs = [set(IB for IB,data in screen_data.items() if low <= data[1]/data[3] < high) 
-                  for (low, high) in zip(phenotype_thresholds, phenotype_thresholds[1:])]
+    binned_IBs = [set(IB for IB,data in screen_data.items() if min(a,b) <= data[1]/data[3] < max(a,b)) 
+                  for (a,b) in zip(phenotype_thresholds, phenotype_thresholds[1:])]
     print "numbers of IBs in each phenotype bin: ", [len(x) for x in binned_IBs]
     return binned_IBs
 
@@ -175,31 +175,30 @@ def print_ratio_counts(gene_bin_counts, wt_bins = .95, one_sided_thresholds=Fals
             or X*2-1 middle bins as wt (if one_sided_thresholds is False); 
         if it's a float<1, use enough many middle bins as wt to have wt be at least X fraction of all counts. 
     """
-    # simplify bins with the middle N bins counted as wt and the rest as phenotype
     if (wt_bins >= 1 and (wt_bins-1) % 2) or wt_bins < 0.3:
         raise Exception("wt_bins must be either an odd integer (number of central bins) "
                         +"or a float 0.3-0.99 (pick central bins to cover at least that fraction of mutants)")
-    # first, if thresholds were two-sided (wt in the middle), "fold" them in half to get a two-sided version
+    # first, if thresholds were two-sided (wt in the middle), "fold" them in half to get a one-sided version
     N_bins = len(gene_bin_counts.values()[0])
     middle_bin = int((N_bins-1)/2)
-    if one_sided_thresholds:
-        gene_bin_counts_sym = {}
+    if not one_sided_thresholds:
+        gene_bin_counts_1side = {}
         for g,b in gene_bin_counts.items():
-            sym = [b[middle_bin]] + [b[i]+b[-i-1] for i in range(middle_bin)]
-            assert sum(sym) == sum(b)
-            gene_bin_counts_sym[g] = sym
-        gene_bin_counts = gene_bin_counts_sym
+            b_1side = [b[i]+b[-i-1] for i in range(middle_bin)] + [b[middle_bin]] 
+            assert sum(b_1side) == sum(b)
+            gene_bin_counts_1side[g] = b_1side
+        gene_bin_counts = gene_bin_counts_1side
     # if wt_bins defined by fraction of mutant, figure out how many are needed
     if wt_bins < 1:
         bin_totals = [sum(x) for x in zip(*gene_bin_counts.values())]
         total = sum(bin_totals)
-        for tmp in range(len(bin_totals)):
-            if sum(bin_totals[:tmp])/total >= wt_bins:
+        for tmp in range(1,len(bin_totals)):
+            if sum(bin_totals[-tmp:])/total >= wt_bins:
                 wt_bins = tmp
                 break
         else: 
-            print "(Couldn't find wt-like bins covering %s of the mutants; instead using all-but-last bins, covering %s.)"%(
-                wt_bins, sum(bin_totals[1:-1])/total)
+            print "(Couldn't find wt-like bins covering %s of the mutants; instead using all-but-last bins, covering %.2f.)"%(
+                wt_bins, sum(bin_totals[1:])/total)
             wt_bins = N_bins-1
     # convert all-bin counts to just wt,phenotype bin counts for each gene (as a list, since gene names aren't needed)
     bin_counts_simplified = [(sum(bin_counts[:wt_bins]), sum(bin_counts[wt_bins:])) for bin_counts in gene_bin_counts.values()]
@@ -228,7 +227,7 @@ def print_ratio_counts(gene_bin_counts, wt_bins = .95, one_sided_thresholds=Fals
     # TODO should probably unit-test all this!
 
 
-def check_proper_enrichments(gene_stats_data, one_sided_thresholds=False, FDR_cutoff=0.3, ratio_difference=2):
+def check_proper_enrichments(gene_stats_data, one_sided_thresholds=False, min_alleles=2, FDR_cutoff=0.5, ratio_difference=3):
     """ Check to make sure the hits are enriched in the phenotype bins overall.
 
     Rather than e.g. depleted in the phenotype bin compared to wt, or enriched in one phenotype bin and depleted in another.
@@ -236,22 +235,27 @@ def check_proper_enrichments(gene_stats_data, one_sided_thresholds=False, FDR_cu
     For two-sided cases (where we're looking at both better-growing and worse-growing phenotypes), 
         check that one side has enrichment, and also check that BOTH sides don't have enrichment, because that would be weird.
 
-    Only do this check for genes with FDR<cutoff.  
+    Only do this check for genes with FDR<cutoff; ignore cases where <min_alleles have a phenotype (on either side if two-sided).
     Consider something enriched if it's ratio_difference times larger than wt.  (Not super clear what this value should be...)
     """
+    # ratios are slightly weird - we want 1/0 to be inf but 0/0 to be 0 (so 5:0:0 shows up as a hit on the 5:0 side but not the 0:0)
+    def ratio_calc(phen_ratio,wt_ratio):
+        if wt_ratio == 0:   return 0 if phen_ratio==0 else float('inf')
+        else:               return phen_ratio/wt_ratio
     # Just doing two-sided and one-sided separately, since in the two-sided case we want to check both sides separately
     #   AND also make sure that we don't have enrichment on both sides.
     if one_sided_thresholds:
-        bin_counts_simplified = {gene:(sum(d[0][0]), sum(d[0][1:])) for (gene,d) in gene_stats_data.items()}
+        bin_counts_simplified = {gene:(sum(d[0][:-1]), d[0][-1]) for (gene,d) in gene_stats_data.items()}
         bin_totals = [sum(x) for x in zip(*bin_counts_simplified.values())]
         for gene, bin_counts in bin_counts_simplified.items():
             FDR = gene_stats_data[gene][2]
             if FDR > FDR_cutoff or numpy.isnan(FDR): continue
             ratios = [b/t for b,t in zip(bin_counts,bin_totals)]
-            ratio = float('inf') if not ratios[0] else ratios[1]/ratios[0]
+            ratio = ratio_calc(ratios[0], ratios[1])
             if ratio < ratio_difference:
-                print ("WARNING: gene %s (FDR %s, full bin counts %s, simplified %s:%s, "
-                       +"phenotype:wt ratio normalized to totals %.2f:%.2f) doesn't look like a proper hit!")%(gene, FDR,
+                print ratios, ratio, ratio_difference, ratio<ratio_difference
+                print ("Warning: gene %s (FDR %s, full bin counts %s, simplified %s:%s, "
+                       +"phenotype:wt ratio normalized to totals %.2g:%.2g) doesn't look like a proper hit!")%(gene, FDR,
                                                               ':'.join(str(x) for x in gene_stats_data[gene][0]), 
                                                               bin_counts[0], bin_counts[1], ratios[0], ratios[1])
     else:
@@ -260,27 +264,32 @@ def check_proper_enrichments(gene_stats_data, one_sided_thresholds=False, FDR_cu
         bin_counts_simplified = {gene:(sum(d[0][:middle_bin]), d[0][middle_bin], sum(d[0][middle_bin+1:])) 
                                  for (gene,d) in gene_stats_data.items()}
         bin_totals = [sum(x) for x in zip(*bin_counts_simplified.values())]
+        worse_growing, better_growing = 0, 0
         for gene, bin_counts in bin_counts_simplified.items():
             FDR = gene_stats_data[gene][2]
             if FDR > FDR_cutoff or numpy.isnan(FDR): continue
             ratios = [b/t for b,t in zip(bin_counts,bin_totals)]
-            ratio1, ratio2 = (float('inf') if not ratios[1] else x/ratios[1] for x in (ratios[0], ratios[2]))
+            ratio1 = ratio_calc(ratios[0], ratios[1])
+            ratio2 = ratio_calc(ratios[2], ratios[1])
             if max(ratio1, ratio2) < ratio_difference:
                 print ("WARNING: gene %s (FDR %s, full bin counts %s, simplified %s, "
-                       +"phenotype:wt ratios normalized to total %.2f/%.2f) doesn't look like a proper hit!")%(gene, FDR,
+                       +"phenotype:wt ratios normalized to total %.2g/%.2g) doesn't look like a proper hit!")%(gene, FDR,
                                                               ':'.join(str(x) for x in gene_stats_data[gene][0]), 
                                                               ':'.join(str(x) for x in bin_counts), ratio1, ratio2)
-            if min(ratio1, ratio2) > ratio_difference:
-                print ("WARNING: gene %s (FDR %s, full bin counts %s, simplified %s, bin count ratios to wt %s) "
-                     +"looks like a hit with both better and worse growth!")%(gene, gene_stats_data[gene][2], 
+            if min(ratio1, ratio2) > ratio_difference and min(bin_counts[0], bin_counts[2])>=min_alleles:
+                print ("WARNING: gene %s (FDR %s, full bin counts %s, simplified %s, "
+                       +"phenotype:wt ratios normalized to total %.2g/%.2g) "
+                       +"looks like a hit with both better and worse growth!")%(gene, FDR,
                                                           ':'.join(str(x) for x in gene_stats_data[gene][0]), 
-                                                          ':'.join(str(x) for x in bin_counts), 
-                                                          ':'.join('%.2f'%x for x in ratios))
+                                                          ':'.join(str(x) for x in bin_counts), ratio1, ratio2)
+            if ratio1 > ratio2:     worse_growing += 1
+            elif ratio1 < ratio2:   better_growing += 1
+        print "Out of all putative hits: %s worse-growing, %s better-growing (FDR<%s)"%(worse_growing, better_growing, FDR_cutoff)
     # TODO unit-test!
 
 
-def gene_full_analysis(screen_sample_data, screen_control_data, library_data_by_IB, phenotype_thresholds, min_reads, 
-                       features, max_conf, min_alleles_for_FDR=1, one_sided_thresholds=False, min_reads_2=0, if_full_library=False):
+def gene_full_analysis(screen_sample_data, screen_control_data, library_data_by_IB, phenotype_thresholds, min_reads, features, 
+               max_conf, gene_names={}, min_alleles_for_FDR=1, one_sided_thresholds=False, min_reads_2=0, if_full_library=False):
     """ Do the basit statistical analysis as described in module docstring.
 
     Inputs:
@@ -301,11 +310,15 @@ def gene_full_analysis(screen_sample_data, screen_control_data, library_data_by_
     if min(phenotype_thresholds) <= 1 <= max(phenotype_thresholds):
         raise Exception("All thresholds should be >1 or all <1! (current values are %s). "%phenotype_thresholds
                         +"Symmetrical ones will be added automatically to make the test two-sided if one_sided_thresholds is False.")
+    # in one-sided cases, always make it so the wt bin is at the end - makes display better and everything else easier.
     if one_sided_thresholds:
-        phenotype_thresholds = [0] + sorted(phenotype_thresholds) + [float('inf')]
+        if numpy.mean(phenotype_thresholds) < 1:
+            phenotype_thresholds = [0] + sorted(phenotype_thresholds) + [float('inf')]
+        else:
+            phenotype_thresholds = [float('inf')] + sorted(phenotype_thresholds, reverse=True) + [0]
     else:
         phenotype_thresholds = sorted([0] + [1/x for x in phenotype_thresholds] + phenotype_thresholds + [float('inf')])
-    print "phenotype thresholds: ", phenotype_thresholds[1:-1]
+    print "phenotype thresholds: ", phenotype_thresholds
     all_IBs =     set(IB for IB,x in screen_sample_data.items() if x[0]) | set(IB for IB,x in screen_control_data.items() if x[0])
     screen_data = {IB: screen_sample_data.get(IB, (0,0)) + screen_control_data.get(IB, (0,0)) for IB in all_IBs}
     print_mutant_read_numbers(screen_data)
@@ -319,14 +332,14 @@ def gene_full_analysis(screen_sample_data, screen_control_data, library_data_by_
     print "Alleles per gene (top 5, filtered): ", dict(collections.Counter(len(x) 
                                                                 for x in IBs_per_gene_filtered.values()).most_common(5))
     print_ratio_counts(gene_bin_counts, .95, one_sided_thresholds)
-    check_proper_enrichments(gene_stats_data, one_sided_thresholds=False)
-    print "number of hit genes by FDR cutoff:  " + ', '.join("%s: %s"%(x, sum(1 for d in gene_stats_data.values() if d[-1] <= x))
+    check_proper_enrichments(gene_stats_data, one_sided_thresholds, min_alleles=min_alleles_for_FDR)
+    print "Number of hit genes by FDR cutoff:  " + ', '.join("%s: %s"%(x, sum(1 for d in gene_stats_data.values() if d[-1] <= x))
                                                               for x in (0.001, 0.01, 0.05, 0.1, 0.3, 0.5))
     # sort the genes by FDR, then pval (FDR is NaN if <N alleles, so categorize those same as FDR=1, I guess)
     sorted_genes = sorted(gene_stats_data.items(), key = lambda (g,d): ((d[2] if not numpy.isnan(d[2]) else 1), d[1]))
-    print "top 5 hit genes (FDRs, bin counts): ", ', '.join(["%s (%.2g, %s)"%(g, d[2], ':'.join(str(x) for x in d[0])) 
+    print "Top 5 hit genes (FDRs, bin counts): ", ', '.join(["%s (%.2g, %s)"%(gene_names.get(g, g), 
+                                                                              d[2], ':'.join(str(x) for x in d[0])) 
                                                              for (g,d) in sorted_genes[:5] if d[2]<1])
-    # TODO add annotation to get gene names!  Useful, and if I end up making an output file I'll want it anyway
     return gene_stats_data
     # TODO test!
 
@@ -348,7 +361,7 @@ def main(args, options):
     screen_all_data = general_utilities.unpickle(infile)
     screen_sample_data = screen_all_data[options.sample_key]
     screen_control_data = screen_all_data[options.control_key]
-    # LATER-TODO add options for library folder/filenames
+    # LATER-TODO add options for library/annotation folder/filenames
     lib_folder = os.path.expanduser('~/experiments/arrayed_library/basic_library_data/')
     if options.full_library:
         library_table_header = general_utilities.unpickle(lib_folder+'large-lib_full_header.pickle')
@@ -361,11 +374,16 @@ def main(args, options):
         Mutant = collections.namedtuple('Mutant', library_table_header)
         library_table = general_utilities.unpickle(lib_folder+'large-lib_rearray.pickle')
     library_data_by_IB = {x.IB: x for x in library_table}
+    ann_file = os.path.expanduser('~/experiments/reference_data/chlamy_annotation/annotation_data_and_header_v5.5.pickle')
+    annotation, ann_header = general_utilities.unpickle(ann_file)
+    gene_names = {gene:(a[0] if a[0]!='-' else (a[11] if a[11]!='-' else gene)) for gene,a in annotation.items()}
+    gene_names = {g:n.split(',')[0] for g,n in gene_names.items()}
     # run basic pipeline, pickle output to outfile
     phenotype_thresholds = [float(x) for x in options.phenotype_thresholds.split(',')]
+    phenotype_thresholds = [int(x) if round(x)==x else x for x in phenotype_thresholds]
     gene_stats_data = gene_full_analysis(screen_sample_data, screen_control_data, library_data_by_IB, phenotype_thresholds, 
                                          options.min_reads, options.features.split(','), 
-                                         options.max_conf, options.min_alleles_for_FDR, 
+                                         options.max_conf, gene_names, options.min_alleles_for_FDR, 
                                          options.one_sided_thresholds, options.min_reads_2, options.full_library)
     # TODO write output file
     # TODO make scatterplot with the readcount/cutoff lines drawn?
