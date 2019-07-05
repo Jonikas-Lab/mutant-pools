@@ -77,6 +77,9 @@ def define_option_parser():
               help="Only genes with at least A qualified alleles are included in FDR correction (default %default)")
     parser.add_option('-F', '--full_library', action='store_true', default=False,
               help="The screen was done on the full library (default: rearray)")
+    parser.add_option('-W', '--workspace_size', type='float', default=2e5,
+              help="Memory used for statistics - try increasing to 2e6 if you're getting \"LDSTP is too small for this problem.  "
+                  +"Try increasing the size of the workspace\" errors, but 2e6 seems to be ~20G... (default %default)")
     return parser
 
 
@@ -176,7 +179,7 @@ def get_gene_bin_counts(IBs_per_gene_filtered, binned_IBs_by_phenotype):
     return gene_bin_counts
 
 
-def gene_statistics(gene_bin_counts, min_alleles_for_FDR=1):
+def gene_statistics(gene_bin_counts, min_alleles_for_FDR=1, workspace_size=2e5):
     """ Calculate a p-value (using Fisher's exact test) and FDR (BH method) for each gene compared to all alleles
 
     Output: gene:[binned_allele_counts, pval, FDR] dictionary, where FDR is NaN for genes with <min_alleles_for_FDR alleles.
@@ -184,8 +187,11 @@ def gene_statistics(gene_bin_counts, min_alleles_for_FDR=1):
     bin_totals = [sum(x) for x in zip(*gene_bin_counts.values())]
     print "numbers of filtered IBs in each phenotype bin: ", bin_totals
     # if there are only 2 bins, can use scipy.stats.fisher_exact; otherwise use my custom one that goes through R
+    #  the one using R will sometimes throw an "Increase workspace or consider using 'simulate.p.value=TRUE'" error - 
+    #   for that reason I changed that to optionally use a higher workspace value, we'll see if that works.
+    # MAYBE-TODO could also switch to chi-squared test for bigger numbers, but that's not great when some numbers are small...
     if len(bin_totals) == 1:    fisher_exact = lambda x: scipy.stats.fisher_exact(x)[1]
-    else:                       fisher_exact = statistics_utilities.fisher_exact
+    else:                       fisher_exact = lambda x: statistics_utilities.fisher_exact(x, workspace=workspace_size)
     gene_pvals = {g:fisher_exact([bin_counts,bin_totals]) for (g,bin_counts) in gene_bin_counts.items()}
     if any(numpy.isnan(x) for x in gene_pvals.values()): raise Exception("Some pvals are NaN! Look into this!")
     # the FDR-correction has to be done on a list of pvalues, so separate out the genes that meet min_alleles_for_FDR
@@ -424,7 +430,7 @@ def readcount_scatterplots(screen_data, screen_data_below_min, IBs_per_gene_filt
 
 def gene_full_analysis(screen_sample_data, screen_control_data, library_data_by_IB, phenotype_thresholds, min_reads, features, 
                        max_conf, sample_name='sample', control_name='control', scatterplot_outfolder=None, gene_names={}, 
-                       min_alleles_for_FDR=1, one_sided_thresholds=False, min_reads_2=0, if_full_library=False):
+                       min_alleles_for_FDR=1, one_sided_thresholds=False, min_reads_2=0, if_full_library=False, workspace_size=2e5):
     """ Do the basit statistical analysis as described in module docstring.
 
     Inputs:
@@ -454,7 +460,7 @@ def gene_full_analysis(screen_sample_data, screen_control_data, library_data_by_
     if not any(IBs_per_gene_filtered.values()):
         raise Exception("No IBs passed the filters!")
     gene_bin_counts = get_gene_bin_counts(IBs_per_gene_filtered, binned_IBs_by_phenotype)
-    gene_stats_data = gene_statistics(gene_bin_counts, min_alleles_for_FDR)
+    gene_stats_data = gene_statistics(gene_bin_counts, min_alleles_for_FDR, workspace_size)
     print "Alleles per gene (top 5, filtered): ", dict(collections.Counter(len(x) 
                                                                 for x in IBs_per_gene_filtered.values()).most_common(5))
     print_ratio_counts(gene_bin_counts, .95, one_sided_thresholds)
@@ -542,8 +548,8 @@ def main(args, options):
         screen_control_data = screen_all_data[control]
         gene_stats_data = gene_full_analysis(screen_sample_data, screen_control_data, library_data_by_IB, phenotype_thresholds, 
                              options.min_reads, options.features.split(','), options.max_conf, 
-                             sample, control, outfolder, gene_names, 
-                             options.min_alleles_for_FDR, options.one_sided_thresholds, options.min_reads_2, options.full_library)
+                             sample, control, outfolder, gene_names, options.min_alleles_for_FDR, 
+                             options.one_sided_thresholds, options.min_reads_2, options.full_library, options.workspace_size)
         gene_stats_data_all.append((sample, control, gene_stats_data))
         # MAYBE-TODO change write_outfile to include multiple samples together?
         _ = write_outfile(gene_stats_data, phenotype_thresholds, outfolder+'/results_%s_%s.txt'%(sample, control), 
