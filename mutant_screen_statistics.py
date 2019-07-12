@@ -252,7 +252,7 @@ def print_ratio_counts(gene_bin_counts, wt_bins = .95, one_sided_thresholds=Fals
     inf = float('inf')
     print_data = []
     total_between_all_cases = 0 
-    for (name, min_wt, max_wt, min_ph, max_ph) in [('3+:0',   3, inf,   0, 0),
+    for (name, min_ph, max_ph, min_wt, max_wt) in [('3+:0',   3, inf,   0, 0),
                                                    ('2:0',    2, 2,     0, 0),   
                                                    ('1:0',    1, 1,     0, 0),   
                                                    ('3+:1',   3, inf,   1, 1),   
@@ -262,10 +262,10 @@ def print_ratio_counts(gene_bin_counts, wt_bins = .95, one_sided_thresholds=Fals
                                                    ('1:2+',   1, 1,     2, inf), 
                                                    ('0:1',    0, 0,     1, 1),   
                                                    ('0:2+',   0, 0,     2, inf)]: 
-        N = sum(1 for wt,ph in bin_counts_simplified if min_wt<=wt<=max_wt and min_ph<=ph<=max_ph)
+        N = sum(1 for ph,wt in bin_counts_simplified if min_wt<=wt<=max_wt and min_ph<=ph<=max_ph)
         print_data.append("%s: %s"%(name, N))
         total_between_all_cases += N
-    print "Genes by wt:phenotype allele counts: " + ', '.join(print_data)
+    print "Genes by phenotype:wt allele counts: " + ', '.join(print_data)
     # make sure that the categories are mutually exclusive and cover everything, i.e. category total = gene total
     if not total_between_all_cases == len(gene_bin_counts):
         raise Exception("Something is wrong with bin counts! %s != %s (%s)"
