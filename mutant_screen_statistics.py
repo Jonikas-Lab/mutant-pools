@@ -195,7 +195,7 @@ def gene_statistics(gene_bin_counts, min_alleles_for_FDR=1, workspace_size=2e5):
     gene_pvals = {g:fisher_exact([bin_counts,bin_totals]) for (g,bin_counts) in gene_bin_counts.items()}
     if any(numpy.isnan(x) for x in gene_pvals.values()): raise Exception("Some pvals are NaN! Look into this!")
     # the FDR-correction has to be done on a list of pvalues, so separate out the genes that meet min_alleles_for_FDR
-    genes_with_enough_alleles = sorted(g for (g,bin_counts) in gene_bin_counts.items() if sum(bin_counts) > min_alleles_for_FDR)
+    genes_with_enough_alleles = sorted(g for (g,bin_counts) in gene_bin_counts.items() if sum(bin_counts) >= min_alleles_for_FDR)
     FDRs_for_some_genes = statistics_utilities.FDR_adjust_pvalues([gene_pvals[g] for g in genes_with_enough_alleles], method='BH')
     FDR_dict = collections.defaultdict(lambda: float('NaN'), zip(genes_with_enough_alleles, FDRs_for_some_genes))
     # join the bin counts, pvals and FDRs into a single dictionary, with NaN FDRs as needed
@@ -348,25 +348,25 @@ def scatterplot(readcountsS, readcountsC, sample_name, control_name, info='', sa
     min_readcount_y = min(x for x in readcountsS if x)
     if same_scale:
         min_readcount_x = min_readcount_y = min(min_readcount_x, min_readcount_y)
-    _ = mplt.figure(figsize=(8,8))
-    _ = mplt.scatter(readcountsC, readcountsS, edgecolor='None', color='k', s=20, alpha=0.2)
-    _ = mplt.xscale('symlog', linthreshx=min_readcount_x)
-    _ = mplt.yscale('symlog', linthreshy=min_readcount_y)
+    mplt.figure(figsize=(8,8))
+    mplt.scatter(readcountsC, readcountsS, edgecolor='None', color='k', s=20, alpha=0.2)
+    mplt.xscale('symlog', linthreshx=min_readcount_x)
+    mplt.yscale('symlog', linthreshy=min_readcount_y)
     scalemax_x = mplt.xlim()[1]
     scalemax_y = mplt.ylim()[1]
     if same_scale:
         scalemax_x = scalemax_y = max(scalemax_x, scalemax_y)
-    _ = mplt.xlim(-min_readcount_x/5, scalemax_x)
-    _ = mplt.ylim(-min_readcount_y/5, scalemax_y)
+    mplt.xlim(-min_readcount_x/5, scalemax_x)
+    mplt.ylim(-min_readcount_y/5, scalemax_y)
     # if one side IS all above zero (because of a readcount cutoff), use different x scale
     if not same_scale and min(readcountsC)>0:
-        _ = mplt.xlim(min_readcount_x/1.5, scalemax_x)
-    _ = mplt.xlabel('control %s readcount (log scale)'%control_name)
-    _ = mplt.ylabel('sample %s readcount (log scale)'%sample_name)
+        mplt.xlim(min_readcount_x/1.5, scalemax_x)
+    mplt.xlabel('control %s readcount (log scale)'%control_name)
+    mplt.ylabel('sample %s readcount (log scale)'%sample_name)
     spearman_corr, spearman_pval = scipy.stats.spearmanr(readcountsS, readcountsC)
     pearson_corr, pearson_pval = scipy.stats.pearsonr(readcountsS, readcountsC)
-    _ = mplt.title('%s vs %s readcount correlation, %s'%(sample_name, control_name, info)
-                   +'\n(each dot is an IB); correlation Spearman %.2f, Pearson %.2f'%(spearman_corr, pearson_corr))
+    mplt.title('%s vs %s readcount correlation, %s'%(sample_name, control_name, info)
+               +'\n(each dot is an IB); correlation Spearman %.2f, Pearson %.2f'%(spearman_corr, pearson_corr))
 
 
 def _plot_thresholds(phenotype_thresholds, min_x, color='dodgerblue', linestyle='dashed'):
@@ -394,8 +394,8 @@ def readcount_scatterplots(screen_data, screen_data_below_min, IBs_per_gene_filt
     mplt.plot((min_reads, min_reads), mplt.ylim(), color='dodgerblue', linestyle='dashed')
     if min_reads_2:
         mplt.plot(mplt.xlim(), (min_reads_2, min_reads_2), color='dodgerblue', linestyle='dashed')
-    _ = plotting_utilities.savefig(outfolder + '/readcount-scatterplot_%s-%s_raw.png'%(sample_name, control_name))
-    _ = mplt.close()
+    plotting_utilities.savefig(outfolder + '/readcount-scatterplot_%s-%s_raw.png'%(sample_name, control_name))
+    mplt.close()
     # MAYBE-TODO instead of showing entirely unfiltered IBs, maybe remove min_reads filtering but keep the rest?
     # Plot 2: normalized readcounts, filtered only (includes min_readcount filtering); plot phenotype_thresholds cutoffs
     all_IBs_sorted = sorted(set.union(*IBs_per_gene_filtered.values()))
@@ -405,7 +405,7 @@ def readcount_scatterplots(screen_data, screen_data_below_min, IBs_per_gene_filt
     _plot_thresholds(phenotype_thresholds, min(readcountsC))
     # if I want a diagonal (doesn't make sense on raw readcounts, but could help on normalized, if there are few thresholds):
     # _plot_thresholds([1], min(readcountsC), color='grey', linestyle='dotted')
-    _ = plotting_utilities.savefig(outfolder + '/readcount-scatterplot_%s-%s_norm.png'%(sample_name, control_name))
+    plotting_utilities.savefig(outfolder + '/readcount-scatterplot_%s-%s_norm.png'%(sample_name, control_name))
     # Plot 3: plot normalized readcounts of only multi-allele genes, and highlight all alleles of hit genes (below FDR threshold)
     if len(FDR_cutoffs) == 1:       colors, sizes = ['red'], [20]
     elif len(FDR_cutoffs) == 2:     colors, sizes = ['#aa0000', 'red'], [15, 30]  # green+limegreen is also decent. Colors are hard!
@@ -416,12 +416,12 @@ def readcount_scatterplots(screen_data, screen_data_below_min, IBs_per_gene_filt
         hit_IBs_sorted = sorted(set.union(*[IBs for gene,IBs in IBs_per_gene_filtered.items() if gene in hit_genes]))
         readcountsS = [screen_data[IB][1] for IB in hit_IBs_sorted]
         readcountsC = [screen_data[IB][3] for IB in hit_IBs_sorted]
-        _ = mplt.scatter(readcountsC, readcountsS, edgecolor='None', color=color, s=size, alpha=1)
-    _ = mplt.title('%s vs %s readcount correlation with putative hit genes, '%(sample_name, control_name)
-                   +'\n(red = all alleles highlighted for genes under FDR cutoffs %s)'%(', '.join(str(x) for x in FDR_cutoffs))
-                   +'\n(grey/black = all alleles of genes with 2+ alleles only)')
-    _ = plotting_utilities.savefig(outfolder + '/readcount-scatterplot_%s-%s_hits.png'%(sample_name, control_name))
-    _ = mplt.close()
+        mplt.scatter(readcountsC, readcountsS, edgecolor='None', color=color, s=size, alpha=1)
+    mplt.title('%s vs %s readcount correlation with putative hit genes, '%(sample_name, control_name)
+               +'\n(red = all alleles highlighted for genes under FDR cutoffs %s)'%(', '.join(str(x) for x in FDR_cutoffs))
+               +'\n(grey/black = all alleles of genes with 2+ alleles only)')
+    plotting_utilities.savefig(outfolder + '/readcount-scatterplot_%s-%s_hits.png'%(sample_name, control_name))
+    mplt.close()
     # TODO plot a few alpha/size combinations maybe...
     # MAYBE-TODO  maybe also color-coding other high-phenotype alleles to show if they're in one-allele genes 
     #   or in genes with one hit allele and multiple non-hit alleles or what
@@ -491,13 +491,45 @@ def write_outfile(gene_stats_data, phenotype_thresholds, outfile, annotation, an
         # make FDR a bit more readable
         if numpy.isnan(FDR):    FDR = 'NA'
         DATA.append([gene] + bin_counts + [pval, FDR] + annotation[gene])
-    # sort by FDR, then pval, then
-    DATA.sort(key = lambda x: (x[header.index('FDR')], x[header.index('raw_p-value')], -x[1], x[0]))
+    # sort by pval not FDR, so that the good-pval-no-FDR ones show up before pval=FDR=1 ones!  Otherwise the sort is the same anyway.
+    DATA.sort(key = lambda x: (x[header.index('raw_p-value')], -x[1], x[0]))
     with open(outfile, 'w') as OUTFILE:
         OUTFILE.write('\t'.join(header) + '\n')
         for line in DATA:
             OUTFILE.write('\t'.join(str(x) for x in line) + '\n')
     return DATA, header
+
+
+def compare_two_samples(sample1, control1, gene_stats_data1, sample2, control2, gene_stats_data2, outfile=None, minval=-1):
+    """ Plot a scatterplot of gene FDRs between samples.
+
+    Both sample/control should be names (strings). 
+    Both gene_stats_data should be gene:(...,FDR) dicts (... is irrelevant), or pickle file names containing same.
+    """
+    if type(gene_stats_data1)==str:  gene_stats_data1 = general_utilities.unpickle(gene_stats_data1)
+    if type(gene_stats_data2)==str:  gene_stats_data2 = general_utilities.unpickle(gene_stats_data2)
+    all_genes_sorted = sorted(set(gene_stats_data1.keys()) | set(gene_stats_data2.keys()))
+    FDRs1 = [-gene_stats_data1.get(gene,[2])[-1] for gene in all_genes_sorted]
+    FDRs2 = [-gene_stats_data2.get(gene,[2])[-1] for gene in all_genes_sorted]
+    FDRs1 = [-2 if numpy.isnan(x) else x for x in FDRs1]
+    FDRs2 = [-2 if numpy.isnan(x) else x for x in FDRs2]
+    mplt.figure(figsize=(8,8))
+    mplt.scatter(FDRs1, FDRs2, edgecolor='None', color='k', s=50, alpha=0.3)
+    mplt.xscale('symlog', linthreshx=0.001)
+    mplt.yscale('symlog', linthreshy=0.001)
+    mplt.xlim(minval-0.5, 0.0003)
+    mplt.ylim(minval-0.5, 0.0003)
+    mplt.xticks([0, -0.001, -0.01, -0.1, -1], '0 0.001 0.01 0.1 1'.split())
+    mplt.yticks([0, -0.001, -0.01, -0.1, -1], '0 0.001 0.01 0.1 1'.split())
+    mplt.title("False discovery rate (FDR) for %s vs %s (each dot is a gene)"%(sample1, sample2))
+    mplt.xlabel('%s FDR (log scale)'%sample1)
+    mplt.ylabel('%s FDR (log scale)'%sample2)
+    for cutoff in (0.5, 0.05):
+        mplt.plot(mplt.xlim(), (-cutoff, -cutoff), color='dodgerblue', linestyle='dashed')
+        mplt.plot((-cutoff, -cutoff), mplt.ylim(), color='dodgerblue', linestyle='dashed')
+    if outfile:
+        plotting_utilities.savefig(outfile)
+        mplt.close()
 
 
 def main(args, options):
@@ -552,35 +584,52 @@ def main(args, options):
                              options.one_sided_thresholds, options.min_reads_2, options.full_library, options.workspace_size)
         gene_stats_data_all.append((sample, control, gene_stats_data))
         # MAYBE-TODO change write_outfile to include multiple samples together?
-        _ = write_outfile(gene_stats_data, phenotype_thresholds, outfolder+'/results_%s_%s.txt'%(sample, control), 
-                          annotation, ann_header)
+        write_outfile(gene_stats_data, phenotype_thresholds, outfolder+'/results_%s_%s.txt'%(sample, control), 
+                      annotation, ann_header)
     if len(samples) == 1:   general_utilities.pickle(gene_stats_data, outfolder+'/all_data.pickle')
     else:                   general_utilities.pickle(gene_stats_data_all, outfolder+'/all_data.pickle')
     # MAYBE-TODO maybe pickle the outfile/header too?  Together or separately from gene_stats_data
     # plot FDR comparison scatterplot for replicates (axes reversed so "good" cases are on top right
-    if len(samples) > 1:
-        all_genes_sorted = sorted(set(gene_stats_data_all[0][-1].keys()) | set(gene_stats_data_all[1][-1].keys()))
-        FDRs1 = [-gene_stats_data_all[0][-1].get(gene,[2])[-1] for gene in all_genes_sorted]
-        FDRs2 = [-gene_stats_data_all[1][-1].get(gene,[2])[-1] for gene in all_genes_sorted]
-        FDRs1 = [-2 if numpy.isnan(x) else x for x in FDRs1]
-        FDRs2 = [-2 if numpy.isnan(x) else x for x in FDRs2]
-        _ = mplt.figure(figsize=(8,8))
-        _ = mplt.scatter(FDRs1, FDRs2, edgecolor='None', color='k', s=50, alpha=0.3)
-        _ = mplt.xscale('symlog', linthreshx=0.001)
-        _ = mplt.yscale('symlog', linthreshy=0.001)
-        _ = mplt.xlim(-1.5, 0.0003)
-        _ = mplt.ylim(-1.5, 0.0003)
-        _ = mplt.xticks([0, -0.001, -0.01, -0.1, -1], '0 0.001 0.01 0.1 1'.split())
-        _ = mplt.yticks([0, -0.001, -0.01, -0.1, -1], '0 0.001 0.01 0.1 1'.split())
-        _ = mplt.title("False discovery rate (FDR) for %s vs %s"%(gene_stats_data_all[0][0], gene_stats_data_all[1][0])
-                       +" (each dot is a gene)")
-        _ = mplt.xlabel('%s FDR (log scale)'%gene_stats_data_all[0][0])
-        _ = mplt.ylabel('%s FDR (log scale)'%gene_stats_data_all[1][0])
-        for cutoff in (0.5, 0.05):
-            mplt.plot(mplt.xlim(), (-cutoff, -cutoff), color='dodgerblue', linestyle='dashed')
-            mplt.plot((-cutoff, -cutoff), mplt.ylim(), color='dodgerblue', linestyle='dashed')
-        _ = plotting_utilities.savefig(outfolder + '/gene_FDR_scatterplot.png')
-        _ = mplt.close()
+    if len(samples) == 2:
+        compare_two_samples(*gene_stats_data_all[0]+gene_stats_data_all[1]+(outfolder + '/gene_FDR_scatterplot.png',))
+
+
+def compare_multiples(gene_stats_datasets, names, overall_name='', outfile=None, linthresh=0.001, wraparound=True):
+    """ Given a list of any number of gene results, plot the FDRs together: each gene is a line, each sample is a column)
+
+    gene_stats_datasets should be either a list of gene:(...,FDR) dicts (... is irrelevant), or of pickle file names containing same.
+    names should be a list of strings.
+    """ 
+    if len(set(type(x) for x in gene_stats_datasets)) != 1:
+        raise Exception("Passed multiple types in the gene_stats_datasets list! %s"%(set(type(x) for x in gene_stats_datasets)))
+    elif type(gene_stats_datasets[0])==str:
+        gene_stats_datasets = [general_utilities.unpickle(x) for x in gene_stats_datasets]
+    gene_all_FDRs = {}
+    for gene in set.union(*[set(gene_stats_data.keys()) for gene_stats_data in gene_stats_datasets]):
+        FDRs = [-gene_stats_data.get(gene,[2])[-1] for gene_stats_data in gene_stats_datasets]
+        FDRs = [-2 if numpy.isnan(x) else x for x in FDRs]
+        gene_all_FDRs[gene] = FDRs
+    mplt.figure()
+    for gene, FDRs in gene_all_FDRs.items():
+        # plot -1 to N+1 and wrap the FDRs around, to see the extra connections and make all points have equal visual weight
+        if not wraparound:
+            mplt.plot(range(len(names)), FDRs, color='black', alpha=0.3)
+        else:
+            mplt.plot(range(-1, len(names)+1), [FDRs[-1]] + FDRs + [FDRs[0]], color='black', alpha=0.3)
+    # LATER-TODO would be REALLY nice to color-code and label the top 10 genes...
+    mplt.yscale('symlog', linthreshy=linthresh)     # the symlog step is very slow!
+    mplt.ylim(-2, linthresh*0.3)
+    mplt.xlim(-0.5, len(names)-0.5)
+    mplt.yticks([0, -0.001, -0.01, -0.1, -1], '~0 0.001 0.01 0.1 1'.split())
+    mplt.xticks(range(len(names)), names)
+    mplt.title("FDR comparison for %s %s\n(each line is a gene, showing FDRs in all the samples)"%(overall_name, ', '.join(names)))
+    mplt.ylabel('FDR (log scale; cutoff lines are 0.05 and 0.5)')
+    mplt.xlabel('')
+    for cutoff in (0.5, 0.05):
+        mplt.plot(mplt.xlim(), (-cutoff, -cutoff), color='dodgerblue', linestyle='dashed')
+    if outfile:
+        plotting_utilities.savefig(outfile)
+        mplt.close()
 
 
 ########################################### Additional analysis/display/plotting #################################################
