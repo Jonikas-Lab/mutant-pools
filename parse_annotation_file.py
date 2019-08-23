@@ -7,6 +7,11 @@ import unittest
 import os
 from collections import defaultdict
 
+# our lab's annotation that's not in Phytozome yet but we often want it
+OUR_GENE_NAMES = {'Cre10.g436550': 'EPYC1', 'Cre11.g467712': 'SAGA1', 'Cre09.g394621': 'SAGA2', 
+                  'Cre06.g261750': 'RBMP1', 'Cre09.g416850': 'RBMP2', 'Cre10.g440050': 'CSP41A'}
+# TODO include that in full annotation and update the annotation+loc file!  Right now I only include OUR_GENE_NAMES in best_gene_name_dict.
+
 # Gene annotation file data for v5.5 genome: 
 #   list of (filename, content_headers, ID_column, content_columns, field_splitter, if_join_all_later_fields) tuples:
 DEFAULT_GENE_ANNOTATION_FILES_v5p5 = [
@@ -284,6 +289,30 @@ def get_all_gene_annotation(genome_version=None, gene_annotation_files=None, add
     for gene in all_gene_IDs:
         full_annotation_dict[gene] = sum([d[gene] for d in gene_annotation_dicts], [])
     return full_annotation_dict, full_header
+
+
+def best_gene_name_dict(full_annotation_dict, full_header, include_custom=True, first_only=True):
+    """ Given full annotation, return a gene:best_name dict, where best_name is the gene name or Arabidopsis gene name or gene ID.
+
+    If there is a gene name in annotation, use that; if not, if there is an Arabidopsis best hit symbol, take that; 
+     if not, use the original gene ID.
+    If first_only is True, if there are multiple comma-separated gene names or Arabidopsis best hits, take the first one.
+    """
+    try:
+        name_column = full_header.index('gene_name')
+        Arabidopsis_name_column = full_header.index('best_arabidopsis_TAIR10_hit_symbol')
+    except ValueError:
+        raise Exception("Annotation header doesn't contain gene_name or best_arabidopsis_TAIR10_hit_symbol fields!")
+    gene_names = {gene:(a[name_column] if a[name_column]!='-' 
+                        else (a[Arabidopsis_name_column] if a[Arabidopsis_name_column]!='-' 
+                              else gene)) 
+                  for gene,a in full_annotation_dict.items()}
+    if first_only:
+        gene_names = {g:n.split(',')[0] for g,n in gene_names.items()}
+    if include_custom:
+        print " Caution: using our lab's custom gene names (%s of them)"%(len(OUR_GENE_NAMES))
+        gene_names.update(OUR_GENE_NAMES)
+    return gene_names
 
 
 def get_term_definitions_from_obo(obo_infile):

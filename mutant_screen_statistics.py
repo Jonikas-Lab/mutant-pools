@@ -564,8 +564,7 @@ def main(args, options):
     library_data_by_IB = {x.IB: x for x in library_table}
     ann_file = os.path.expanduser('~/experiments/reference_data/chlamy_annotation/annotation+loc_data+header_v5.5.pickle')
     annotation, ann_header = general_utilities.unpickle(ann_file)
-    gene_names = {gene:(a[0] if a[0]!='-' else (a[12] if a[12]!='-' else gene)) for gene,a in annotation.items()}
-    gene_names = {g:n.split(',')[0] for g,n in gene_names.items()}
+    gene_names = parse_annotation_file.best_gene_name_dict(annotation, ann_header)
     # run basic pipeline, with txt+pickle outfile; if replicates, analyze both and compare gene FDRs.
     phenotype_thresholds = modify_phenotype_thresholds(options.phenotype_thresholds, options.one_sided_thresholds)
     samples =  [x.strip() for x in options.sample_key.split(',')]
