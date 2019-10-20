@@ -1549,6 +1549,75 @@ def readcounts_histogram(dataset_name_list, color_dict=None, Nbins=100, histtype
                     prop=FontProperties(size='medium'))
   
 
+def multi_scatterplots(all_datasets, samples_row, samples_col, title, print_correlations=True, print_pvals=False,
+                       dotsize=1, opacity=0.1, plotsize=4, ticklabels=None, linthresh=None, scalemin=None):
+    """ Make a large plot containing an array of readcount scatterplots between all samples_row and all samples_col.
+
+    all_datasets should be an {sample_name:{IB:readcount}} double dictionary, with the inner a defaultdict with default value 0.
+    samples_row and samples_col should be lists of sample names to be plotted; they can be identical. 
+    """
+    # TODO I should make a function for single plots first, and refactor!  That one's already somewhere else too...
+    # MAYBE-TODO add functionality?
+    #   - special case for if samples_row==samples_col (can skip the diagonal plots and put labels there instead)
+    #   - various options that were present in the old version of this in mutant_make_plots.py (plot_all_correlations):
+    #       color a specific list of mutants, color-code the corr values, color dots by chromosome, grey dots below a min #reads
+    #   - make the low-readcount dots bigger depending on #reads! (optionally).
+    #       Instead of plotting the dots on top of each other, first make a dictionary by dot coordinates, that counts the number 
+    #       of dots with each exact coordinate pair (there's going to be a lot with (1,1) and (0,1) etc, and just singles with 
+    #       higher numbers), and then plot each coordinate pair just once, with size based on the count!  And show a size=# scale.
+    Nrow = len(samples_row)
+    Ncol = len(samples_col)
+    # does the dpi here even do anything??  not sure - as far as the final image it's the savefig dpi that matters.
+    # TODO make all the subplots exactly square!!  the math below is close but not exact
+    fig = mplt.figure(figsize=(plotsize*(Ncol+0.1), plotsize*Nrow), dpi=300)
+    mplt.suptitle(title, fontsize='x-large')  
+    min_nonzero = min(min(x for x in X.values() if x>0) for name,X in all_datasets.items() if name in samples_row+samples_col)
+    scalemax = max(max(X.values()) for name,X in all_datasets.items() if name in samples_row+samples_col)
+    scalemax = 10**(numpy.ceil(numpy.log10(scalemax)))
+    # some defaults depend on whether readcounts are raw or normalized - you can tell by whether the lowest nonzero value is 1.
+    # TODO I should probably make this more sensible by using linscale in addition to linthresh!
+    if linthresh is None:       linthresh  =    1 if min_nonzero==1 else min_nonzero*3
+    if scalemin is None:        scalemin   = -0.5 if min_nonzero==1 else -min_nonzero/3*2
+    if ticklabels is None:      ticklabels = True if min_nonzero==1 else False
+    # note: sample_row is on the Y axis, col on the X axis, so that everything in the same row has the same Y axis and vice versa
+    for row,sample_row in enumerate(samples_row):
+        for col,sample_col in enumerate(samples_col):
+            dataX = all_datasets[sample_col]
+            dataY = all_datasets[sample_row]
+            all_IBs = sorted(set(IB for IB,n in dataX.items() if n) | set(IB for IB,n in dataY.items() if n))
+            readcountsX = [dataX[IB] for IB in all_IBs]
+            readcountsY = [dataY[IB] for IB in all_IBs]
+            mplt.subplot(Nrow, Ncol, Ncol*row+col+1)
+            mplt.plot(readcountsX, readcountsY, linestyle='None', marker='o', color='k', markersize=dotsize, 
+                      markeredgecolor='None', alpha=opacity)
+            mplt.xscale('symlog', linthreshx=linthresh)
+            mplt.yscale('symlog', linthreshy=linthresh)
+            mplt.xlim(scalemin, scalemax)
+            mplt.ylim(scalemin, scalemax)
+            # put axis labels on the top row (as titles) and first column;
+            #  make it so only the bottom row has X axis tick labels and only the first column has Y ones, but everything has ticks, 
+            locs,labels = mplt.xticks()
+            if row==0:  mplt.title(sample_col, fontweight='bold', fontsize='x-large')
+            if col==0:  mplt.ylabel(sample_row, fontweight='bold', fontsize='x-large')
+            if ticklabels:
+                if col!=0:      mplt.yticks(locs,[])
+                if row!=Nrow-1: mplt.xticks(locs,[])
+            else:
+                mplt.yticks(locs,[])
+                mplt.xticks(locs,[])
+            # if desired, print Spearman and Pearson correlation coefficient on each graph
+            # TODO this isn't quite right - if I'm counting IBs absent in one sample, I should be counting ones absent in BOTH 
+            #   samples too, or else I'm biased toward anticorrelation a bit!  I'd need to use the full list of library IBs?
+            if print_correlations:
+                corrS, pvalS = scipy.stats.spearmanr(readcountsX,readcountsY)
+                corrP, pvalP = scipy.stats.pearsonr(readcountsX,readcountsY)
+                if print_pvals:     corr_text = 'corr Spearman %.3f (pval %.2g)\nPearson %.3f (%.2g)'%(corrS, pvalS, corrP, pvalP)
+                else:               corr_text = 'corr Spearman %.3f\nPearson %.3f'%(corrS, corrP)
+                mplt.text(0, scalemax/2, corr_text, horizontalalignment='left', verticalalignment='top')
+    mplt.subplots_adjust(hspace=0.02)
+    mplt.subplots_adjust(wspace=0.02)
+    return fig
+
 ######### Multi-plot functions
 
 # this is OLD, probably doesn't work - MAYBE-TODO make it work if I actually want to?
@@ -1769,7 +1838,7 @@ def adjacent_readcount_ratio_plot(dataset, distance_cutoffs, distance_linestyles
     mplt.title('Ratios between the readcounts of adjacent mutant pairs,\nby category and distance')
 
 
-################################################# Plotting RISCC data ##################################################
+################################################ Plotting LEAP-seq confirmation data ################################################
 
 # TODO check that those don't have any missing requirements - I moved them from mutant_Carette.py.
 
