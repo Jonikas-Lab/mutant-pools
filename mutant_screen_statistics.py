@@ -40,6 +40,7 @@ import mutant_utilities
 import mutant_IB_RISCC_classes
 import statistics_utilities
 import plotting_utilities
+import parse_annotation_file
 
 def define_option_parser():
     """ Populates and returns an optparse option parser object, with __doc__ as the usage string."""
@@ -54,19 +55,30 @@ def define_option_parser():
                           + "Ignores all other options/arguments. (default %default).")
 
     ### functionality options
-    parser.add_option('-S', '--sample_key', type='string', default='', metavar='"Sample1"', 
-      help="Name of the sample in the infile dictionary (required) - put quotes around it if it has spaces or weird characters."
-          +" Can be two comma-separated values - in that case both will be analyzed separately and then as replicates.")
-    parser.add_option('-C', '--control_key', type='string', default='', metavar='"Control1"', 
-      help="Name of the control in the infile dictionary (required) - put quotes around it if it has spaces or weird characters."
-          +" If two --sample_key values were given, this can be two comma-separated values or a single value.")
+    parser.add_option('-S', '--sample', type='string', default='', metavar='"Sample1"', 
+              help="Picklefile of the sample {IB:(raw,norm)} readcount dictionary, or name of the sample in the -D dictionary"
+                  +" (required) - put quotes around it if it has spaces or weird characters."
+                  +" Can be two comma-separated values - in that case both will be analyzed separately and then as replicates.")
+    parser.add_option('-C', '--control', type='string', default='', metavar='"Control1"', 
+              help="Picklefile of the control {IB:(raw,norm)} readcount dictionary, or name of the control in -D dictionary"
+                  +" (required) - put quotes around it if it has spaces or weird characters."
+                  +" If two --sample values were given, this can be two comma-separated values or a single value.")
+    parser.add_option('-D', '--data_dictionary', type='string', default='', metavar='Data', 
+              help="Python pickle file containing a {sample_name:{IB:(raw_readcount, normalized_readcount)}} dictionary,"
+                  +"containing all --sample and --control names and optionally any other data."
+                  +" Required only if --sample/--control values are names rather than separate picklefiles.")
     parser.add_option('-p', '--phenotype_thresholds', type='string', default='0.0625,0.125,0.25,0.5', metavar='X,Y', 
               help="List of sample/control ratio thresholds for bins, comma-separated, no spaces, lowest first (default %default)."
-                  +"The real thresholds used will be made two-sided, i.e. '10' -> '0.1,10' etc, unless -P is used.")
-    parser.add_option('-P', '--one_sided_thresholds', action='store_true', default=False,
+                  +"The real thresholds used will be made two-sided, i.e. '10' -> '0.1,10' etc, unless -O is used."
+                  +"If -P, this should be a list of offsets for Poisson curves instead (integers 1-6, positive or negative).")
+    parser.add_option('-P', '--Poisson_thresholds', action='store_true', default=False,
+              help="Instead of linear thresholds, use Poisson curves with offsets (default: %default)")
+    parser.add_option('-O', '--one_sided_thresholds', action='store_true', default=False,
               help="Only look for slower-growing and not faster-growing mutants (default: two-sided)")
     parser.add_option('-m', '--min_reads', type='int', default='50', metavar='M', 
-              help="Minimum raw control reads to include IB in analysis (default %default).")
+              help="Minimum raw control reads (or control+sample reads if -M) to include IB in analysis (default %default).")
+    parser.add_option('-M', '--symmetrical_min_reads', action='store_true', default=False,
+              help="Minimum readcount uses control+sample reads rather than only control reads (default %default).")
     parser.add_option('-x', '--min_reads_2', type='int', default='0', metavar='M', 
               help="Minimum raw SAMPLE reads to include IB in analysis - rarely needed! (default %default).")
     parser.add_option('-c', '--max_conf', type='int', default=4, metavar='C',
@@ -85,52 +97,112 @@ def define_option_parser():
 
 ########################################### Basic pipeline #################################################
 
-def modify_phenotype_thresholds(phenotype_thresholds, one_sided_thresholds=False):
+def modify_phenotype_thresholds(phenotype_thresholds, Poisson=False, one_sided_thresholds=False):
     """ Make sure thresholds are in the right order; make them two-sided if needed.
     """
     phenotype_thresholds = [float(x) for x in phenotype_thresholds.split(',')]
     phenotype_thresholds = [int(x) if round(x)==x else x for x in phenotype_thresholds]
-    if min(phenotype_thresholds) <= 1 <= max(phenotype_thresholds):
-        raise Exception("All thresholds should be >1 or all <1! (current values are %s). "%phenotype_thresholds
+    middle = 0 if Poisson else 1
+    if min(phenotype_thresholds) <= middle <= max(phenotype_thresholds):
+        raise Exception("All thresholds should be >%s or all <%s! (current values are %s). "%(middle, middle, phenotype_thresholds)
                         +"Symmetrical ones will be added automatically to make the test two-sided if one_sided_thresholds is False.")
     # in one-sided cases, always make it so the wt bin is at the end - makes display better and everything else easier.
+    low = -10 if Poisson else 0
+    high = 10 if Poisson else float('inf')
+    opposite = (lambda x: -x) if Poisson else (lambda x: 1/x)
     if one_sided_thresholds:
-        if numpy.mean(phenotype_thresholds) < 1:
-            phenotype_thresholds = [0] + sorted(phenotype_thresholds) + [float('inf')]
+        if numpy.mean(phenotype_thresholds) < middle:
+            phenotype_thresholds = [low] + sorted(phenotype_thresholds) + [high]
         else:
-            phenotype_thresholds = [float('inf')] + sorted(phenotype_thresholds, reverse=True) + [0]
+            phenotype_thresholds = [high] + sorted(phenotype_thresholds, reverse=True) + [low]
+    # in two-sided cases, make it so slow-growing is at the start, for consistency/readability
+    #   (in normal thresholds slow-growing is fractions; in Poisson it's positive values, so reverse the sort)
     else:
-        phenotype_thresholds = sorted([0] + [1/x for x in phenotype_thresholds] + phenotype_thresholds + [float('inf')])
-    print "phenotype thresholds: ", phenotype_thresholds
+        phenotype_thresholds = sorted([low] + [opposite(x) for x in phenotype_thresholds] + phenotype_thresholds + [high], 
+                                     reverse=Poisson)
+    print "phenotype thresholds%s: "%(' (Poisson)' if Poisson else ''), phenotype_thresholds
     return phenotype_thresholds
 
 
-def filter_IBs_by_min_readcount(screen_data, min_readcount, min_readcount_2=0):
+def filter_IBs_by_min_readcount(screen_data, min_readcount, symmetrical_min=False, min_readcount_2=0):
     """ Modifies screen_data to remove any IBs below the min readcounts.
 
     Returns separate dictionary of data removed from screen_data.
     """
+    if symmetrical_min and min_readcount_2:
+        raise Exception("Can't have a minimum readcount on control+sample AND on sample!")
     removed_screen_data = {}
     for (IB,data) in screen_data.items():
-        if data[2] < min_readcount or data[0] < min_readcount_2:
-            del screen_data[IB]
-            removed_screen_data[IB] = data
+        if not symmetrical_min:
+            if data[2] < min_readcount or data[0] < min_readcount_2:
+                del screen_data[IB]
+                removed_screen_data[IB] = data
+        else:
+            if data[2]+data[0] < min_readcount:
+                del screen_data[IB]
+                removed_screen_data[IB] = data
     return removed_screen_data
 
 
-def bin_IBs_by_phenotype(screen_data, phenotype_thresholds):
-    """ Bins IBs by sample/control ratio based on phenotype_thresholds; returns list of IB sets for each bin.
+def poisson_function(offset):
+    """ Given an offset (semi-arbitrary number >0; 7=infinity), return Poisson curve function.
     """
-    binned_IBs = [set(IB for IB,data in screen_data.items() if min(a,b) <= data[1]/data[3] < max(a,b)) 
+    # this offset thing in two places is a bit weird, I just hand-picked it to look good with (1,2,3,4). 
+    #   the -.2 is just so the line doesn't overlap the actual data points, to make it clearer which side they count on.
+    if offset > 6: 
+        return lambda x: float('inf')
+    return lambda x: scipy.stats.poisson(x/1.8**offset).interval(1-1/10**(4+2*offset))[0]-.2
+
+
+def check_threshold_Poisson(x, y, threshold):
+    """ Check whether a given (x,y) position is above a custom Poisson curve with the given offset.
+    """
+    # deal with the infinity special cases separately - nothing should ever be below the -inf curve or above the +inf one:
+    if threshold > 6:       return True
+    elif threshold < -6:    return False
+    # otherwise do a normal check for a positive number, and a reverse check (swapping x and y) for negative numbers
+    elif threshold > 0:
+        poisson_func = poisson_function(threshold)
+        return (y > poisson_func(x))
+    else:
+        poisson_func = poisson_function(-threshold)
+        return (x < poisson_func(y))
+
+
+def bin_IBs_by_phenotype(screen_data, phenotype_thresholds, Poisson=False):
+    """ Bins IBs by sample/control ratio or Poisson curve based on phenotype_thresholds; returns list of IB sets for each bin.
+    """
+    # screen_data is an IB:(raw_sample, norm_sample, raw_ctrl, norm_ctrl) readcount dict.
+    # if normal thresholds, use the normalized data
+    if not Poisson:
+        # need to use a high value to deal with the x/0 case; can't use inf because then it doesn't get binned because inf !< inf.
+        highval = 2*max(phenotype_thresholds[1:-1])
+        if_between = lambda low, high, data: (min(low,high) <= (data[1]/data[3] if data[3] else highval) < max(low,high))
+    # if Poisson, have to use the raw data; control is x axis and sample is y axis. 
+    # this is SLOW, ~30min for a normal dataset, but I'm not sure I can speed up Poisson math...
+    else:
+        if_between = lambda low, high, data: (check_threshold_Poisson(data[2],data[0],low)
+                                              and not check_threshold_Poisson(data[2],data[0],high))
+    binned_IBs = [set(IB for IB,data in screen_data.items() if if_between(a,b,data))
                   for (a,b) in zip(phenotype_thresholds, phenotype_thresholds[1:])]
     print "numbers of IBs in each phenotype bin: ", [len(x) for x in binned_IBs]
+    if len(set.union(*binned_IBs)) != sum(len(x) for x in binned_IBs):
+        print "PROBLEM: bins are double-counting IBs?? %s IBs, bin total %s"%(len(set.union(*binned_IBs)), 
+                                                                              sum(len(x) for x in binned_IBs))
+    elif len(screen_data) != sum(len(x) for x in binned_IBs):
+        missing_IBs = set(screen_data.keys()) - set.union(*binned_IBs)
+        print "PROBLEM: %s IBs couldn't be binned! %s"%(len(missing_IBs), [(IB, screen_data[IB]) for IB in missing_IBs])
     return binned_IBs
+    # there is a minor asymmetry here because the bins are defined as low <= x < high, so values exactly on the edge 
+    #   will belong to one bin or the other depending on the order of the thresholds.  
+    # If I really wanted to be extra-careful I could make it symmetrical by making everything go toward the bin that's closer to 
+    #   1 (the middle) instead of closer to 0, but that would make the code more complicated and seems unnecessary.
 
 
 def raw_screen_data_per_gene(library_data_by_IB, screen_data, features, max_conf):
     """ Make a list of screen per-IB data lines for each gene, filtering by feature and confidence.
 
-    Return a gene:IB_data dict, where IB_data is a list of (IB, readcount_list) tuples.
+    Return a gene:IB_data dict, where IB_data is a list of (IB, (raw_sample, norm_sample, raw_ctrl, norm_ctrl)) tuples
     """
     screen_lines_per_gene = collections.defaultdict(list)
     for IB in screen_data.keys():
@@ -146,9 +218,11 @@ def raw_screen_data_per_gene(library_data_by_IB, screen_data, features, max_conf
     return screen_lines_per_gene
 
 
-def filter_IBs_per_gene(screen_lines_per_gene, library_data_by_IB, if_full_library=False):
-    """ Filter lists of screen data for each gene to remove multiple ones in the same mutant (keep the highest-control-readcount one)
-
+def filter_IBs_per_gene(screen_lines_per_gene, symmetric, library_data_by_IB, if_full_library=False):
+    """ Filter lists of screen data for each gene to remove multiple ones in the same mutant
+    
+    If symmetric is True, for each mutant keep the IB with the highest control+sample readcount; otherwise just highest control.
+    screen_lines_per_gene is the output of raw_screen_data_per_gene.
     Returns gene:IB_set dictionary.
     """
     if if_full_library:     get_mutant_ID = lambda x: (x.plate, x.well)
@@ -160,7 +234,9 @@ def filter_IBs_per_gene(screen_lines_per_gene, library_data_by_IB, if_full_libra
             screen_lines_by_mutant[get_mutant_ID(library_data_by_IB[IB])].append((IB,data))
         filtered_IBs = set()
         for line_set in screen_lines_by_mutant.values():
-            line_set.sort(key = lambda x: x[1][2])
+            # sort by IB after the readcounts just to make sure everything is deterministic even if two IBs have the same readcount.
+            if symmetric:   line_set.sort(key = lambda x: (x[1][0]+x[1][2], x[0]))
+            else:           line_set.sort(key = lambda x: (x[1][2], x[0]))
             filtered_IBs.add(line_set[-1][0])
         IBs_per_gene_filtered[gene] = filtered_IBs
     return IBs_per_gene_filtered
@@ -263,9 +339,9 @@ def print_ratio_counts(gene_bin_counts, wt_bins = .95, one_sided_thresholds=Fals
                                                    ('0:1',    0, 0,     1, 1),   
                                                    ('0:2+',   0, 0,     2, inf)]: 
         N = sum(1 for ph,wt in bin_counts_simplified if min_wt<=wt<=max_wt and min_ph<=ph<=max_ph)
-        print_data.append("%s: %s"%(name, N))
+        print_data.append("%s %s"%(name, N))
         total_between_all_cases += N
-    print "Genes by phenotype:wt allele counts: " + ', '.join(print_data)
+    print "Genes by phen:wt allele counts: " + ', '.join(print_data)
     # make sure that the categories are mutually exclusive and cover everything, i.e. category total = gene total
     if not total_between_all_cases == len(gene_bin_counts):
         raise Exception("Something is wrong with bin counts! %s != %s (%s)"
@@ -297,11 +373,11 @@ def check_proper_enrichments(gene_stats_data, one_sided_thresholds=False, ratio_
         for gene, bin_counts in bin_counts_simplified.items():
             FDR = gene_stats_data[gene][2]
             if FDR > FDR_cutoff or numpy.isnan(FDR): continue
-            ratios = [b/t for b,t in zip(bin_counts,bin_totals)]
+            ratios = [ratio_calc(b,t) for b,t in zip(bin_counts,bin_totals)]
             ratio = ratio_calc(ratios[0], ratios[1])
             if ratio < ratio_difference:
                 print ("Warning: gene %s (FDR %s, full bin counts %s, simplified %s:%s, "
-                       +"phenotype:wt ratio normalized to totals %.2g:%.2g) doesn't look like a proper hit!")%(gene, FDR,
+                       +"phen:wt ratio normalized to totals %.2g:%.2g) doesn't look like a proper hit!")%(gene, FDR,
                                                               ':'.join(str(x) for x in gene_stats_data[gene][0]), 
                                                               bin_counts[0], bin_counts[1], ratios[0], ratios[1])
     else:
@@ -314,17 +390,17 @@ def check_proper_enrichments(gene_stats_data, one_sided_thresholds=False, ratio_
         for gene, bin_counts in bin_counts_simplified.items():
             FDR = gene_stats_data[gene][2]
             if FDR > FDR_cutoff or numpy.isnan(FDR): continue
-            ratios = [b/t for b,t in zip(bin_counts,bin_totals)]
+            ratios = [ratio_calc(b,t) for b,t in zip(bin_counts,bin_totals)]
             ratio1 = ratio_calc(ratios[0], ratios[1])
             ratio2 = ratio_calc(ratios[2], ratios[1])
             if max(ratio1, ratio2) < ratio_difference:
                 print ("WARNING: gene %s (FDR %s, full bin counts %s, simplified %s, "
-                       +"phenotype:wt ratios normalized to total %.2g/%.2g) doesn't look like a proper hit!")%(gene, FDR,
+                       +"phen:wt ratios normalized to total %.2g/%.2g) doesn't look like a proper hit!")%(gene, FDR,
                                                               ':'.join(str(x) for x in gene_stats_data[gene][0]), 
                                                               ':'.join(str(x) for x in bin_counts), ratio1, ratio2)
             if min(ratio1, ratio2) > ratio_difference and min(bin_counts[0], bin_counts[2])>=min_alleles:
                 print ("WARNING: gene %s (FDR %s, full bin counts %s, simplified %s, "
-                       +"phenotype:wt ratios normalized to total %.2g/%.2g) "
+                       +"phen:wt ratios normalized to total %.2g/%.2g) "
                        +"looks like a hit with both better and worse growth!")%(gene, FDR,
                                                           ':'.join(str(x) for x in gene_stats_data[gene][0]), 
                                                           ':'.join(str(x) for x in bin_counts), ratio1, ratio2)
@@ -342,7 +418,7 @@ def check_proper_enrichments(gene_stats_data, one_sided_thresholds=False, ratio_
     # TODO unit-test!
 
 
-def scatterplot(readcountsS, readcountsC, sample_name, control_name, info='', same_scale=True):
+def scatterplot(readcountsS, readcountsC, sample_name, control_name, info='', same_scale=True, correlations=True):
     # I want min readcounts ABOVE zero so I can use them to set the symlog threshold
     min_readcount_x = min(x for x in readcountsC if x)
     min_readcount_y = min(x for x in readcountsS if x)
@@ -350,63 +426,115 @@ def scatterplot(readcountsS, readcountsC, sample_name, control_name, info='', sa
         min_readcount_x = min_readcount_y = min(min_readcount_x, min_readcount_y)
     mplt.figure(figsize=(8,8))
     mplt.scatter(readcountsC, readcountsS, edgecolor='None', color='k', s=20, alpha=0.2)
-    mplt.xscale('symlog', linthreshx=min_readcount_x)
-    mplt.yscale('symlog', linthreshy=min_readcount_y)
+    mplt.xscale('symlog', linthreshx=min_readcount_x, linscalex=0.5)
+    mplt.yscale('symlog', linthreshy=min_readcount_y, linscaley=0.5)
     scalemax_x = mplt.xlim()[1]
     scalemax_y = mplt.ylim()[1]
     if same_scale:
         scalemax_x = scalemax_y = max(scalemax_x, scalemax_y)
-    mplt.xlim(-min_readcount_x/5, scalemax_x)
-    mplt.ylim(-min_readcount_y/5, scalemax_y)
+    mplt.xlim(-min_readcount_x/2, scalemax_x)
+    mplt.ylim(-min_readcount_y/2, scalemax_y)
     # if one side IS all above zero (because of a readcount cutoff), use different x scale
     if not same_scale and min(readcountsC)>0:
         mplt.xlim(min_readcount_x/1.5, scalemax_x)
     mplt.xlabel('control %s readcount (log scale)'%control_name)
     mplt.ylabel('sample %s readcount (log scale)'%sample_name)
-    spearman_corr, spearman_pval = scipy.stats.spearmanr(readcountsS, readcountsC)
-    pearson_corr, pearson_pval = scipy.stats.pearsonr(readcountsS, readcountsC)
-    mplt.title('%s vs %s readcount correlation, %s'%(sample_name, control_name, info)
-               +'\n(each dot is an IB); correlation Spearman %.2f, Pearson %.2f'%(spearman_corr, pearson_corr))
+    if correlations:
+        spearman_corr, spearman_pval = scipy.stats.spearmanr(readcountsS, readcountsC)
+        pearson_corr, pearson_pval = scipy.stats.pearsonr(readcountsS, readcountsC)
+        corr_info = '; correlation Spearman %.2f, Pearson %.2f'%(spearman_corr, pearson_corr)
+    else:
+        corr_info = ''
+    mplt.title('%s vs %s readcount correlation, %s\n(each dot is an IB)%s'%(sample_name, control_name, info, corr_info))
+    return min_readcount_x, min_readcount_y
 
 
-def _plot_thresholds(phenotype_thresholds, min_x, color='dodgerblue', linestyle='dashed'):
-    """ Plot phenotype thresholds on existing plot.
+def _plot_thresholds(phenotype_thresholds, linthreshx, linthreshy, color='dodgerblue', linestyle='dashed'):
+    """ Plot phenotype thresholds on existing symlog plot.
     """
     xmax = mplt.xlim()[1]
     for ratio in phenotype_thresholds:
         if ratio==0 or numpy.isinf(ratio):  continue
-        mplt.plot([min_x/2, xmax], [ratio*min_x/2, ratio*xmax], color=color, linestyle=linestyle)
+        # if I plot a line on a symlog plot it'll be a straight line rather than switching between linear and log-scales correctly!
+        # so to make these lines right I need to avoid putting anything in the linear region on either axis, 
+        #   i.e. find the lowest x such that x >= linthreshx and ratio*x >= linthreshy.
+        # IF I want the lines to just stop at the edge of the linear region and not do anything weird:
+        #mplt.plot([edge_point, xmax], [edge_point*ratio, xmax*ratio], color=color, linestyle=linestyle)
+        # BUT I also want to extend at least the outer lines down so that it's obvious what happens to x=0 and y=0 points
+        #   even though they're out of the log-scale region...  To get the best approximation of that, 
+        #   use 0, and the point where both the scales are linear, and the point where both are log.
+        #   (this is still not perfect because in the region where one scale is linear and one is log the line should be a curve...)
+        edge_points = [0, min(linthreshx, linthreshy/ratio), max(linthreshx, linthreshy/ratio), xmax]
+        mplt.plot(edge_points, [ratio*x for x in edge_points], color=color, linestyle=linestyle)
+        # But this is ugly... I could ALSO just fake it and make straight lines going all the way to -xmax, which looks better, 
+        #   when there are no points in the affected regions anyway...  BUT sometimes there are points at y=0 that get crossed 
+        #       by the lines even though they shouldn't be, so this isn't a good general solution!
+        #   AND in the non-symmetrical case the lines are still not quite straight below edge_point! 
+        #       Probably happens when the vertical and horizontal linear ranges are different sizes?  Not sure how to fix that... 
+        #edge_point = max(linthreshx, linthreshy/ratio)
+        #mplt.plot([-xmax, edge_point, xmax], [-xmax/ratio, edge_point*ratio, xmax*ratio], color=color, linestyle=linestyle)
+
+
+def _plot_Poisson_thresholds(phenotype_thresholds, linthreshx, linthreshy, color='dodgerblue', linestyle='solid'):
+    """ Plot phenotype thresholds on existing symlog plot.
+    """
+    for raw_offset in phenotype_thresholds:
+        # for negative offsets just plot the absolute offset but on the other side
+        offset = abs(raw_offset)
+        # I don't want to plot every number up to 10k, so do 1,2,3,..., 100,200,300 etc, modified for the way I use offset.
+        subrange = range(int(1*2**offset), int(100*2**offset), 1) + range(int(100*2**offset), int(mplt.xlim()[1]), 100)
+        poisson_func = poisson_function(offset)
+        poisson = [poisson_func(x) for x in subrange]
+        if raw_offset>0:    mplt.plot(poisson, subrange, color=color, linestyle=linestyle)
+        elif raw_offset<0:  mplt.plot(subrange, poisson, color=color, linestyle=linestyle)
+        else:               print "PROBLEM: Weird offset value %s!"%raw_offset
 
 
 def readcount_scatterplots(screen_data, screen_data_below_min, IBs_per_gene_filtered, gene_stats_data, outfolder, 
-                           sample_name, control_name, phenotype_thresholds, min_reads, min_reads_2=0, FDR_cutoffs=[0.5,0.05]):
-    """ Make a scatterplot of the sample-vs-control for all mutants, with all the cutoff lines drawn. 
+                           sample_name, control_name, phenotype_thresholds, min_reads, 
+                           Poisson=False, symmetrical_min=False, min_reads_2=0, FDR_cutoffs=[0.5,0.05]):
+    """ Make scatterplots of the sample-vs-control for all mutants (raw, norm, and hits), with cutoff lines drawn. 
     
+    Three plots:
+    1) raw readcounts with min readcount lines drawn, not filtered by gene/feature/confidence
+    2) normalized readcounts filtered by min_readcount and gene/feature/etc, with phenotype threshold lines drawn
+    3) same but only for multi-allele genes, highlighting all alleles of hit genes 
     Only plot filtered IBs (by library presence, feature, confidence, multiple-IBs-per-mutant). 
-    Plot normalized counts; min_reads thresholds are based on raw counts, which aren't always the same (especially for 5' vs 3'), 
-     so plot those as two dotted lines.
     """
-    # Plot 1: raw readcounts, all IBs regardless of filtering; plot min_reads and min_reads_2 cutoff
+    ### PLOT 1
     all_IBs_sorted = sorted(set(screen_data.keys() + screen_data_below_min.keys()))
-    readcountsS = [screen_data.get(IB, screen_data_below_min.get(IB, float('NaN')))[0] for IB in all_IBs_sorted]
-    readcountsC = [screen_data.get(IB, screen_data_below_min.get(IB, float('NaN')))[2] for IB in all_IBs_sorted]
-    scatterplot(readcountsS, readcountsC, sample_name, control_name, 'raw')
-    mplt.plot((min_reads, min_reads), mplt.ylim(), color='dodgerblue', linestyle='dashed')
-    if min_reads_2:
-        mplt.plot(mplt.xlim(), (min_reads_2, min_reads_2), color='dodgerblue', linestyle='dashed')
-    plotting_utilities.savefig(outfolder + '/readcount-scatterplot_%s-%s_raw.png'%(sample_name, control_name))
-    mplt.close()
+    NaN = float('NaN')
+    readcountsS = [screen_data.get(IB, screen_data_below_min.get(IB, NaN))[0] for IB in all_IBs_sorted]
+    readcountsC = [screen_data.get(IB, screen_data_below_min.get(IB, NaN))[2] for IB in all_IBs_sorted]
     # MAYBE-TODO instead of showing entirely unfiltered IBs, maybe remove min_reads filtering but keep the rest?
-    # Plot 2: normalized readcounts, filtered only (includes min_readcount filtering); plot phenotype_thresholds cutoffs
+    #   Honestly I should probably just have that be a separate function that happens before filtering in main...
+    scatterplot(readcountsS, readcountsC, sample_name, control_name, 'raw')
+    # if min_reads is a straight cutoff on one or both samples, plot lines, easy:
+    if not symmetrical_min:
+        mplt.plot((min_reads, min_reads), mplt.ylim(), color='dodgerblue', linestyle='dashed')
+        if min_reads_2:
+            mplt.plot(mplt.xlim(), (min_reads_2, min_reads_2), color='dodgerblue', linestyle='dashed')
+    # if it's a sum of both, that's tricky to plot on a symlog plot, so just plot all points that add up to the min!
+    #   and I have to use lists instead of just range generators because range generators fail to plot, ugh.
+    else:
+        mplt.plot([mplt.ylim()[0]] + list(range(min_reads+1)) + [min_reads], 
+                  [min_reads] + list(reversed(range(min_reads+1))) + [mplt.xlim()[0]], color='dodgerblue', linestyle='dashed')
+    plotting_utilities.savefig(outfolder + '/readcount-scatterplot__%s--%s__raw.png'%(sample_name, control_name))
+    mplt.close()
+    ### PLOT 2
+    # TODO is there ANY sensible way to plot Poisson curves on normalized data??
     all_IBs_sorted = sorted(set.union(*IBs_per_gene_filtered.values()))
-    readcountsS = [screen_data[IB][1] for IB in all_IBs_sorted]
-    readcountsC = [screen_data[IB][3] for IB in all_IBs_sorted]
-    scatterplot(readcountsS, readcountsC, sample_name, control_name, 'normalized', same_scale=False)
-    _plot_thresholds(phenotype_thresholds, min(readcountsC))
+    readcountsS = [screen_data[IB][(0 if Poisson else 1)] for IB in all_IBs_sorted]
+    readcountsC = [screen_data[IB][(2 if Poisson else 3)] for IB in all_IBs_sorted]
+    linthreshx,linthreshy = scatterplot(readcountsS, readcountsC, sample_name, control_name, 
+                                        ('raw' if Poisson else 'normalized'), same_scale=(symmetrical_min or Poisson))
+    if Poisson: _plot_Poisson_thresholds(phenotype_thresholds, linthreshx, linthreshy)
+    else:       _plot_thresholds(phenotype_thresholds, linthreshx, linthreshy)
     # if I want a diagonal (doesn't make sense on raw readcounts, but could help on normalized, if there are few thresholds):
     # _plot_thresholds([1], min(readcountsC), color='grey', linestyle='dotted')
-    plotting_utilities.savefig(outfolder + '/readcount-scatterplot_%s-%s_norm.png'%(sample_name, control_name))
-    # Plot 3: plot normalized readcounts of only multi-allele genes, and highlight all alleles of hit genes (below FDR threshold)
+    plotting_utilities.savefig(outfolder + '/readcount-scatterplot__%s--%s__thresholds.png'%(sample_name, control_name))
+    # TODO TODO TODO implement optional Poisson color-coding by bin!
+    ### PLOT 3
     if len(FDR_cutoffs) == 1:       colors, sizes = ['red'], [20]
     elif len(FDR_cutoffs) == 2:     colors, sizes = ['#aa0000', 'red'], [15, 30]  # green+limegreen is also decent. Colors are hard!
     else:                           raise Exception("I didn't define colors for %s FDR cutoffs for plot!"%len(FDR_cutoffs))
@@ -414,13 +542,13 @@ def readcount_scatterplots(screen_data, screen_data_below_min, IBs_per_gene_filt
         hit_genes = set(gene for gene,data in gene_stats_data.items() if data[-1]<FDR_cutoff)
         if not hit_genes: continue
         hit_IBs_sorted = sorted(set.union(*[IBs for gene,IBs in IBs_per_gene_filtered.items() if gene in hit_genes]))
-        readcountsS = [screen_data[IB][1] for IB in hit_IBs_sorted]
-        readcountsC = [screen_data[IB][3] for IB in hit_IBs_sorted]
+        readcountsS = [screen_data[IB][(0 if Poisson else 1)] for IB in hit_IBs_sorted]
+        readcountsC = [screen_data[IB][(2 if Poisson else 3)] for IB in hit_IBs_sorted]
         mplt.scatter(readcountsC, readcountsS, edgecolor='None', color=color, s=size, alpha=1)
     mplt.title('%s vs %s readcount correlation with putative hit genes, '%(sample_name, control_name)
                +'\n(red = all alleles highlighted for genes under FDR cutoffs %s)'%(', '.join(str(x) for x in FDR_cutoffs))
                +'\n(grey/black = all alleles of genes with 2+ alleles only)')
-    plotting_utilities.savefig(outfolder + '/readcount-scatterplot_%s-%s_hits.png'%(sample_name, control_name))
+    plotting_utilities.savefig(outfolder + '/readcount-scatterplot__%s--%s__hits.png'%(sample_name, control_name))
     mplt.close()
     # TODO plot a few alpha/size combinations maybe...
     # MAYBE-TODO  maybe also color-coding other high-phenotype alleles to show if they're in one-allele genes 
@@ -428,9 +556,10 @@ def readcount_scatterplots(screen_data, screen_data_below_min, IBs_per_gene_filt
     #  (need some phenotype threshold for alleles to count - can use same as in print_ratio_counts)
 
 
-def gene_full_analysis(screen_sample_data, screen_control_data, library_data_by_IB, phenotype_thresholds, min_reads, features, 
-                       max_conf, sample_name='sample', control_name='control', scatterplot_outfolder=None, gene_names={}, 
-                       min_alleles_for_FDR=1, one_sided_thresholds=False, min_reads_2=0, if_full_library=False, workspace_size=2e5):
+def gene_full_analysis(screen_sample_data, screen_control_data, library_data_by_IB, phenotype_thresholds, Poisson, min_reads, 
+                       symmetrical_min=False, features="CDS,intron,5'UTR,5'UTR_intron", max_conf=4, min_alleles_for_FDR=1, 
+                       sample_name='sample', control_name='control', scatterplot_outfolder=None, gene_names={}, 
+                       one_sided_thresholds=False, min_reads_2=0, if_full_library=False, workspace_size=2e5):
     """ Do the basit statistical analysis as described in module docstring.
 
     Inputs:
@@ -438,6 +567,7 @@ def gene_full_analysis(screen_sample_data, screen_control_data, library_data_by_
      - library_data_by_IB - IB:insertion_namedtuple dict derived from the standard library rearray file
      - phenotype_thresholds - list of sample/control normalized ratio thresholds by which mutants will be binned
      - min_reads - the minimum number of reads in the control, below which mutants won't be included in the analysis to avoid noise
+     - symmetrical_min - if True, min_reads applies to reads in control+sample, not just control
      - features - only mutants in one of those gene features will be included in the analysis
         (if a mutant is in multiple features of different splice variants, it's enough that one of the features is on the list)
      - max_conf - only mutants with a mapping confidence this or higher will be included in the analysis
@@ -448,15 +578,18 @@ def gene_full_analysis(screen_sample_data, screen_control_data, library_data_by_
 
     Output: gene:[binned_allele_counts, pval, FDR] dictionary.
     """
-    all_IBs =     set(IB for IB,x in screen_sample_data.items() if x[0]) | set(IB for IB,x in screen_control_data.items() if x[0])
+    all_IBs = set(IB for IB,x in screen_sample_data.items() if x[0]) | set(IB for IB,x in screen_control_data.items() if x[0])
     # screen_data is an IB:(raw_sample, norm_sample, raw_ctrl, norm_ctrl) readcount dict.
     screen_data = {IB: screen_sample_data.get(IB, (0,0)) + screen_control_data.get(IB, (0,0)) for IB in all_IBs}
     print_mutant_read_numbers(screen_data, sample_name, control_name)
-    screen_data_below_min = filter_IBs_by_min_readcount(screen_data, min_reads, min_reads_2)
-    print_mutant_read_numbers(screen_data, sample_name, control_name, 'Filtered (min %s control reads)'%min_reads)
-    binned_IBs_by_phenotype = bin_IBs_by_phenotype(screen_data, phenotype_thresholds)
+    screen_data_below_min = filter_IBs_by_min_readcount(screen_data, min_reads, symmetrical_min, min_reads_2)
+    if symmetrical_min: filter_text = 'Filtered (min %s control+sample reads)'%min_reads
+    elif min_reads_2:   filter_text = 'Filtered (min %s control and %s sample reads)'%(min_reads, min_reads_2)
+    else:               filter_text = 'Filtered (min %s control reads)'%min_reads
+    print_mutant_read_numbers(screen_data, sample_name, control_name, filter_text)
+    binned_IBs_by_phenotype = bin_IBs_by_phenotype(screen_data, phenotype_thresholds, Poisson)
     screen_lines_per_gene = raw_screen_data_per_gene(library_data_by_IB, screen_data, features, max_conf)
-    IBs_per_gene_filtered = filter_IBs_per_gene(screen_lines_per_gene, library_data_by_IB, if_full_library)
+    IBs_per_gene_filtered = filter_IBs_per_gene(screen_lines_per_gene, symmetrical_min, library_data_by_IB, if_full_library)
     if not any(IBs_per_gene_filtered.values()):
         raise Exception("No IBs passed the filters!")
     gene_bin_counts = get_gene_bin_counts(IBs_per_gene_filtered, binned_IBs_by_phenotype)
@@ -469,12 +602,17 @@ def gene_full_analysis(screen_sample_data, screen_control_data, library_data_by_
                                                               for x in (0.001, 0.01, 0.05, 0.1, 0.3, 0.5))
     if scatterplot_outfolder:
         readcount_scatterplots(screen_data, screen_data_below_min, IBs_per_gene_filtered, gene_stats_data, scatterplot_outfolder, 
-                               sample_name, control_name, phenotype_thresholds, min_reads, min_reads_2, FDR_cutoffs=[0.5,0.05])
+                               sample_name, control_name, phenotype_thresholds, min_reads, Poisson, symmetrical_min, min_reads_2, 
+                               FDR_cutoffs=[0.5,0.05])
     # sort the genes by FDR, then pval (FDR is NaN if <N alleles, so categorize those same as FDR=1, I guess)
     sorted_genes = sorted(gene_stats_data.items(), key = lambda (g,d): ((d[2] if not numpy.isnan(d[2]) else 1), d[1]))
+    # print top 10 hits with decent FDRs, and if there are <10 of those, print one but not more with bad FDRs (bad=0.5).
+    top10_hits = sorted_genes[:10]
+    Nbad = sum(1 for g,d in top10_hits if not d[2]<=0.5)    # using not< instead of > to catch NaNs
+    if Nbad>1:  top10_hits = top10_hits[:-Nbad+1]
     print "Top 10 hit genes (FDRs, bin counts): ", ', '.join(["%s (%.2g, %s)"%(gene_names.get(g, g), 
                                                                                d[2], ':'.join(str(x) for x in d[0])) 
-                                                              for (g,d) in sorted_genes[:10] if d[2]<1])
+                                                              for (g,d) in top10_hits])
     return gene_stats_data
     # TODO test!
 
@@ -542,11 +680,10 @@ def main(args, options):
     """
     # LATER-TODO if I want other people to use this, I should add plaintext input/output formats...
     try:
-        infile, outfolder = args
+        [outfolder] = args
     except ValueError:
         parser.print_help()
-        sys.exit("\nError: exactly one infile and outfolder are required!")
-    screen_all_data = general_utilities.unpickle(infile)
+        sys.exit("\nError: exactly one output folder is required!")
     try:                os.mkdir(outfolder)
     except OSError:     pass
     # LATER-TODO add options for library/annotation folder/filenames
@@ -566,24 +703,31 @@ def main(args, options):
     annotation, ann_header = general_utilities.unpickle(ann_file)
     gene_names = parse_annotation_file.best_gene_name_dict(annotation, ann_header)
     # run basic pipeline, with txt+pickle outfile; if replicates, analyze both and compare gene FDRs.
-    phenotype_thresholds = modify_phenotype_thresholds(options.phenotype_thresholds, options.one_sided_thresholds)
-    samples =  [x.strip() for x in options.sample_key.split(',')]
-    controls = [x.strip() for x in options.control_key.split(',')]
-    if len(samples) > 2:                raise Exception("Can't have more than two samples!")
-    if len(controls) > len(samples):    raise Exception("Can't have more controls than samples!")
-    if len(samples)==2 and len(controls)==1:
-        controls *= 2
+    phenotype_thresholds = modify_phenotype_thresholds(options.phenotype_thresholds, 
+                                                       options.Poisson_thresholds, options.one_sided_thresholds)
+    samples =  [x.strip() for x in options.sample.split(',')]
+    controls = [x.strip() for x in options.control.split(',')]
+    if len(samples) > 2:                        raise Exception("Can't have more than two samples!")
+    if len(controls) > len(samples):            raise Exception("Can't have more controls than samples!")
+    if len(samples)==2 and len(controls)==1:    controls *= 2
+    if options.data_dictionary:
+        screen_all_data = general_utilities.unpickle(options.data_dictionary)
     gene_stats_data_all = []
     for (sample, control) in zip(samples, controls):
-        screen_sample_data = screen_all_data[sample]
-        screen_control_data = screen_all_data[control]
-        gene_stats_data = gene_full_analysis(screen_sample_data, screen_control_data, library_data_by_IB, phenotype_thresholds, 
-                             options.min_reads, options.features.split(','), options.max_conf, 
-                             sample, control, outfolder, gene_names, options.min_alleles_for_FDR, 
+        if options.data_dictionary:     screen_sample_data = screen_all_data[sample]
+        else:                           screen_sample_data = general_utilities.unpickle(sample)
+        if options.data_dictionary:     screen_control_data = screen_all_data[control]
+        else:                           screen_control_data = general_utilities.unpickle(control)
+        if sample.endswith('.pickle'):  sample = sample[:-len('.pickle')]
+        if control.endswith('.pickle'): control = control[:-len('.pickle')]
+        gene_stats_data = gene_full_analysis(screen_sample_data, screen_control_data, library_data_by_IB, 
+                             phenotype_thresholds, options.Poisson_thresholds, 
+                             options.min_reads, options.symmetrical_min_reads, options.features.split(','), options.max_conf, 
+                             options.min_alleles_for_FDR, sample, control, outfolder, gene_names, 
                              options.one_sided_thresholds, options.min_reads_2, options.full_library, options.workspace_size)
         gene_stats_data_all.append((sample, control, gene_stats_data))
         # MAYBE-TODO change write_outfile to include multiple samples together?
-        write_outfile(gene_stats_data, phenotype_thresholds, outfolder+'/results_%s_%s.txt'%(sample, control), 
+        write_outfile(gene_stats_data, phenotype_thresholds, outfolder+'/results__%s--%s.txt'%(sample, control), 
                       annotation, ann_header)
     if len(samples) == 1:   general_utilities.pickle(gene_stats_data, outfolder+'/all_data.pickle')
     else:                   general_utilities.pickle(gene_stats_data_all, outfolder+'/all_data.pickle')
@@ -647,6 +791,7 @@ def normalize_readcounts_multi(sample_dict, norm_total=1e6):
 
 
 ### Notes and old interactive code for stuff I might want to implement later
+def __NOTES():
     """
     ### more looking at IBs with a phenotype
 
@@ -918,6 +1063,7 @@ def normalize_readcounts_multi(sample_dict, norm_total=1e6):
         ...         OUTFILE.write('\t'.join([str(x) for x in (g, h1, n1, q1, h2, n2, q2)] + A) + '\n')
 
     """
+    pass
 
 ########################################### Tests #################################################
 
