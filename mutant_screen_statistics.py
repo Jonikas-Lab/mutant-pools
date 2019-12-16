@@ -92,7 +92,10 @@ def define_option_parser():
     parser.add_option('-W', '--workspace_size', type='float', default=2e5,
               help="Memory used for statistics - try increasing to 2e6 if you're getting \"LDSTP is too small for this problem.  "
                   +"Try increasing the size of the workspace\" errors, but 2e6 seems to be ~20G... (default %default)")
+    parser.add_option('-q', '--quiet', action='store_true', default=False,
+              help="Print only the hit numbers/list, no other output (default: rearray)")
     return parser
+    # TODO implement --quiet
 
 
 ########################################### Basic pipeline #################################################
@@ -152,6 +155,8 @@ def poisson_function(offset):
     if offset > 6: 
         return lambda x: float('inf')
     return lambda x: scipy.stats.poisson(x/1.8**offset).interval(1-1/10**(4+2*offset))[0]-.2
+    # TODO this is slow!  should I just calculate all the normal Poisson intervals once and save them 
+    #   instead of calculating them constantly during the binning?
 
 
 def check_threshold_Poisson(x, y, threshold):
@@ -737,7 +742,8 @@ def main(args, options):
         compare_two_samples(*gene_stats_data_all[0]+gene_stats_data_all[1]+(outfolder + '/gene_FDR_scatterplot.png',))
 
 
-def compare_multiples(gene_stats_datasets, names, overall_name='', outfile=None, linthresh=0.001, wraparound=True):
+def compare_multiples(gene_stats_datasets, names, overall_name='', outfile=None, linthresh=0.001, wraparound=True, 
+                      replace_names_in_title=None, color_top_hits=True):
     """ Given a list of any number of gene results, plot the FDRs together: each gene is a line, each sample is a column)
 
     gene_stats_datasets should be either a list of gene:(...,FDR) dicts (... is irrelevant), or of pickle file names containing same.
@@ -747,25 +753,31 @@ def compare_multiples(gene_stats_datasets, names, overall_name='', outfile=None,
         raise Exception("Passed multiple types in the gene_stats_datasets list! %s"%(set(type(x) for x in gene_stats_datasets)))
     elif type(gene_stats_datasets[0])==str:
         gene_stats_datasets = [general_utilities.unpickle(x) for x in gene_stats_datasets]
-    gene_all_FDRs = {}
+    if replace_names_in_title is None:
+        replace_names_in_title = ', '.join(names)
+    gene_all_FDRs = []
     for gene in set.union(*[set(gene_stats_data.keys()) for gene_stats_data in gene_stats_datasets]):
         FDRs = [-gene_stats_data.get(gene,[2])[-1] for gene_stats_data in gene_stats_datasets]
         FDRs = [-2 if numpy.isnan(x) else x for x in FDRs]
-        gene_all_FDRs[gene] = FDRs
-    mplt.figure()
-    for gene, FDRs in gene_all_FDRs.items():
+        gene_all_FDRs.append((gene, FDRs))
+
+    # sort by lowest FDR (and then second-lowest etc) - hits on top
+    gene_all_FDRs.sort(key=lambda (g,fs): sorted(-f for f in fs))
+    # make top 10 hits color-coded!  
+    colors = ([(c,1) for c in plotting_utilities.colors_12a[2:]] if color_top_hits else []) + [('black', 0.3) for _ in gene_all_FDRs]
+    # TODO could also give them labels?  If I do that I should probably take fewer than top 10 if not all of them are hits
+    mplt.figure(figsize=(max(10, 1.2*len(gene_stats_datasets)), 8))
+    for (color, alpha), (gene, FDRs) in zip(colors, gene_all_FDRs):
         # plot -1 to N+1 and wrap the FDRs around, to see the extra connections and make all points have equal visual weight
-        if not wraparound:
-            mplt.plot(range(len(names)), FDRs, color='black', alpha=0.3)
-        else:
-            mplt.plot(range(-1, len(names)+1), [FDRs[-1]] + FDRs + [FDRs[0]], color='black', alpha=0.3)
-    # LATER-TODO would be REALLY nice to color-code and label the top 10 genes...
+        if not wraparound:  mplt.plot(range(len(names)),        FDRs,                         color=color, alpha=alpha)
+        else:               mplt.plot(range(-1, len(names)+1), [FDRs[-1]] + FDRs + [FDRs[0]], color=color, alpha=alpha)
     mplt.yscale('symlog', linthreshy=linthresh)     # the symlog step is very slow!
     mplt.ylim(-2, linthresh*0.3)
     mplt.xlim(-0.5, len(names)-0.5)
     mplt.yticks([0, -0.001, -0.01, -0.1, -1], '~0 0.001 0.01 0.1 1'.split())
     mplt.xticks(range(len(names)), names)
-    mplt.title("FDR comparison for %s %s\n(each line is a gene, showing FDRs in all the samples)"%(overall_name, ', '.join(names)))
+    mplt.title("FDR comparison for %s %s\n(each line is a gene, showing FDRs in all the samples)"%(overall_name, 
+                                                                                                   replace_names_in_title))
     mplt.ylabel('FDR (log scale; cutoff lines are 0.05 and 0.5)')
     mplt.xlabel('')
     for cutoff in (0.5, 0.05):
