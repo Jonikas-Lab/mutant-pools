@@ -8,8 +8,9 @@ import os
 from collections import defaultdict
 
 # our lab's annotation that's not in Phytozome yet but we often want it
-OUR_GENE_NAMES = {'Cre10.g436550': 'EPYC1', 'Cre11.g467712': 'SAGA1', 'Cre09.g394621': 'SAGA2', 
-                  'Cre06.g261750': 'RBMP1', 'Cre09.g416850': 'RBMP2', 'Cre10.g440050': 'CSP41A'}
+OUR_GENE_NAMES = {'Cre10.g436550': '*EPYC1', 'Cre11.g467712': '*SAGA1',  'Cre09.g394621': '*SAGA2', 'Cre06.g261750': '*RBMP1', 
+                  'Cre09.g416850': '*RBMP2', 'Cre10.g440050': '*CSP41A', 'Cre06.g259100': '*SAGA3', 'Cre09.g394621': '*SAGA-like', 
+                  'Cre09.g395700': '*CIA8',  'Cre02.g111550': '*FABL',   'Cre01.g038100': '*Bestrophin', }
 # TODO include that in full annotation and update the annotation+loc file!  Right now I only include OUR_GENE_NAMES in best_gene_name_dict.
 
 # Gene annotation file data for v5.5 genome: 
@@ -202,6 +203,28 @@ def parse_ID_conversion_file(infile=DEFAULT_ID_CONVERSION_FILE_v5p5, key_header=
     # TODO add unit-tests!
 
 
+def ID_conversion(IDs, input_version='3.1', output_version='5.5', conversion_file=DEFAULT_ID_CONVERSION_FILE_v5p5, 
+                  print_details=False, strip_fields_after = ['.t', '_t'], strip_fields_before = ['|', 'au5.', 'Au9.'], 
+                  blank_val = '--', warn_on_multiples=False):
+    """ Convert list of input_version IDs (string or int) to output_version, and print the missing/multiple count.
+
+    Optionally print the missing and multiple values.
+    Returns: set of new IDs, old:new ID dict (including some missing and multiple cases).
+    """
+    conversion_dict = parse_ID_conversion_file(conversion_file, input_version, output_version, strip_fields_after, 
+                                               strip_fields_before, blank_val, warn_on_multiples)
+    converted_IDs = {ID:conversion_dict.get(ID,'') for ID in IDs}
+    output_IDs = set.union(*[set(x.split(',')) for x in converted_IDs.values() if x])
+    print "%s input IDs -> %s output IDs: %s missing, %s multiples."%(len(IDs), len(output_IDs), 
+                                                                      sum(1 for x in converted_IDs.values() if not x), 
+                                                                      sum(1 for x in converted_IDs.values() if ',' in x))
+    if print_details:
+        print "MISSING: %s"%(' '.join(old for old,new in converted_IDs.items() if not new))
+        print "MULTIPLES: %s"%(', '.join('%s: %s'%(old, new) for old,new in converted_IDs.items() if ',' in new))
+    return output_IDs, converted_IDs
+    # TODO add unit-tests!
+
+
 def get_gene_names_from_gff3(gff3_file):
     """ Get gene names from the 'name' field of a gff3 file - returns gene:set_of_names dictionary. """
     genename_dict = defaultdict(set)
@@ -304,7 +327,7 @@ def best_gene_name_dict(full_annotation_dict, full_header, include_custom=True, 
     except ValueError:
         raise Exception("Annotation header doesn't contain gene_name or best_arabidopsis_TAIR10_hit_symbol fields!")
     gene_names = {gene:(a[name_column] if a[name_column]!='-' 
-                        else (a[Arabidopsis_name_column] if a[Arabidopsis_name_column]!='-' 
+                        else ('~'+a[Arabidopsis_name_column] if a[Arabidopsis_name_column]!='-' 
                               else gene)) 
                   for gene,a in full_annotation_dict.items()}
     if first_only:
