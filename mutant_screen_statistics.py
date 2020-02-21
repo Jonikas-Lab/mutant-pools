@@ -33,7 +33,9 @@ import collections
 # other packages
 import scipy.stats
 import numpy
+import random
 import matplotlib.pyplot as mplt
+import adjustText
 # my modules
 import general_utilities
 import mutant_utilities
@@ -41,6 +43,11 @@ import mutant_IB_RISCC_classes
 import statistics_utilities
 import plotting_utilities
 import parse_annotation_file
+
+# this is hardcoded for now - used in both main and compare_multiples
+ANN_FILE = os.path.expanduser('~/experiments/reference_data/chlamy_annotation/annotation+loc_data+header_v5.5.pickle')
+annotation, ann_header = general_utilities.unpickle(ANN_FILE)
+gene_names = parse_annotation_file.best_gene_name_dict(annotation, ann_header)
 
 def define_option_parser():
     """ Populates and returns an optparse option parser object, with __doc__ as the usage string."""
@@ -643,7 +650,8 @@ def write_outfile(gene_stats_data, phenotype_thresholds, outfile, annotation, an
     return DATA, header
 
 
-def compare_two_samples(sample1, control1, gene_stats_data1, sample2, control2, gene_stats_data2, outfile=None, minval=-1):
+def compare_two_samples(sample1, control1, gene_stats_data1, sample2, control2, gene_stats_data2, label_top_hits, 
+                        cutoffs = [0.5, 0.05], outfile=None, minval=-1):
     """ Plot a scatterplot of gene FDRs between samples.
 
     Both sample/control should be names (strings). 
@@ -652,6 +660,7 @@ def compare_two_samples(sample1, control1, gene_stats_data1, sample2, control2, 
     if type(gene_stats_data1)==str:  gene_stats_data1 = general_utilities.unpickle(gene_stats_data1)
     if type(gene_stats_data2)==str:  gene_stats_data2 = general_utilities.unpickle(gene_stats_data2)
     all_genes_sorted = sorted(set(gene_stats_data1.keys()) | set(gene_stats_data2.keys()))
+    # plotting all FDRs as negative - easiest way to get 0 on top
     FDRs1 = [-gene_stats_data1.get(gene,[2])[-1] for gene in all_genes_sorted]
     FDRs2 = [-gene_stats_data2.get(gene,[2])[-1] for gene in all_genes_sorted]
     FDRs1 = [-2 if numpy.isnan(x) else x for x in FDRs1]
@@ -664,12 +673,22 @@ def compare_two_samples(sample1, control1, gene_stats_data1, sample2, control2, 
     mplt.ylim(minval-0.5, 0.0003)
     mplt.xticks([0, -0.001, -0.01, -0.1, -1], '0 0.001 0.01 0.1 1'.split())
     mplt.yticks([0, -0.001, -0.01, -0.1, -1], '0 0.001 0.01 0.1 1'.split())
-    mplt.title("False discovery rate (FDR) for %s vs %s (each dot is a gene)"%(sample1, sample2))
+    mplt.title('False discovery rate (FDR) for %s vs %s'%(sample1, sample2)
+              +'\n(each dot is a gene, showing FDRs for the two samples)')
     mplt.xlabel('%s FDR (log scale)'%sample1)
     mplt.ylabel('%s FDR (log scale)'%sample2)
-    for cutoff in (0.5, 0.05):
+    for cutoff in cutoffs:
         mplt.plot(mplt.xlim(), (-cutoff, -cutoff), color='dodgerblue', linestyle='dashed')
         mplt.plot((-cutoff, -cutoff), mplt.ylim(), color='dodgerblue', linestyle='dashed')
+    # I'm using adjustText to make the labels non-overlapping - see https://github.com/Phlya/adjustText for docs
+    # TODO add more options for which dots should be annotated, and make them into command-line options?
+    if label_top_hits:
+        texts = [mplt.text(x, y, gene_names.get(g,g), fontsize='small') 
+                 for (x,y,g) in zip(FDRs1, FDRs2, all_genes_sorted) if min(-x,-y)<=cutoffs[1] or max(-x,-y)<=cutoffs[0]] 
+        adjustText.adjust_text(texts, x=FDRs1, y=FDRs2, expand_text=(1.05, 1.05))
+                # old version using randomization to deal with overlapping text - not great
+                # verticalalignment = 'top' if random.randint(0,1) else 'bottom'
+                # mplt.annotate(xy=(x,y), s=gene_names.get(g,g), va=verticalalignment)
     if outfile:
         plotting_utilities.savefig(outfile)
         mplt.close()
@@ -704,9 +723,6 @@ def main(args, options):
         Mutant = collections.namedtuple('Mutant', library_table_header)
         library_table = general_utilities.unpickle(lib_folder+'large-lib_rearray.pickle')
     library_data_by_IB = {x.IB: x for x in library_table}
-    ann_file = os.path.expanduser('~/experiments/reference_data/chlamy_annotation/annotation+loc_data+header_v5.5.pickle')
-    annotation, ann_header = general_utilities.unpickle(ann_file)
-    gene_names = parse_annotation_file.best_gene_name_dict(annotation, ann_header)
     # run basic pipeline, with txt+pickle outfile; if replicates, analyze both and compare gene FDRs.
     phenotype_thresholds = modify_phenotype_thresholds(options.phenotype_thresholds, 
                                                        options.Poisson_thresholds, options.one_sided_thresholds)
@@ -739,11 +755,14 @@ def main(args, options):
     # MAYBE-TODO maybe pickle the outfile/header too?  Together or separately from gene_stats_data
     # plot FDR comparison scatterplot for replicates (axes reversed so "good" cases are on top right
     if len(samples) == 2:
-        compare_two_samples(*gene_stats_data_all[0]+gene_stats_data_all[1]+(outfolder + '/gene_FDR_scatterplot.png',))
+        compare_two_samples(*gene_stats_data_all[0]+gene_stats_data_all[1], 
+                            label_top_hits=10, outfile=outfolder+'/gene_FDR_scatterplot.png')
 
+
+########################################### Additional analysis/display/plotting #################################################
 
 def compare_multiples(gene_stats_datasets, names, overall_name='', outfile=None, linthresh=0.001, wraparound=True, 
-                      replace_names_in_title=None, color_top_hits=True):
+                      replace_names_in_title=None, xlabel_extra=None, color_top_hits=10, ncol=5):
     """ Given a list of any number of gene results, plot the FDRs together: each gene is a line, each sample is a column)
 
     gene_stats_datasets should be either a list of gene:(...,FDR) dicts (... is irrelevant), or of pickle file names containing same.
@@ -760,17 +779,24 @@ def compare_multiples(gene_stats_datasets, names, overall_name='', outfile=None,
         FDRs = [-gene_stats_data.get(gene,[2])[-1] for gene_stats_data in gene_stats_datasets]
         FDRs = [-2 if numpy.isnan(x) else x for x in FDRs]
         gene_all_FDRs.append((gene, FDRs))
-
     # sort by lowest FDR (and then second-lowest etc) - hits on top
     gene_all_FDRs.sort(key=lambda (g,fs): sorted(-f for f in fs))
-    # make top 10 hits color-coded!  
-    colors = ([(c,1) for c in plotting_utilities.colors_12a[2:]] if color_top_hits else []) + [('black', 0.3) for _ in gene_all_FDRs]
-    # TODO could also give them labels?  If I do that I should probably take fewer than top 10 if not all of them are hits
+    # make top 10 hits color-coded!  and give them labels (using gene names and not just IDs)
+    # TODO instead of top10, highlight everything that goes above the FDR=0.05 line, or something?  Introducing bias otherwise...
+    # TODO have it also print the top hits and some info to stdout?  In a table by sample?
+    plot_args = [(g, f, 'black', 0.3, 1, '_nolegend_') for g,f in gene_all_FDRs[color_top_hits:]]
+    if color_top_hits:
+        plot_args += [(g, f, c, 1, 1.5, gene_names.get(g,g)) 
+                      for c,(g,f) in zip(plotting_utilities.colors_12a[2:], gene_all_FDRs[:color_top_hits])]
     mplt.figure(figsize=(max(10, 1.2*len(gene_stats_datasets)), 8))
-    for (color, alpha), (gene, FDRs) in zip(colors, gene_all_FDRs):
+    for (gene, FDRs, color, alpha, linewidth, label) in plot_args:
+        kwargs = dict(color=color, alpha=alpha, label=label, linewidth=linewidth)
         # plot -1 to N+1 and wrap the FDRs around, to see the extra connections and make all points have equal visual weight
-        if not wraparound:  mplt.plot(range(len(names)),        FDRs,                         color=color, alpha=alpha)
-        else:               mplt.plot(range(-1, len(names)+1), [FDRs[-1]] + FDRs + [FDRs[0]], color=color, alpha=alpha)
+        if not wraparound:  mplt.plot(range(len(names)),        FDRs,                         **kwargs)
+        else:               mplt.plot(range(-1, len(names)+1), [FDRs[-1]] + FDRs + [FDRs[0]], **kwargs)
+    # make a legend with colored text squeezed into the upper region
+    plotting_utilities.legend(colortext=True, loc='upper center', frameon=False, ncol=ncol, 
+                              handlelength=1, handletextpad=0.05, columnspacing=0.5, borderaxespad=0.1, labelspacing = 0.1)
     mplt.yscale('symlog', linthreshy=linthresh)     # the symlog step is very slow!
     mplt.ylim(-2, linthresh*0.3)
     mplt.xlim(-0.5, len(names)-0.5)
@@ -779,15 +805,13 @@ def compare_multiples(gene_stats_datasets, names, overall_name='', outfile=None,
     mplt.title("FDR comparison for %s %s\n(each line is a gene, showing FDRs in all the samples)"%(overall_name, 
                                                                                                    replace_names_in_title))
     mplt.ylabel('FDR (log scale; cutoff lines are 0.05 and 0.5)')
-    mplt.xlabel('')
+    mplt.xlabel('samples' + (' (%s)'%xlabel_extra if xlabel_extra else ''))
     for cutoff in (0.5, 0.05):
         mplt.plot(mplt.xlim(), (-cutoff, -cutoff), color='dodgerblue', linestyle='dashed')
     if outfile:
         plotting_utilities.savefig(outfile)
         mplt.close()
 
-
-########################################### Additional analysis/display/plotting #################################################
 
 def normalize_readcounts_single(sample_dict, norm_total=1e6):
     """ Given an IB:count dict, return matching one with normalized counts to a total of norm_total.
