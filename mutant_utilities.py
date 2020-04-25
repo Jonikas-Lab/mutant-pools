@@ -28,6 +28,15 @@ DEFAULT_ALL_GENOME_FILE = os.path.expanduser('~/experiments/reference_data/genom
 DEFAULT_GENOME_CASSETTE_FILE = os.path.expanduser('~/experiments/reference_data/genomes_and_indexes/Chlre5.5-nm_chl-mit_cassette-CIB1.fa')
 DEFAULT_GENE_POS_FILE = os.path.expanduser('~/experiments/reference_data/chlamy_annotation/Creinhardtii_281_v5.5.gene.gff3')
 
+# Which parts of the cassette are copies of genomic regions so I should ignore any alignments to those genomic regions:
+# got this from Phytozome BLAST cassette vs genome, see ~/experiments/reference_data/insertion_cassettes/cassette_CIB1_components.txt
+CASSETTE_GENOME_REGIONS = {'chromosome_5':  [(2979914, 2979945), (2987827, 2987858), (2978203, 2978592)],
+                           'chromosome_8':  [(2521997, 2522264)],
+                           'chromosome_2':  [(6943411, 6943632), (6946456, 6946677), (6943104, 6943255)],
+                           'chromosome_12': [(5285436, 5285598)]
+                          }
+
+
 def get_chromosome_lengths(genome_file=None):
     """ Return chromosome:length dictionary based on reading a genome fasta file. """
     original_input = genome_file
