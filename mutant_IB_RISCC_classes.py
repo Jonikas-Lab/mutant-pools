@@ -1332,7 +1332,7 @@ class Insertional_mutant_multi_dataset(Insertional_mutant):
         don't modify original mutant.
         """
         mutant_dictionary = defaultdict(blank_full_single_mutant)
-        for dataset_name in self.by_dataset.iterkeys():
+        for dataset_name in self.by_dataset.keys():
             mutant_dictionary[dataset_name] = self.give_single_dataset_mutant(dataset_name)
         return mutant_dictionary
 
@@ -1656,7 +1656,7 @@ class Insertional_mutant_pool_dataset():
         if not self.multi_dataset:  return self.summary.N_mutants
         else:                       return sum(1 for m in self if sum(x.total_read_count for x in m.by_dataset.values()))
 
-    def __iter__(self):     return self._mutants_by_IB.itervalues()
+    def __iter__(self):     return self._mutants_by_IB.values()
     # for multi-datasets, for iterating over only mutants with 1+ reads in a particular dataset, see mutants_in_dataset()
 
     @property
@@ -1878,11 +1878,11 @@ class Insertional_mutant_pool_dataset():
         If the object is multi-dataset, dataset name must be provided, otherwise it cannot.
         """
         gene_by_mutantN = defaultdict(set)
-        for (gene,mutants) in self.mutants_by_gene.iteritems():
+        for (gene,mutants) in self.mutants_by_gene.items():
             gene_by_mutantN[len([m for m in mutants if m.read_info(dataset).total_read_count])].add(gene)
         # check that the numbers add up to the total number of genes
         all_genes = set([mutant.gene for mutant in self]) - set(SPECIAL_GENE_CODES.all_codes)
-        assert sum([len(geneset) for geneset in gene_by_mutantN.itervalues()]) == len(all_genes)
+        assert sum([len(geneset) for geneset in gene_by_mutantN.values()]) == len(all_genes)
         return gene_by_mutantN
         #LATER-TODO add unit-test
 
@@ -1910,7 +1910,7 @@ class Insertional_mutant_pool_dataset():
         """
         if not self.multi_dataset:  raise MutantError("populate_multi_dataset can only be run for multi-datasets!")
 
-        for dataset_name,dataset_object in source_dataset_dict.iteritems():
+        for dataset_name,dataset_object in source_dataset_dict.items():
 
             if any([s in dataset_name for s in ' \t\n']):
                 raise MutantError("Dataset name '%s' contains spaces/tabs/newlines - not allowed!"%dataset_name)
@@ -2060,7 +2060,7 @@ class Insertional_mutant_pool_dataset():
         # First get the list of all chromosomes in the file, WITHOUT reading it all into memory
         with open(genefile) as GENEFILE:
             GFF_limit_data = GFF.GFFExaminer().available_limits(GENEFILE)
-            chromosomes_and_counts = dict([(c,n) for ((c,),n) in GFF_limit_data['gff_id'].iteritems()])
+            chromosomes_and_counts = dict([(c,n) for ((c,),n) in GFF_limit_data['gff_id'].items()])
             all_reference_chromosomes = set(chromosomes_and_counts.keys())
 
         # Now lump the chromosomes into N_run_groups sets with the feature counts balanced between sets, 
@@ -2726,8 +2726,8 @@ class Testing_position_functionality(unittest.TestCase):
             for make_full_pos in (lambda x: '%d-?'%x, lambda x: '?-%d'%(x+1), lambda x: '%s-%s'%(x,x+1)):
                 pos = Insertion_position(chrom, strand, full_position=make_full_pos(min_pos))
                 for either in (True,False):
-                    self.assertEquals(find_gene_by_pos_gff3(pos, chr_rec, True, either, True), expected_output)
-                    self.assertEquals(find_gene_by_pos_gff3(pos, chr_rec, False, either, True), expected_output_basic_features)
+                    self.assertEqual(find_gene_by_pos_gff3(pos, chr_rec, True, either, True), expected_output)
+                    self.assertEqual(find_gene_by_pos_gff3(pos, chr_rec, False, either, True), expected_output_basic_features)
         for (strand, orientation) in [('+', 'sense'), ('-', 'antisense')]:
             _check_pos_in_gene(100, strand, ['gene1_plus', orientation, "gene_edge/mRNA_edge/5'UTR", '0,600'])
             _check_pos_in_gene(130, strand, ['gene1_plus', orientation, "5'UTR",                    '30,570'])
@@ -2765,15 +2765,15 @@ class Testing_position_functionality(unittest.TestCase):
                 [pos1, pos2, pos3, pos4] = [Insertion_position('chrA', orientation, full_position=make_full_pos(x)) 
                                       for x in (50, 99, 1000, 2000)]
                 for pos in (pos1, pos2, pos3, pos4):
-                    self.assertEquals(find_gene_by_pos_gff3(pos, chr_rec, either, False, True),
+                    self.assertEqual(find_gene_by_pos_gff3(pos, chr_rec, either, False, True),
                                       [SPECIAL_GENE_CODES.not_found, '-', '-', '-'])
-                self.assertEquals(find_gene_by_pos_gff3(pos1, chr_rec, either, True, True),
+                self.assertEqual(find_gene_by_pos_gff3(pos1, chr_rec, either, True, True),
                                   ['gene1_plus', 'upstream', 'intergenic', '50'])
-                self.assertEquals(find_gene_by_pos_gff3(pos2, chr_rec, either, True, True),
+                self.assertEqual(find_gene_by_pos_gff3(pos2, chr_rec, either, True, True),
                                   ['gene1_plus', 'upstream', 'intergenic', '1'])
-                self.assertEquals(find_gene_by_pos_gff3(pos3, chr_rec, either, True, True), 
+                self.assertEqual(find_gene_by_pos_gff3(pos3, chr_rec, either, True, True), 
                                   ['gene1_plus & gene2_minus', 'downstream & downstream', 'intergenic', '300 & 100'])
-                self.assertEquals(find_gene_by_pos_gff3(pos4, chr_rec, either, True, True),
+                self.assertEqual(find_gene_by_pos_gff3(pos4, chr_rec, either, True, True),
                                   ['gene2_minus', 'upstream', 'intergenic', '300'])
         # LATER-TODO add tests for weird cases based on test_data/INPUT_gene-data-1_all-cases.gff3
 
@@ -3060,7 +3060,7 @@ class Testing_Insertional_mutant(unittest.TestCase):
         pos1 = Insertion_position('chr2','+',position_before=10, immutable=True)        # bad - wrong chromosome
         mutant.improve_best_RISCC_read('AAA', pos1, max_distance=50)
         assert len(mutant.RISCC_genome_side_aligned_reads) == 1
-        assert mutant.RISCC_genome_side_aligned_reads.values()[0][0].min_position == 10
+        assert list(mutant.RISCC_genome_side_aligned_reads.values())[0][0].min_position == 10
         assert mutant.RISCC_max_confirmed_distance(1000) == 0
         pos2 = Insertion_position('chr1','-',position_before=11, immutable=True)        # bad - wrong strand
         mutant.improve_best_RISCC_read('AAA', pos2, max_distance=50)
