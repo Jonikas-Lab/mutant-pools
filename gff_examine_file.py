@@ -23,7 +23,7 @@ import basic_seq_utilities
 from testing_utilities import run_functional_tests
 from mutant_utilities import DEFAULT_NUCLEAR_GENOME_FILE
 
-# At once point BCBio.GFF stopped working after upgrading my computer from Xubuntu 12.10 to 14.04, see https://github.com/chapmanb/bcbb/issues/89 for report/fix.
+# At one point BCBio.GFF stopped working after upgrading my computer from Xubuntu 12.10 to 14.04, see https://github.com/chapmanb/bcbb/issues/89 for report/fix.
 
 ### Constants
 
@@ -385,6 +385,7 @@ def parse_JGI_GFF2_file(infile_GFF2, stop_on_error=False):
      otherwise print an error line and keep going, leaving the annotation parsing for that line unfinished.
     """ 
     for line in open(infile_GFF2):
+        if line.startswith('#'):    continue
         fields = line.strip().split('\t')
         annotations = {}
         for ann in fields[8].split('; '):
@@ -454,7 +455,7 @@ def name_to_ID_dicts(infile_GFF2, convert_to_singles=True):
 
 
 def gene_position_dict(infile_GFF2):
-    """ Given a JGI-style GFF2 file, return chromosome:proteinID:(start,end) dictionary; ignores strand and features.
+    """ Given a JGI-style GFF2 file (NOT GFF3), return chromosome:proteinID:(start,end) dictionary; ignores strand and features.
 
     The input should be the filename.
     """
