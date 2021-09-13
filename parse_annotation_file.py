@@ -1,4 +1,4 @@
-#!/usr/bin/env python2.7
+#!/usr/bin/env python3
 
 # standard library
 from __future__ import division
@@ -80,7 +80,7 @@ def parse_gene_annotation_file(gene_annotation_filename, content_header_fields, 
     if not os.path.lexists(gene_annotation_filename):
         raise Exception("Couldn't find the %s gene annotation file!"%gene_annotation_filename)
     if verbosity_level>0:
-        print "  Parsing file %s for gene annotation info..."%os.path.basename(gene_annotation_filename)
+        print("  Parsing file %s for gene annotation info..."%os.path.basename(gene_annotation_filename))
 
     ### Parse the whole file into lists of tab-separated fields
     #    (could change to a generator, but most of the data has to stay in memory anyway in a different format, so probably no point)
@@ -91,7 +91,7 @@ def parse_gene_annotation_file(gene_annotation_filename, content_header_fields, 
         fields = line.strip().split(field_splitter)
         data_by_row.append(fields)
     if verbosity_level>0:
-        print "  Parsed %s lines"%len(data_by_row)
+        print("  Parsed %s lines"%len(data_by_row))
         
     # if any of the other lines doesn't start with a Cre* gene ID, fail!
     if genes_start_with is not None:
@@ -104,11 +104,11 @@ def parse_gene_annotation_file(gene_annotation_filename, content_header_fields, 
     data_lengths = set([len(row) for row in data_by_row])
     if len(data_lengths)>1 and not if_join_all_later_fields:
         mismatched_lengths = True
-        if verbosity_level:     print "Not all data rows have the same length! Lengths found: %s"%list(data_lengths)
+        if verbosity_level:     print("Not all data rows have the same length! Lengths found: %s"%list(data_lengths))
         if pad_with_empty_fields:
             max_length = max(data_lengths)
             if verbosity_level>0:
-                print "Data field numbers vary between rows - padding all lower-length data rows to length %s"%max_length
+                print("Data field numbers vary between rows - padding all lower-length data rows to length %s"%max_length)
             for row in data_by_row:
                 if len(row)<max_length:
                     row += ['' for x in range(max_length-len(row))]
@@ -147,7 +147,7 @@ def parse_gene_annotation_file(gene_annotation_filename, content_header_fields, 
         data_by_gene[gene] = [x if x else '-' for x in data]
 
     if verbosity_level>0:
-        print "  DONE Parsing gene annotation file - found %s genes"%len(data_by_gene)
+        print("  DONE Parsing gene annotation file - found %s genes"%len(data_by_gene))
     return defaultdict(lambda: ['-' for _ in content_columns], data_by_gene)
 
 
@@ -193,7 +193,7 @@ def parse_ID_conversion_file(infile=DEFAULT_ID_CONVERSION_FILE_v5p5, key_header=
                 if warn_on_multiples:
                     for field, curr_header in zip(joint_fields, header):
                         if ',' in field:
-                            print "Warning: %s %s has multiple %s values! %s"%(key_header, key, curr_header, field)
+                            print("Warning: %s %s has multiple %s values! %s"%(key_header, key, curr_header, field))
     if val_header:
         try:                val_column = column_headers.index(val_header)
         except ValueError:  raise Exception("val_header %s didn't appear in header!"%val_header)
@@ -215,12 +215,12 @@ def ID_conversion(IDs, input_version='3.1', output_version='5.5', conversion_fil
                                                strip_fields_before, blank_val, warn_on_multiples)
     converted_IDs = {ID:conversion_dict.get(ID,'') for ID in IDs}
     output_IDs = set.union(*[set(x.split(',')) for x in converted_IDs.values() if x])
-    print "%s input IDs -> %s output IDs: %s missing, %s multiples."%(len(IDs), len(output_IDs), 
+    print("%s input IDs -> %s output IDs: %s missing, %s multiples."%(len(IDs), len(output_IDs), 
                                                                       sum(1 for x in converted_IDs.values() if not x), 
-                                                                      sum(1 for x in converted_IDs.values() if ',' in x))
+                                                                      sum(1 for x in converted_IDs.values() if ',' in x)))
     if print_details:
-        print "MISSING: %s"%(' '.join(old for old,new in converted_IDs.items() if not new))
-        print "MULTIPLES: %s"%(', '.join('%s: %s'%(old, new) for old,new in converted_IDs.items() if ',' in new))
+        print("MISSING: %s"%(' '.join(old for old,new in converted_IDs.items() if not new)))
+        print("MULTIPLES: %s"%(', '.join('%s: %s'%(old, new) for old,new in converted_IDs.items() if ',' in new)))
     return output_IDs, converted_IDs
     # TODO add unit-tests!
 
@@ -285,7 +285,7 @@ def get_all_gene_annotation(genome_version=None, gene_annotation_files=None, add
     if genome_version is not None and gene_annotation_files is not None:
         raise Exception("User should not provide both genome_version and gene_annotation_files, just one!")
     elif gene_annotation_files is None:
-        if genome_version == 5.5:
+        if float(genome_version) == 5.5:
             gene_annotation_files = DEFAULT_GENE_ANNOTATION_FILES_v5p5
         else:
             raise Exception("Genome version %s not implemented right now!"%genome_version)
@@ -306,7 +306,7 @@ def get_all_gene_annotation(genome_version=None, gene_annotation_files=None, add
             extra_gene_names = get_gene_names_from_gff3(DEFAULT_GENE_POS_FILE_v5p5)
             add_new_names_to_name_dict(gene_name_dict, extra_gene_names)
         else:
-            print "No gff3 file specified for genome version %s - can't use it to get extra gene names."%genome_version
+            print("No gff3 file specified for genome version %s - can't use it to get extra gene names."%genome_version)
     all_gene_IDs = set.union(*[set(d.keys()) for d in gene_annotation_dicts])
     full_annotation_dict = defaultdict(lambda: ['-' for _ in full_header])
     for gene in all_gene_IDs:
@@ -326,14 +326,14 @@ def best_gene_name_dict(full_annotation_dict, full_header, include_custom=True, 
         Arabidopsis_name_column = full_header.index('best_arabidopsis_TAIR10_hit_symbol')
     except ValueError:
         raise Exception("Annotation header doesn't contain gene_name or best_arabidopsis_TAIR10_hit_symbol fields!")
-    gene_names = {gene:(a[name_column] if a[name_column]!='-' 
-                        else ('~'+a[Arabidopsis_name_column] if a[Arabidopsis_name_column]!='-' 
+    gene_names = {gene:(a[name_column] if a[name_column] not in ('-','')
+                        else ('~'+a[Arabidopsis_name_column] if a[Arabidopsis_name_column] not in ('-','')
                               else gene)) 
                   for gene,a in full_annotation_dict.items()}
     if first_only:
         gene_names = {g:n.split(',')[0] for g,n in gene_names.items()}
     if include_custom:
-        print " Caution: using our lab's custom gene names (%s of them)"%(len(OUR_GENE_NAMES))
+        print(" Caution: using our lab's custom gene names (%s of them)"%(len(OUR_GENE_NAMES)))
         gene_names.update(OUR_GENE_NAMES)
     return gene_names
 
@@ -402,16 +402,16 @@ def get_all_annotation_definitions(annotation_types_files=DEFAULT_ANNOTATION_DEF
         # if there are multiple files, use the later ones to fill in only what was absent in the first
         final_dict = dictionaries[0]
         if len(files) > 1:
-            print "For %s data, merging multiple files - starting with %s (%s terms)"%(annotation_type, os.path.split(files[0])[1], 
-                                                                                       len(final_dict))
+            print("For %s data, merging multiple files - starting with %s (%s terms)"%(annotation_type, os.path.split(files[0])[1], 
+                                                                                       len(final_dict)))
         for (extra_dict, extra_file) in zip(dictionaries[1:], files[1:]):
             N_added = 0
             for term, definition in extra_dict.items():
                 if term not in final_dict:
                     N_added += 1
                     final_dict[term] = definition
-            print "  - added %s/%s terms from %s - total %s terms."%(N_added, len(extra_dict), 
-                                                                     os.path.split(extra_file)[1], len(final_dict))
+            print("  - added %s/%s terms from %s - total %s terms."%(N_added, len(extra_dict), 
+                                                                     os.path.split(extra_file)[1], len(final_dict)))
         all_annotation[annotation_type] = final_dict
     return all_annotation
 
@@ -425,7 +425,7 @@ def get_PFAM_definitions(infile):
         if ID in definitions:
             raise Exception("ID %s shows up twice in file %s!"%(ID, infile))
         definitions[ID] = fields[4] + (" (%s)"%fields[2] if fields[2] else '')
-    print "Parsed %s file - %s term definitions."%(os.path.split(infile)[1], len(definitions))
+    print("Parsed %s file - %s term definitions."%(os.path.split(infile)[1], len(definitions)))
     return definitions
 
 
@@ -439,7 +439,7 @@ def get_Panther_definitions(infile):
             raise Exception("ID %s shows up twice in file %s!"%(ID, infile))
         definitions[ID] = "%s (%s)"%(fields[1], ', '.join(fields[2:]))
         # MAYBE-TODO include definitions for all the GO terms listed in the fields, too?  But there's LOTS
-    print "Parsed %s file - %s term definitions."%(os.path.split(infile)[1], len(definitions))
+    print("Parsed %s file - %s term definitions."%(os.path.split(infile)[1], len(definitions)))
     return definitions
 
 
@@ -453,7 +453,7 @@ def get_KOG_definitions(infile):
         if ID in definitions:
             raise Exception("ID %s shows up twice in file %s!"%(ID, infile))
         definitions[ID] = "%s (namespace %s)"%(fields[1], fields[2])
-    print "Parsed %s file - %s term definitions."%(os.path.split(infile)[1], len(definitions))
+    print("Parsed %s file - %s term definitions."%(os.path.split(infile)[1], len(definitions)))
     return definitions
 
 
@@ -473,7 +473,7 @@ def get_KEGGec_definitions(infile):
         if definition.startswith('Transferred entry:'):
             new_IDs = definition.split(': ')[1].replace(' and ', ', ').split(', ')
             new_definition = "Transferred entries (%s): %s"%(len(new_IDs), ' & '.join(definitions[x] for x in new_IDs))
-    print "Parsed %s file - %s term definitions."%(os.path.split(infile)[1], len(definitions))
+    print("Parsed %s file - %s term definitions."%(os.path.split(infile)[1], len(definitions)))
     return definitions
 
 
@@ -488,7 +488,7 @@ def get_KEGGorthology_definitions(infile):
         if ID in definitions:
             raise Exception("ID %s shows up twice in file %s!"%(ID, infile))
         definitions[ID] = "%s (%s)"%(fields[2], fields[3])
-    print "Parsed %s file - %s term definitions."%(os.path.split(infile)[1], len(definitions))
+    print("Parsed %s file - %s term definitions."%(os.path.split(infile)[1], len(definitions)))
     return definitions
 
 
@@ -502,7 +502,7 @@ def get_GO_definitions(infile):
         if ID in definitions:
             raise Exception("ID %s shows up twice in file %s!"%(ID, infile))
         definitions[ID] = "%s (%s: %s) [%s]"%(fields[1], fields[2], fields[3], fields[4])
-    print "Parsed %s file - %s term definitions."%(os.path.split(infile)[1], len(definitions))
+    print("Parsed %s file - %s term definitions."%(os.path.split(infile)[1], len(definitions)))
     return definitions
 
 
@@ -530,5 +530,5 @@ class Testing(unittest.TestCase):
 
 if __name__=='__main__':
     """ If module is run directly, run tests. """
-    print "This is a module for import by other programs - it doesn't do anything on its own.  Running tests..."
+    print("This is a module for import by other programs - it doesn't do anything on its own.  Running tests...")
     unittest.main()

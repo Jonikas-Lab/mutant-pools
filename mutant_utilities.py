@@ -1,4 +1,4 @@
-#! /usr/bin/env python2.7
+#! /usr/bin/env python3
 
 """
 Various help functions for mutant datasets and related things.  Module - running it directly just runs tests.
@@ -270,19 +270,19 @@ def replicate_reproducibility_info(dataset1, dataset2, readcount_cutoffs=[1,10,1
         N_filtered_in_A = len(filtered_readcount_pairs)
         N_filtered_dict[readcount_cutoff] = N_filtered_in_A
         if not quiet:
-            print " * looking at mutants with at least %s reads in at least one dataset - %s"%(readcount_cutoff, 
+            print(" * looking at mutants with at least %s reads in at least one dataset - %s"%(readcount_cutoff, 
                    general_utilities.value_and_percentages(N_filtered_in_A, mutant_count_totals, 
-                                                           percentage_format_str='%.0f', words_for_percentages=total_descriptions))
+                                                           percentage_format_str='%.0f', words_for_percentages=total_descriptions)))
         # see how many are present in B
         N_present_in_B = sum(b>0 for (a,b) in filtered_readcount_pairs)
         if not quiet:
-            print "   - out of those, %s are present in the other."%(general_utilities.value_and_percentages(N_present_in_B, 
-                                                                                                             [N_filtered_in_A]))
+            print("   - out of those, %s are present in the other."%(general_utilities.value_and_percentages(N_present_in_B, 
+                                                                                                             [N_filtered_in_A])))
         N_present_in_B_dict[readcount_cutoff] = N_present_in_B
         # look at how many mutants are within given B:A readcount ratios (raw and normalized readcounts)
         if not quiet:
-            if higher_only:     print '   - how many mutants have a readcount replicate1:2 ratio exceeding the given value:'
-            else:               print '   - how many mutants are within a given readcount ratio between the replicates:'
+            if higher_only:     print('   - how many mutants have a readcount replicate1:2 ratio exceeding the given value:')
+            else:               print('   - how many mutants are within a given readcount ratio between the replicates:')
         info_strings_raw, info_strings_norm = [], []
         N_within_ratio_raw_dict[readcount_cutoff], N_within_ratio_norm_dict[readcount_cutoff] = {}, {}
         for ratio_cutoff in ratio_cutoffs:
@@ -301,8 +301,8 @@ def replicate_reproducibility_info(dataset1, dataset2, readcount_cutoffs=[1,10,1
             info_strings_norm.append('%sx - %s'%(ratio_cutoff, 
                                                 'N/A' if N_filtered_in_A==0 else '%.0f%%'%(N_within_ratio_norm/N_filtered_in_A*100)))
         if not quiet:
-            print '       raw readcount ratios       : '+', '.join(info_strings_raw)
-            print '       normalized readcount ratios: '+', '.join(info_strings_norm)
+            print('       raw readcount ratios       : '+', '.join(info_strings_raw))
+            print('       normalized readcount ratios: '+', '.join(info_strings_norm))
     return N_filtered_dict, N_present_in_B_dict, N_within_ratio_raw_dict, N_within_ratio_norm_dict, mutant_count_totals
 
 
@@ -516,5 +516,5 @@ class Testing(unittest.TestCase):
 
 if __name__=='__main__':
     """ If module is run directly, run tests. """
-    print "This is a module for import by other programs - it doesn't do anything on its own.  Running tests..."
+    print("This is a module for import by other programs - it doesn't do anything on its own.  Running tests...")
     unittest.main()

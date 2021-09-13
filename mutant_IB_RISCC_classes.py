@@ -1,4 +1,4 @@
-#!/usr/bin/env python2.7
+#!/usr/bin/env python3
 """
 Module containing classes and functions for analysis of deepseq data related to insertional mutant libraries.
 
@@ -448,7 +448,7 @@ def find_gene_by_pos_gff3(insertion_pos, chromosome_GFF_record, detailed_feature
     #  which seems sufficient.
 
     # get the needed information from either input format
-    strand, ins_start, ins_end = _get_insertion_info(insertion_pos)
+    strand, ins_start, ins_end = _get_insertion_info(insertion_pos, None)
 
     ### Go over all the genes in the chromosome record, 
     #   and calculate the distance from the insertion (or 0 if insertion overlaps the gene)
@@ -473,8 +473,8 @@ def find_gene_by_pos_gff3(insertion_pos, chromosome_GFF_record, detailed_feature
         nearest_genes = []
         genes_upstream =   [(gene,dist) for (gene,dist) in gene_distances if dist < 0]
         genes_downstream = [(gene,dist) for (gene,dist) in gene_distances if dist > 0]
-        if genes_upstream:      nearest_genes.append(max(genes_upstream, key = lambda (gene,dist): dist))
-        if genes_downstream:    nearest_genes.append(min(genes_downstream, key = lambda (gene,dist): dist))
+        if genes_upstream:      nearest_genes.append(max(genes_upstream, key = lambda gene_and_dist: gene_and_dist[1]))
+        if genes_downstream:    nearest_genes.append(min(genes_downstream, key = lambda gene_and_dist: gene_and_dist[1]))
     else:
         nearest_genes = []
 
@@ -779,8 +779,10 @@ class Insertional_mutant():
         if not self.sequences_counts_positions_errors:
             self.position = SPECIAL_POSITIONS.unknown
             return
-        main_seq, (main_count, main_pos, main_Nerr) = min(self.sequences_counts_positions_errors.items(), 
-                                             key = lambda (s, (c, p, e)): (p in SPECIAL_POSITIONS.all_undefined, -c, e, s))
+        def _order(arg):
+            s, (c, p, e) = arg
+            return (p in SPECIAL_POSITIONS.all_undefined, -c, e, s)
+        main_seq, (main_count, main_pos, main_Nerr) = min(self.sequences_counts_positions_errors.items(), key = _order)
         self.position = main_pos
         for seq, (count, pos, N_err) in self.sequences_counts_positions_errors.items():
             if pos not in SPECIAL_POSITIONS.all_undefined:
@@ -827,7 +829,7 @@ class Insertional_mutant():
         else:
             filtered_data = seqs_to_counts_and_data.items()
         sequences_by_count = sorted([(seq,data[0]) for (seq,data) in filtered_data], 
-                                    key = lambda (s,c): (-c, s))
+                                    key = lambda s_c: (-s_c[1], s_c[0]))
         # try returning the Nth sequence and count; return nothing if there are under N sequences.
         try:                return tuple(sequences_by_count[N-1])
         except IndexError:  return ('',0)
@@ -1139,7 +1141,7 @@ class Insertional_mutant():
         for (position, read_data) in sorted(self.RISCC_genome_side_aligned_reads.items()):
             fields = [read_data[0].chromosome, read_data[0].strand, read_data[0].full_position.strip('?-')]
             readcount = read_data[1]
-            main_seq = min(read_data[2].items(), key = lambda (s, (r,e)): (-r, e))[0]
+            main_seq = min(read_data[2].items(), key = lambda s__r_e: (-s__r_e[1][0], s__r_e[1][1]))[0]
             perfect_read_count = sum(read_count for (read_count, N_errors) in read_data[2].values() if N_errors==0)
             fields += read_data[3:7] + [readcount, perfect_read_count, main_seq] 
             try:                    fields.append(read_data[7])
@@ -1850,7 +1852,7 @@ class Insertional_mutant_pool_dataset():
                                 +"(if distance >%s and some are within %sx reads of each other).")%(
                                   len(IBs_to_remove), len(self), max_allowed_cassette_side_dist, max_cassette_side_ratio_to_ignore)
                 REMOVED_MUTANT_FILE.write("SUMMARY: " + summary_text + '\n')
-            if not quiet: print summary_text + " - see %s for details."%removed_mutant_file
+            if not quiet: print(summary_text + " - see %s for details."%removed_mutant_file)
             for IB in IBs_to_remove:
                 self.remove_mutant(IB)
 
@@ -2076,7 +2078,7 @@ class Insertional_mutant_pool_dataset():
                 genefile_parsing_limits['gff_type'] = ['gene']
             with open(genefile) as GENEFILE:
                 for chromosome_record in GFF.parse(GENEFILE, limit_info=genefile_parsing_limits):
-                    if verbosity_level>1:   print "    parsing %s for mutant gene locations..."%chromosome_record.id
+                    if verbosity_level>1:   print("    parsing %s for mutant gene locations..."%chromosome_record.id)
                     self.total_genes_in_genome += len(chromosome_record.features)
                     for thing in insertion_data_by_chromosome[chromosome_record.id]:
                         if isinstance(thing, Insertional_mutant):  position = thing.position
@@ -2091,13 +2093,13 @@ class Insertional_mutant_pool_dataset():
                         else:
                             thing[3:] = gene_data
                         # TODO gene_data now includes distances from gene ends as the fourth thing - use that!
-                    if verbosity_level>1:   print "    ...found total %s genes."%(len(chromosome_record.features))
-        if verbosity_level>1:   print "    found total %s genes in full genome."%(self.total_genes_in_genome)
+                    if verbosity_level>1:   print("    ...found total %s genes."%(len(chromosome_record.features)))
+        if verbosity_level>1:   print("    found total %s genes in full genome."%(self.total_genes_in_genome))
 
         # for mutants or positions in chromosomes that weren't listed in the genefile, use special values
         for chromosome in set(insertion_data_by_chromosome.keys())-set(all_reference_chromosomes):
             if not is_cassette_chromosome(chromosome):
-                print 'Warning: chromosome "%s" not found in genefile data!'%(chromosome)
+                print('Warning: chromosome "%s" not found in genefile data!'%(chromosome))
             for thing in insertion_data_by_chromosome[chromosome]:
                 gene_data = (SPECIAL_GENE_CODES.chromosome_not_in_reference,'-','-','-')
                 if isinstance(thing, Insertional_mutant):
@@ -2153,8 +2155,8 @@ class Insertional_mutant_pool_dataset():
                     annotation = self._get_annotation_for_gene(RISCC_data[3], gene_annotation_dict)
                     RISCC_data[7:] = annotation
                     if annotation:      N_annotated += 1
-        if print_info:          print "Added %s annotations"%N_annotated
-        elif not N_annotated:   print "Warning: No gene annotations found!"
+        if print_info:          print("Added %s annotations"%N_annotated)
+        elif not N_annotated:   print("Warning: No gene annotations found!")
         # LATER-TODO add this to the gene-info run-test case!  But the get_all_gene_annotation method has tests.
 
     # MAYBE-TODO implement mutant-merging or counting adjacent mutants?   See code and unit/run-tests in mutant_analysis_classes.py.
@@ -2454,10 +2456,10 @@ def save_dataset_files(dataset, outfile, verbosity_level=0, print_genome_side_de
      it should be the applicable optparse options object if there is one, or a text message otherwise.
     """
     # print summary info to stdout if desired
-    if verbosity_level>1: print "\nDATA SUMMARY:"
+    if verbosity_level>1: print("\nDATA SUMMARY:")
     if verbosity_level>0: dataset.print_summary(count_cassette=count_cassette, count_other=count_other)
     # print full data to outfile
-    if verbosity_level>1: print "printing output - time %s."%time.ctime()
+    if verbosity_level>1: print("printing output - time %s."%time.ctime())
     outfile_basename = os.path.splitext(outfile)[0]
     summary_outfile = outfile_basename + '_summary.txt'
     pickled_outfile = outfile_basename + '.pickle'
@@ -2578,12 +2580,11 @@ class Testing_position_functionality(unittest.TestCase):
         for pos in (pos1,pos2):
             # have to use execute workaround here to use self.assertRaises on statements instead of expressions;
             #  if this was python 2.7 I could just do "with self.assertRaises(MutantError): <bunch of statements>"
-            def execute(S, context):  exec S in context
-            self.assertRaises(MutantError, execute, "pos.chromosome = 'chr3'", locals())
-            self.assertRaises(MutantError, execute, "pos.strand = '-'", locals())
-            self.assertRaises(MutantError, execute, "pos.position_after = '5'", locals())
-            self.assertRaises(MutantError, execute, "pos.position_before = '4'", locals())
-            self.assertRaises(MutantError, execute, "pos.new_attribute = '4'", locals())
+            with self.assertRaises(MutantError): pos.chromosome = 'chr3'
+            with self.assertRaises(MutantError): pos.strand = '-'
+            with self.assertRaises(MutantError): pos.position_after = '5'
+            with self.assertRaises(MutantError): pos.position_before = '4'
+            with self.assertRaises(MutantError): pos.new_attribute = '4'
             set([pos1])
             dict([(pos1, 1)])
         # if we make it mutable, it's mutable and unhashable again
