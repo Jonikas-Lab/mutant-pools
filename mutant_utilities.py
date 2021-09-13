@@ -17,7 +17,7 @@ import numpy
 # my modules
 import general_utilities
 import basic_seq_utilities
-import mutant_IB_RISCC_classes
+from mutant_IB_RISCC_classes import Insertion_position
 
 # various defaults/constants
 STRAND_VAR_VALUES = ('+', '-', 'both', None)
@@ -479,34 +479,34 @@ class Testing(unittest.TestCase):
         # MAYBE-TODO test the actual printed data?  It's pretty straightforwardly derived from the outputted/tested data, though.
 
     def test__insertion_pair_type_distance(self):
-        side0, pos0 = "5'", mutant_IB_RISCC_classes.Insertion_position('chr1', '+', full_position='100-?')
+        side0, pos0 = "5'", Insertion_position('chr1', '+', full_position='100-?')
         assert insertion_pair_type_distance(pos0, side0, pos0, side0) == ('same-direction', 0)
         # other-side cases, same chromosome
         for (side1, strand1) in [("3'", "+"), ("5'", "-")]:
-            pos1 = mutant_IB_RISCC_classes.Insertion_position('chr1', strand1, full_position='?-101')
+            pos1 = Insertion_position('chr1', strand1, full_position='?-101')
             assert insertion_pair_type_distance(pos0, side0, pos1, side1) == ('inner-cassette', 0) 
-            pos1 = mutant_IB_RISCC_classes.Insertion_position('chr1', strand1, full_position='?-102')
+            pos1 = Insertion_position('chr1', strand1, full_position='?-102')
             assert insertion_pair_type_distance(pos0, side0, pos1, side1) == ('inner-cassette', 1) 
-            pos1 = mutant_IB_RISCC_classes.Insertion_position('chr1', strand1, full_position='?-301')
+            pos1 = Insertion_position('chr1', strand1, full_position='?-301')
             assert insertion_pair_type_distance(pos0, side0, pos1, side1) == ('inner-cassette', 200) 
-            pos1 = mutant_IB_RISCC_classes.Insertion_position('chr1', strand1, full_position='?-100')
+            pos1 = Insertion_position('chr1', strand1, full_position='?-100')
             assert insertion_pair_type_distance(pos0, side0, pos1, side1) == ('outer-cassette', 1) 
-            pos1 = mutant_IB_RISCC_classes.Insertion_position('chr1', strand1, full_position='?-50')
+            pos1 = Insertion_position('chr1', strand1, full_position='?-50')
             assert insertion_pair_type_distance(pos0, side0, pos1, side1) == ('outer-cassette', 51) 
         for (side1, strand1) in [("3'", "-"), ("5'", "+")]:
-            pos1 = mutant_IB_RISCC_classes.Insertion_position('chr1', strand1, full_position='100-?')
+            pos1 = Insertion_position('chr1', strand1, full_position='100-?')
             assert insertion_pair_type_distance(pos0, side0, pos1, side1) == ('same-direction', 0) 
-            pos1 = mutant_IB_RISCC_classes.Insertion_position('chr1', strand1, full_position='101-?')
+            pos1 = Insertion_position('chr1', strand1, full_position='101-?')
             assert insertion_pair_type_distance(pos0, side0, pos1, side1) == ('same-direction', 1) 
-            pos1 = mutant_IB_RISCC_classes.Insertion_position('chr1', strand1, full_position='50-?')
+            pos1 = Insertion_position('chr1', strand1, full_position='50-?')
             assert insertion_pair_type_distance(pos0, side0, pos1, side1) == ('same-direction', 50) 
-            pos1 = mutant_IB_RISCC_classes.Insertion_position('chr1', strand1, full_position='500-?')
+            pos1 = Insertion_position('chr1', strand1, full_position='500-?')
             assert insertion_pair_type_distance(pos0, side0, pos1, side1) == ('same-direction', 400) 
         for side1 in "5' 3'".split():
             for chrom1 in 'chr2 chromosome_5 insertion_cassette scaffold_88 chloroplast'.split():
                 for strand1 in "+=":
                     for fullpos1 in '?-1 ?-100 ?-10000 1-? 100-? 10000-?'.split():
-                        pos1 = mutant_IB_RISCC_classes.Insertion_position(chrom1, strand1, full_position=fullpos1)
+                        pos1 = Insertion_position(chrom1, strand1, full_position=fullpos1)
                         category, dist = insertion_pair_type_distance(pos0, side0, pos1, side1)
                         assert category == 'diff-chrom'
                         assert numpy.isnan(dist)
